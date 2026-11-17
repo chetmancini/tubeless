@@ -47,8 +47,8 @@ it.each([1200, 1_000_000])(
     expect(addedBytes).toBeLessThanOrEqual(Math.min(budget, 262_144));
     expect(outputs.map((item) => item.id)).toEqual(["large", "error", "small"]);
     for (const index of [0, 1]) {
-      const output = JSON.parse(outputs[index]!.output);
-      const outcome = outcomes[index]!;
+      const output = JSON.parse(outputs[index].output);
+      const outcome = outcomes[index];
       const original = JSON.stringify(
         outcome.ok ? { ok: true, value: outcome.value } : { ok: false, error: outcome.error }
       );
@@ -61,8 +61,8 @@ it.each([1200, 1_000_000])(
       expect(output.preview).not.toContain("\uFFFD");
       expect(output.notice).toContain("do not repeat successful mutations");
     }
-    expect(JSON.parse(outputs[2]!.output)).toEqual({ ok: true, value: "done" });
-    expect(outcomes[0]!.value).toBe(value);
+    expect(JSON.parse(outputs[2].output)).toEqual({ ok: true, value: "done" });
+    expect(outcomes[0].value).toBe(value);
   }
 );
 
@@ -77,7 +77,7 @@ it.each([600, 601, 602, 603])(
   (budget) => {
     const value = "é漢🌍".repeat(100_000);
     const [item] = toolOutputs([{ id: "large", tool: "read", ok: true, value }], budget);
-    const output = JSON.parse(item!.output);
+    const output = JSON.parse(item.output);
     const original = JSON.stringify({ ok: true, value });
     expect(output).toMatchObject({ truncated: true, originalBytes: Buffer.byteLength(original) });
     expect(Buffer.byteLength(JSON.stringify(item)) + 1).toBeLessThanOrEqual(budget);

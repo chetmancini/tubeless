@@ -102,13 +102,13 @@ export async function openNdjsonPipelineRunStore(
       if (query.afterId !== undefined) {
         while (start < end) {
           const middle = Math.floor((start + end) / 2);
-          if (selected[middle]!.id > query.afterId) end = middle;
+          if (selected[middle].id > query.afterId) end = middle;
           else start = middle + 1;
         }
       }
       const page: StoredPipelineEvent[] = [];
       for (let index = start; index < selected.length && page.length < limit; index++) {
-        const event = selected[index]!;
+        const event = selected[index];
         if (query.pipelineId !== undefined && event.pipelineId !== query.pipelineId) continue;
         page.push(structuredClone(event));
       }

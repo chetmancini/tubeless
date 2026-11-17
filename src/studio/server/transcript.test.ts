@@ -62,10 +62,10 @@ describe("Studio transcript routes", () => {
       const events = recordedRun();
       if (agentRun)
         events[0] = storedEvent({
-          ...events[0]!,
+          ...events[0],
           version: 3,
           payload: {
-            ...events[0]!.payload,
+            ...events[0].payload,
             definitionIdentity: agent.definition?.identity,
             definitionSnapshot: agent.definition,
           },

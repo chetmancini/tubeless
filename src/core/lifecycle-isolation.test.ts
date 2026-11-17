@@ -135,7 +135,7 @@ describe("lifecycle observation isolation", () => {
       run: (_inputs, context) => {
         context.reportProgress(progress);
         progress.completed = 2;
-        progress.details![0]!.label = "producer changed";
+        progress.details![0].label = "producer changed";
       },
     });
     await definePipeline({ id: "progress", steps: [work] }).run(
@@ -147,11 +147,11 @@ describe("lifecycle observation isolation", () => {
             onStepStatus(event) {
               if (event.status === "running" && event.progress) {
                 event.progress.completed = 99;
-                event.progress.details![0]!.label = "generic hook changed";
+                event.progress.details![0].label = "generic hook changed";
               }
             },
             onStepProgress({ progress }) {
-              progress.details![0]!.label = "focused hook changed";
+              progress.details![0].label = "focused hook changed";
             },
           },
           { onStepProgress: ({ progress }) => observed.push(progress) },
@@ -159,7 +159,7 @@ describe("lifecycle observation isolation", () => {
       }
     );
     expect(observed).toEqual([{ completed: 1, details: [{ id: "item", label: "original" }] }]);
-    expect(progress.details![0]!.label).toBe("producer changed");
+    expect(progress.details![0].label).toBe("producer changed");
   });
 
   it.each(["step", "finalization"] as const)(
@@ -228,7 +228,7 @@ describe("lifecycle observation isolation", () => {
               retained = run;
               run.value = "replaced";
               run.status = "failed";
-              run.steps[0]!.id = "changed";
+              run.steps[0].id = "changed";
             },
           },
           {
@@ -242,7 +242,7 @@ describe("lifecycle observation isolation", () => {
     expect(result.value).toBe(value);
     expect(observed).toEqual([value, value]);
     expect(result.status).toBe("completed");
-    expect(result.steps[0]!.id).toBe("build");
+    expect(result.steps[0].id).toBe("build");
     expect(retained).not.toBe(result);
     expect(warn).not.toHaveBeenCalled();
   });

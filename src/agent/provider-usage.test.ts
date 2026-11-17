@@ -10,7 +10,7 @@ it("records the HTTP status of a failed exchange without leaking the error messa
       throw new ProviderRequestError("PRIVATE", { status: 429, retryable: true });
     })
   ).rejects.toBeInstanceOf(ProviderRequestError);
-  expect(reportAttempt.mock.calls[0]![1]).toMatchObject({
+  expect(reportAttempt.mock.calls[0][1]).toMatchObject({
     "agent.model.httpStatus": 429,
     "agent.model.responseReceived": false,
   });
@@ -30,7 +30,7 @@ it.each([-1, undefined, null, "100", 1.5, Number.POSITIVE_INFINITY])(
         cache_creation_input_tokens: 300,
       },
     }));
-    const attributes = reportAttempt.mock.calls[0]![1];
+    const attributes = reportAttempt.mock.calls[0][1];
     expect(attributes["agent.model.inputTokens"]).toBeUndefined();
     expect(attributes["agent.model.uncachedInputTokens"]).toBeUndefined();
     expect(attributes).toMatchObject({
@@ -54,8 +54,8 @@ it.each(["cache_read_input_tokens", "cache_creation_input_tokens"])(
         [field]: -1,
       },
     }));
-    expect(reportAttempt.mock.calls[0]![1]["agent.model.inputTokens"]).toBeUndefined();
-    expect(reportAttempt.mock.calls[0]![1]["agent.model.uncachedInputTokens"]).toBe(100);
+    expect(reportAttempt.mock.calls[0][1]["agent.model.inputTokens"]).toBeUndefined();
+    expect(reportAttempt.mock.calls[0][1]["agent.model.uncachedInputTokens"]).toBe(100);
   }
 );
 
@@ -78,9 +78,9 @@ it.each([-1, undefined])(
         ],
       },
     }));
-    expect(reportAttempt.mock.calls[0]![1]["agent.model.inputTokens"]).toBeUndefined();
-    expect(reportAttempt.mock.calls[0]![1]["agent.model.uncachedInputTokens"]).toBeUndefined();
-    expect(reportAttempt.mock.calls[0]![1]).toMatchObject({
+    expect(reportAttempt.mock.calls[0][1]["agent.model.inputTokens"]).toBeUndefined();
+    expect(reportAttempt.mock.calls[0][1]["agent.model.uncachedInputTokens"]).toBeUndefined();
+    expect(reportAttempt.mock.calls[0][1]).toMatchObject({
       "agent.model.outputTokens": 20,
       "agent.model.cacheReadTokens": 200,
     });
@@ -125,7 +125,7 @@ it("records OpenAI reads, writes by lifetime, reasoning and request order withou
       "agent.turn": 2,
     }),
   ]);
-  expect(reportAttempt.mock.calls[1]![1]).toMatchObject({
+  expect(reportAttempt.mock.calls[1][1]).toMatchObject({
     "agent.model.operation": "decision",
     "agent.model.request": 2,
     "agent.model.outputTokens": 0,
@@ -182,7 +182,7 @@ it("keeps unavailable or invalid counters unknown and records failed requests wi
     expect(attributes["agent.model.cacheReadTokens"]).toBeUndefined();
     expect(attributes["agent.model.cacheWriteTokens"]).toBeUndefined();
   }
-  expect(reportAttempt.mock.calls[2]![1]).toMatchObject({
+  expect(reportAttempt.mock.calls[2][1]).toMatchObject({
     "agent.model.request": 3,
     "agent.model.responseReceived": false,
   });

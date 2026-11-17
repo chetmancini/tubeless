@@ -494,7 +494,7 @@ describe("recorded fan-out diagnostics", () => {
     const pipeline = definePipeline({ id: "parent", steps: [fan], finalize: () => true });
     const lines: string[] = [];
     const run = await pipeline.run({}, {}, { tracing: { exporter: captureJson(lines) } });
-    const expected = run.errors[0]!.fanOut;
+    const expected = run.errors[0].fanOut;
     expect(expected).toMatchObject({ failureCount: 40, omittedFailureCount: 8 });
     const filename = await tempFile(`${lines.join("\n")}\n`);
     const ndjson = await openNdjsonPipelineRunStore(filename);

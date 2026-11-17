@@ -77,10 +77,10 @@ describe("agent conversation sessions", () => {
     vi.stubGlobal("fetch", fetcher);
     const io = { ...captureIo(directory), stdin: Readable.from(["remember this\nfollow up\n"]) };
     expect(await runWorkbenchCli(["agent", "--model-module", "pipeline.mjs"], io)).toBe(0);
-    expect(fetcher.mock.calls[1]![0]).toBe("https://api.openai.com/v1/responses/compact");
-    const compact = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+    expect(fetcher.mock.calls[1][0]).toBe("https://api.openai.com/v1/responses/compact");
+    const compact = JSON.parse(fetcher.mock.calls[1][1]!.body as string);
     expect(compact.input.at(-1)).toMatchObject({ type: "function_call_output", call_id: "finish" });
-    const next = JSON.parse(fetcher.mock.calls[2]![1]!.body as string);
+    const next = JSON.parse(fetcher.mock.calls[2][1]!.body as string);
     expect(next.input).toEqual([...compacted, { role: "user", content: "follow up" }]);
     expect(io.errors).toEqual([]);
   });

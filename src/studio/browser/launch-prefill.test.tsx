@@ -244,8 +244,8 @@ describe("Studio rerun review", () => {
     const bodies = fetcher.mock.calls.map(
       ([, init]) => JSON.parse(String(init!.body)) as { idempotencyKey: string }
     );
-    expect(bodies[0]!.idempotencyKey).toBeTruthy();
-    expect(bodies[1]!.idempotencyKey).not.toBe(bodies[0]!.idempotencyKey);
+    expect(bodies[0].idempotencyKey).toBeTruthy();
+    expect(bodies[1].idempotencyKey).not.toBe(bodies[0].idempotencyKey);
     expect(bodies.map((body) => body.idempotencyKey)).not.toContain("original");
   });
 });

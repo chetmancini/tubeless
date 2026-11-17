@@ -63,9 +63,9 @@ function withStrictType(schema: Record<string, unknown>): Record<string, unknown
         return { type: unique.length === 1 ? unique[0] : "number", ...schema };
       const groups = new Map<string, unknown[]>();
       for (const [index, type] of types.entries()) {
-        const values = groups.get(type!) ?? [];
+        const values = groups.get(type) ?? [];
         values.push(schema.enum[index]);
-        groups.set(type!, values);
+        groups.set(type, values);
       }
       const { enum: _enum, ...rest } = schema;
       return { ...rest, anyOf: [...groups].map(([type, values]) => ({ type, enum: values })) };
@@ -173,7 +173,7 @@ export function anthropicDecision(content: readonly Record<string, unknown>[]) {
   if (calls.length === 0) return null;
   if (calls.some((call) => call.tool === "_finish")) {
     if (calls.length !== 1) throw new Error("Anthropic must finish without other calls");
-    return { kind: "finish", result: calls[0]!.input };
+    return { kind: "finish", result: calls[0].input };
   }
   return { kind: "continue", calls };
 }

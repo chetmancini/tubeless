@@ -276,7 +276,7 @@ it("encodes unsafe ID segments and separates case-sensitive identities on disk",
   expect(await readdir(cwd)).toEqual([".cache"]);
   const pipelines = await readdir(join(cwd, ".cache"));
   expect(pipelines).toHaveLength(1);
-  expect(await readdir(join(cwd, ".cache", pipelines[0]!))).toHaveLength(4);
+  expect(await readdir(join(cwd, ".cache", pipelines[0]))).toHaveLength(4);
   expect(run).toHaveBeenCalledTimes(4);
 });
 

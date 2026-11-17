@@ -336,7 +336,7 @@ describe("runUi", { timeout: 60_000 }, () => {
       const commandId = payload.commands[0]?.id;
       expect(commandId).toBeDefined();
       expect(launches).toEqual([]);
-      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/runs`, {
         body: JSON.stringify({ values: { message: "from-studio" } }),
         headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
         method: "POST",
@@ -472,7 +472,7 @@ describe("runUi", { timeout: 60_000 }, () => {
         return payload.commands[0]?.id;
       });
       expect(commandId).toBe("failing-fixture");
-      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/runs`, {
         body: JSON.stringify({ values: { message: "boom" } }),
         headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
         method: "POST",

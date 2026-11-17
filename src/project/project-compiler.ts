@@ -48,7 +48,7 @@ export function compilePipelineDocument(
   const compile = (id: string): Pipeline<object, unknown> => {
     const existing = compiled.get(id);
     if (existing) return existing;
-    const definition = parsed.pipelines[id]!;
+    const definition = parsed.pipelines[id];
     const path = `$.pipelines[${JSON.stringify(id)}]`;
     compiling.add(id);
     const optionsSchema = resolvedRegistry.optionsSchema(

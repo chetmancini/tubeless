@@ -178,8 +178,8 @@ function failure(value: unknown): CheckFailure {
     throw new Error("Invalid failure");
   return {
     message: f.message,
-    ...(f.stack === undefined ? {} : { stack: f.stack as string }),
-    ...(f.file === undefined ? {} : { file: f.file as string }),
+    ...(f.stack === undefined ? {} : { stack: f.stack }),
+    ...(f.file === undefined ? {} : { file: f.file }),
     ...(f.line === undefined ? {} : { line: f.line as number }),
     ...(f.column === undefined ? {} : { column: f.column as number }),
   };
@@ -242,7 +242,7 @@ export function readCheckReport(content: string | undefined): CheckReportResult 
         id: t.id,
         file: t.file,
         title: t.title,
-        suite: t.suite as string[],
+        suite: t.suite,
         ambiguous: t.ambiguous,
         outcome: t.outcome as CheckTest["outcome"],
         ...(t.durationMs === undefined ? {} : { durationMs: t.durationMs as number }),

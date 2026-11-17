@@ -25,7 +25,7 @@ describe("agent transcript evaluation", () => {
         context.turn === 1
           ? { kind: "continue", calls: [{ id: "one", tool: "double", input: 2 }] }
           : { kind: "finish", result: state },
-      reduce: (_state, outcomes) => (outcomes[0]!.ok ? outcomes[0]!.value : 0),
+      reduce: (_state, outcomes) => (outcomes[0].ok ? outcomes[0].value : 0),
     }).run();
     expect(run.value).toBe(4);
     expect(() => transcript.assertComplete(run.runId)).not.toThrow();

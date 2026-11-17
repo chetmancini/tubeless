@@ -200,7 +200,7 @@ describe("runConcurrentPartial", () => {
     const workers = [deferred<string>(), deferred<string>(), deferred<string>()];
     const controller = new AbortController();
     const worker = vi.fn(
-      (_item: string, index: number, _signal?: AbortSignal) => workers[index]!.promise
+      (_item: string, index: number, _signal?: AbortSignal) => workers[index].promise
     );
     const run = runConcurrentPartial(
       ["a", "b", "c"],
@@ -212,15 +212,15 @@ describe("runConcurrentPartial", () => {
       ["a", 0, controller.signal],
       ["b", 1, controller.signal],
     ]);
-    workers[1]!.resolve("second");
+    workers[1].resolve("second");
     await Promise.resolve();
     expect(worker.mock.calls).toEqual([
       ["a", 0, controller.signal],
       ["b", 1, controller.signal],
       ["c", 2, controller.signal],
     ]);
-    workers[2]!.resolve("third");
-    workers[0]!.resolve("first");
+    workers[2].resolve("third");
+    workers[0].resolve("first");
     const partial = await run;
     expect(partial).toEqual({
       ok: true,
@@ -269,7 +269,7 @@ describe("runConcurrentPartial", () => {
     const controller = new AbortController();
     const worker = vi.fn((_item: number, index: number, signal?: AbortSignal) => {
       expect(signal).toBe(controller.signal);
-      return workers[index]!.promise;
+      return workers[index].promise;
     });
     const run = runConcurrentPartial(
       [0, 1, 2, 3],
@@ -278,12 +278,12 @@ describe("runConcurrentPartial", () => {
     );
     const resolved = vi.fn();
     void run.then(resolved);
-    workers[1]!.reject(undefined);
+    workers[1].reject(undefined);
     await Promise.resolve();
     expect(resolved).not.toHaveBeenCalled();
     expect(controller.signal.aborted).toBe(false);
-    workers[2]!.resolve(undefined);
-    workers[0]!.resolve("late success");
+    workers[2].resolve(undefined);
+    workers[0].resolve("late success");
     const partial = await run;
     expect(partial.ok).toBe(false);
     if (partial.ok) throw new Error("Expected a failed outcome");
@@ -305,12 +305,12 @@ describe("runConcurrentPartial", () => {
       const run = runConcurrentPartial(
         [0, 1, 2],
         { concurrency: 2, signal: controller.signal },
-        (_item, index) => workers[index]!.promise
+        (_item, index) => workers[index].promise
       );
-      workers[1]!.reject(failure);
+      workers[1].reject(failure);
       await Promise.resolve();
       controller.abort(new Error("later abort"));
-      workers[0]!.reject(new Error("later worker failure"));
+      workers[0].reject(new Error("later worker failure"));
       const partial = await run;
       expect(partial.ok).toBe(false);
       if (partial.ok) throw new Error("Expected a failed outcome");
@@ -338,7 +338,7 @@ describe("runConcurrentPartial", () => {
     const controller = new AbortController();
     const failure = new Error("operator stop");
     const workers = [deferred<number>(), deferred<number>()];
-    const worker = vi.fn((_item: number, index: number) => workers[index]!.promise);
+    const worker = vi.fn((_item: number, index: number) => workers[index].promise);
     const run = runConcurrentPartial(
       [0, 1, 2],
       { concurrency: 2, signal: controller.signal },
@@ -347,10 +347,10 @@ describe("runConcurrentPartial", () => {
     const resolved = vi.fn();
     void run.then(resolved);
     controller.abort(failure);
-    workers[0]!.resolve(10);
+    workers[0].resolve(10);
     await Promise.resolve();
     expect(resolved).not.toHaveBeenCalled();
-    workers[1]!.resolve(20);
+    workers[1].resolve(20);
     const partial = await run;
     expect(partial.ok).toBe(false);
     if (partial.ok) throw new Error("Expected a failed outcome");
@@ -367,12 +367,12 @@ describe("runConcurrentPartial", () => {
     const run = runConcurrentPartial(
       [0, 1],
       { concurrency: 2, signal: controller.signal },
-      (_item, index) => workers[index]!.promise
+      (_item, index) => workers[index].promise
     );
     controller.abort(failure);
-    workers[0]!.resolve(10);
+    workers[0].resolve(10);
     await Promise.resolve();
-    workers[1]!.reject(undefined);
+    workers[1].reject(undefined);
     const partial = await run;
     expect(partial.ok).toBe(false);
     if (partial.ok) throw new Error("Expected a failed outcome");

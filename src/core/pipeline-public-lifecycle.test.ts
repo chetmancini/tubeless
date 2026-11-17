@@ -294,7 +294,7 @@ describe("definePipeline lifecycle and scheduling", () => {
     });
 
     expect(result.finishedAtMs - result.startedAtMs).toBe(10);
-    expect(result.steps[0]!.finishedAtMs - result.steps[0]!.startedAtMs!).toBe(7);
+    expect(result.steps[0].finishedAtMs - result.steps[0].startedAtMs!).toBe(7);
   });
 
   it("uses an abort-aware default sleep, rejecting once the signal it was given aborts mid-wait", async () => {

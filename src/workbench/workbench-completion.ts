@@ -108,7 +108,7 @@ function scanWords(
   let pendingFlag: CompletionFlag | undefined;
   let optionsEnded = false;
   for (let index = 0; index < words.length; index++) {
-    const word = words[index]!;
+    const word = words[index];
     if (pendingFlag) {
       // Bash splits `--flag=value` into `--flag`, `=`, `value`.
       if (word === "=") continue;
@@ -239,13 +239,13 @@ async function subcommandCompletion(
   const mode = command.spec.passthrough ? "run" : "workbench";
   let scanned = scanWords(words, spec, mode);
   const inline = !scanned.optionsEnded && /^(--[^=]+)=(.*)$/s.exec(current);
-  if (inline) scanned = scanWords([...words, inline[1]!], spec, mode);
+  if (inline) scanned = scanWords([...words, inline[1]], spec, mode);
   let completion: Completion;
   if (scanned.passthrough !== undefined) {
     if (!command.spec.passthrough) return NO_COMPLETION;
     completion = await commandArgumentCompletion(
       { ...scanned, passthrough: scanned.passthrough },
-      inline ? inline[2]! : current,
+      inline ? inline[2] : current,
       io
     );
   } else if (scanned.pendingFlag) {
@@ -297,7 +297,7 @@ export async function runComplete(
   commands: readonly WorkbenchCommandSummary[]
 ): Promise<number> {
   const [command, ...rest] = words.length === 0 ? [""] : words;
-  const current = rest.at(-1) ?? command!;
+  const current = rest.at(-1) ?? command;
   let completion: Completion;
   if (rest.length === 0) {
     completion = current.startsWith("-")
@@ -441,7 +441,7 @@ export async function runCompletion(argv: readonly string[], io: WorkbenchCliIo)
         message: `Pass one shell: ${COMPLETION_SHELLS.join(", ")}.`,
       },
       async run(parsed, commandIo) {
-        const shell = parsed.positionals[0]!;
+        const shell = parsed.positionals[0];
         if (!isCompletionShell(shell)) {
           const suggestion = didYouMean(shell, COMPLETION_SHELLS);
           return writeUsageError(

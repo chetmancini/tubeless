@@ -36,7 +36,7 @@ describe("SQLite transcripts", () => {
     const { directory, filename, store } = await fixture();
     try {
       const records = [end(3), transcriptRecord(1), transcriptRecord(2)];
-      expect(store.importTranscript([...records, records[0]!])).toBe(3);
+      expect(store.importTranscript([...records, records[0]])).toBe(3);
       expect(store.importTranscript(records)).toBe(0);
     } finally {
       await store.close();

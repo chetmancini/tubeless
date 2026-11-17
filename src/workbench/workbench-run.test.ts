@@ -231,9 +231,7 @@ describe("runCommand", () => {
       '{ mode: "interactive", color: "never", symbols: "ascii" }'
     );
     const io = captureIo(directory);
-    const processStdoutWrite = vi
-      .spyOn(process.stdout, "write")
-      .mockImplementation((() => true) as typeof process.stdout.write);
+    const processStdoutWrite = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
     try {
       const exitCode = await runCommand(

@@ -12,9 +12,9 @@ function editDistance(left: string, right: string, limit: number): number {
     let rowMinimum = i;
     for (let j = 1; j <= right.length; j++) {
       const cost = left[i - 1] === right[j - 1] ? 0 : 1;
-      let value = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + cost);
+      let value = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
       if (i > 1 && j > 1 && left[i - 1] === right[j - 2] && left[i - 2] === right[j - 1]) {
-        value = Math.min(value, previousPrevious[j - 2]! + 1);
+        value = Math.min(value, previousPrevious[j - 2] + 1);
       }
       current.push(value);
       rowMinimum = Math.min(rowMinimum, value);
@@ -23,7 +23,7 @@ function editDistance(left: string, right: string, limit: number): number {
     previousPrevious = previous;
     previous = current;
   }
-  return previous[right.length]!;
+  return previous[right.length];
 }
 
 /**

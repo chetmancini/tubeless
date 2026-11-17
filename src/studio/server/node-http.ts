@@ -10,9 +10,9 @@ interface NodeStreamingRequestInit extends RequestInit {
 export function toFetchHeaders(request: IncomingMessage): Headers {
   const headers = new Headers();
   for (let index = 0; index < request.rawHeaders.length; index += 2) {
-    const name = request.rawHeaders[index]!;
+    const name = request.rawHeaders[index];
     if (name.toLowerCase() === "host") continue;
-    headers.append(name, request.rawHeaders[index + 1]!);
+    headers.append(name, request.rawHeaders[index + 1]);
   }
   return headers;
 }

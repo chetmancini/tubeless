@@ -729,7 +729,7 @@ describe("agent transcript capture", () => {
     expect(events(records.slice(count))).toEqual([
       { kind: "end", status: "completed", replayed: true },
     ]);
-    expect(records[count]!.runId).not.toBe(records[0]!.runId);
+    expect(records[count].runId).not.toBe(records[0].runId);
   });
 
   it("marks restored outcomes without repeating their handlers or inventing a past decision", async () => {

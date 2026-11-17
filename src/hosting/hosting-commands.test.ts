@@ -20,7 +20,7 @@ const schema: StandardSchemaV1<{ name: string }, { name: string }> = {
         required: ["name"],
       }),
     },
-  } as StandardSchemaV1<{ name: string }, { name: string }>["~standard"],
+  },
 };
 const { step } = createSteps(schema);
 const greet = step("greet", { run: (_inputs, context) => `hi ${context.options.name}` });
@@ -46,13 +46,13 @@ const output = () => {
 describe("hosted project commands", () => {
   it("derives schema-backed commands with Studio descriptors", () => {
     const [entry] = hostedProjectCommands(defineProject("p", [Greeting]));
-    expect(entry!.descriptor).toMatchObject({ id: "greeting", name: "Greeting", canPlan: true });
-    expect(entry!.descriptor.parameters.map((parameter) => parameter.key)).toContain("name");
+    expect(entry.descriptor).toMatchObject({ id: "greeting", name: "Greeting", canPlan: true });
+    expect(entry.descriptor.parameters.map((parameter) => parameter.key)).toContain("name");
   });
 
   it("prefers explicit project commands and rejects schema-less pipelines", () => {
     const explicit = definePipelineCommand(Plain, { params: {}, mapOptions: () => ({}) });
-    expect(hostedProjectCommands(defineProject("p", [explicit]))[0]!.descriptor.id).toBe("plain");
+    expect(hostedProjectCommands(defineProject("p", [explicit]))[0].descriptor.id).toBe("plain");
     expect(() => hostedProjectCommands(defineProject("p", [Plain]))).toThrow(
       /Standard JSON Schema/
     );
@@ -61,16 +61,16 @@ describe("hosted project commands", () => {
   it("executes values with workbench exit codes", async () => {
     const [entry] = hostedProjectCommands(defineProject("p", [Greeting]));
     const ok = output();
-    const parsed = entry!.command.parseValues({ name: "ada" });
+    const parsed = entry.command.parseValues({ name: "ada" });
     expect(parsed.kind).toBe("values");
     if (parsed.kind !== "values") return;
     expect(
-      await executeHostedCommand(entry!.command, parsed.values, ok, new AbortController().signal)
+      await executeHostedCommand(entry.command, parsed.values, ok, new AbortController().signal)
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     const aborted = new AbortController();
     aborted.abort(new DOMException("stop", "AbortError"));
-    expect(
-      await executeHostedCommand(entry!.command, parsed.values, output(), aborted.signal)
-    ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
+    expect(await executeHostedCommand(entry.command, parsed.values, output(), aborted.signal)).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.cancellation
+    );
   });
 });

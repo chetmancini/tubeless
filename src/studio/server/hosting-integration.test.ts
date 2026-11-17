@@ -298,6 +298,7 @@ describe("authenticated Studio listener", () => {
               response.end("Gateway configuration failed");
               return;
             }
+            // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- tsgolint narrows statusCode here; tsc does not.
             response.writeHead(reply.statusCode!, reply.headers);
             reply.pipe(response);
           }
@@ -413,6 +414,7 @@ describe("authenticated Studio listener", () => {
         },
         (reply) => {
           reply.resume();
+          // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- tsgolint narrows statusCode here; tsc does not.
           resolve(reply.statusCode!);
         }
       );

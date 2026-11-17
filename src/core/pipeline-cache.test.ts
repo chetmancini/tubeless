@@ -133,7 +133,7 @@ describe("step output cache", () => {
     await expect(pipeline.runOrThrow()).resolves.toBe("count:5");
     await expect(pipeline.runOrThrow()).resolves.toBe("count:5");
     expect(validate).toHaveBeenCalledTimes(2);
-    const key = [...cache.entries.keys()][0]!;
+    const key = [...cache.entries.keys()][0];
     cache.entries.set(key, { value: await cache.codec.encode(123), createdAtMs: Date.now() });
     const failed = await pipeline.run();
     expect(failed.steps[0]).toMatchObject({

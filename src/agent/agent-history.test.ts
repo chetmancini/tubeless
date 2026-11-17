@@ -128,8 +128,8 @@ describe("agent definition and recorded execution", () => {
   it("fingerprints declared capabilities and limits independently of execution and property order", async () => {
     const pipeline = agent();
     expect(pipeline.definition.identity.version).toBe(2);
-    expect(pipeline.plan().steps[0]!.agent).toEqual(pipeline.definition.steps[0]!.agent);
-    expect(Object.isFrozen(pipeline.plan().steps[0]!.agent!.capabilities)).toBe(true);
+    expect(pipeline.plan().steps[0].agent).toEqual(pipeline.definition.steps[0].agent);
+    expect(Object.isFrozen(pipeline.plan().steps[0].agent!.capabilities)).toBe(true);
     for (const other of [
       agent({ maxCalls: 2 }),
       agent({ maxDepth: 2 }),
@@ -270,7 +270,7 @@ describe("agent definition and recorded execution", () => {
         expect(context.capabilities.filter(({ name }) => name === "number")).toEqual([
           { name: "number", description: "Number", inputJsonSchema: { type: "number" } },
         ]);
-        expect(Object.isFrozen(context.capabilities[0]!.inputJsonSchema)).toBe(true);
+        expect(Object.isFrozen(context.capabilities[0].inputJsonSchema)).toBe(true);
         return { kind: "finish", result: 1 };
       },
     });

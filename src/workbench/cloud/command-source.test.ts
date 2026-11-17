@@ -37,7 +37,7 @@ describe("Cloud source selection", () => {
     const progress = (json ? io.errors : io.output).join("");
     expect(progress).toContain('Requested source: {"kind":"ref","ref":"feature/ 31m orders"}');
     expect(progress).not.toMatch(/[\u009b\u202e]/);
-    expect(dependencies.calls[0]!.body).toEqual({ pipelineId: pipeline.id, input: {}, source });
+    expect(dependencies.calls[0].body).toEqual({ pipelineId: pipeline.id, input: {}, source });
     if (json) expect(JSON.parse(io.output.join("")).branch).toBe(ref);
   });
 
@@ -186,6 +186,6 @@ describe("Cloud source selection", () => {
         dependencies
       )
     ).toBe(0);
-    expect(dependencies.calls[0]!.body).toEqual({ pipelineId: pipeline.id, input: {}, source });
+    expect(dependencies.calls[0].body).toEqual({ pipelineId: pipeline.id, input: {}, source });
   });
 });

@@ -51,7 +51,7 @@ type GraphSelection =
 
 /** Draw an edge as a gate once it trips, even when the source is also an input. */
 function edgeLook(edge: Pick<RunScene["edges"][number], "kinds" | "state">): EdgeKind {
-  return edge.state === "tripped" ? "gate" : edge.kinds[0]!;
+  return edge.state === "tripped" ? "gate" : edge.kinds[0];
 }
 
 const EDGE_STATE_COPY: Record<EdgeState, (from: string, to: string) => string> = {

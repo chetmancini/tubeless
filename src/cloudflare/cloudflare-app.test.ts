@@ -168,7 +168,7 @@ async function runStatus(runId: string, until: (status: string) => boolean): Pro
 }
 
 beforeAll(async () => {
-  keys = (await crypto.subtle.generateKey(
+  keys = await crypto.subtle.generateKey(
     {
       name: "RSASSA-PKCS1-v1_5",
       modulusLength: 2048,
@@ -177,7 +177,7 @@ beforeAll(async () => {
     },
     true,
     ["sign", "verify"]
-  )) as CryptoKeyPair;
+  );
   jwk = { ...(await crypto.subtle.exportKey("jwk", keys.publicKey)), kid: "k1" } as JsonWebKey;
   persist = mkdtempSync(join(tmpdir(), "tubeless-workers-"));
   mf = new Miniflare({

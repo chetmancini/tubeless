@@ -703,9 +703,9 @@ describe("SQLite pipeline run store", () => {
     await store.export(startedEvent("run-1", 12));
 
     const [first, second, third] = await store.listEvents();
-    expect(await store.listEvents({ afterId: first!.id })).toEqual([
-      expect.objectContaining({ id: second!.id, timestampMs: 11 }),
-      expect.objectContaining({ id: third!.id, timestampMs: 12 }),
+    expect(await store.listEvents({ afterId: first.id })).toEqual([
+      expect.objectContaining({ id: second.id, timestampMs: 11 }),
+      expect.objectContaining({ id: third.id, timestampMs: 12 }),
     ]);
     await store.close();
   });
@@ -735,10 +735,10 @@ describe("SQLite pipeline run store", () => {
     await store.export(startedEvent("run-2", 13, "publish"));
 
     const [first] = await store.listEvents({ runId: "run-1" });
-    expect(await store.listEvents({ afterId: first!.id, runId: "run-1" })).toEqual([
+    expect(await store.listEvents({ afterId: first.id, runId: "run-1" })).toEqual([
       expect.objectContaining({ id: 3, runId: "run-1", pipelineId: "import" }),
     ]);
-    expect(await store.listEvents({ afterId: first!.id, pipelineId: "import" })).toEqual([
+    expect(await store.listEvents({ afterId: first.id, pipelineId: "import" })).toEqual([
       expect.objectContaining({ id: 3, pipelineId: "import", runId: "run-1" }),
     ]);
     await store.close();

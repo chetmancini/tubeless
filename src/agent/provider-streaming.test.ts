@@ -193,7 +193,7 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
           "event" in record && record.event.kind === "assistant" ? [record.event] : []
         )
       ).toEqual([{ kind: "assistant", text: "Hello 🌍" }]);
-      expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string).stream).toBe(true);
+      expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).stream).toBe(true);
     }
   );
 
@@ -287,7 +287,7 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       expect(run.status).toBe(reason === "caller" ? "cancelled" : "failed");
       expect(released).toBe(true);
       expect(observed.at(-1)).toMatchObject({ kind: "end", status: "interrupted" });
-      if (reason === "deadline") expect(run.errors[0]!.message).toContain("timed out");
+      if (reason === "deadline") expect(run.errors[0].message).toContain("timed out");
     }
   );
 
@@ -393,7 +393,7 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
         context
       )
     ).runOrThrow({ task: "hi" });
-    const body = fetcher.mock.calls[0]![1]!.body as string;
+    const body = fetcher.mock.calls[0][1]!.body as string;
     const payload = JSON.parse(body);
     expect(Buffer.byteLength(body)).toBeLessThanOrEqual(1_048_576);
     expect(payload.stream).toBe(true);
@@ -431,7 +431,7 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       })
     ).run({ task: "hi" });
     expect(run.status).toBe("failed");
-    expect(run.errors[0]!.message).toContain("response exceeds 2 MiB");
+    expect(run.errors[0].message).toContain("response exceeds 2 MiB");
     expect(observed).toEqual([expect.objectContaining({ kind: "end", status: "interrupted" })]);
   });
 
@@ -472,8 +472,8 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       transport({ ...request, conversation: [{ role: "user", content: "old prompt" }] }, context)
     ).runOrThrow({ task: "hi" });
     expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string)).not.toHaveProperty("stream");
-    expect(JSON.parse(fetcher.mock.calls[1]![1]!.body as string).stream).toBe(true);
+    expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string)).not.toHaveProperty("stream");
+    expect(JSON.parse(fetcher.mock.calls[1][1]!.body as string).stream).toBe(true);
     expect(JSON.stringify(observed)).not.toContain("private");
   });
 
@@ -497,7 +497,7 @@ describe.each(protocols)("$name public text streaming", ({ name, model, events }
       })
     ).run({ task: "hi" });
     expect(failedSink.status).toBe("failed");
-    expect(failedSink.errors[0]!.message).toContain("Agent text sink failed");
+    expect(failedSink.errors[0].message).toContain("Agent text sink failed");
     expect(JSON.stringify(failedSink.errors)).not.toContain("secret credential");
   });
 });
@@ -514,7 +514,7 @@ it("rejects OpenAI final-text mismatch without committing a conversation", async
     })
   ).run({ task: "hi" });
   expect(run.status).toBe("failed");
-  expect(run.errors[0]!.message).toContain("text does not match final response");
+  expect(run.errors[0].message).toContain("text does not match final response");
   expect(observed.at(-1)).toMatchObject({ status: "interrupted" });
 });
 

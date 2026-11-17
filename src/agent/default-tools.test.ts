@@ -78,7 +78,7 @@ describe("default agent tools", () => {
           : { kind: "finish", result: state };
       },
       reduce: (_state, outcomes) => {
-        const outcome = outcomes[0]!;
+        const outcome = outcomes[0];
         if (!outcome.ok || outcome.tool !== "read") throw new Error("Expected custom read");
         expectTypeOf(outcome.value).toEqualTypeOf<number>();
         return outcome.value;
@@ -88,7 +88,7 @@ describe("default agent tools", () => {
     expect(
       batch([])
         .plan()
-        .steps[0]!.agent!.capabilities.map(({ name }) => name)
+        .steps[0].agent!.capabilities.map(({ name }) => name)
     ).toEqual(["bash", "edit", "list", "read", "search", "write"]);
   });
 

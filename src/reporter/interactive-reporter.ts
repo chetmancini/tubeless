@@ -414,7 +414,7 @@ function createInteractiveReporter<TResult>(
     const ellipsis = theme.unicodeEnabled ? "…" : "...";
     if (rows < 5) {
       ensureTicker().setLines(
-        [lines[0]!, `  ${ellipsis} ${lines.length - 1} rows omitted`].slice(0, rows - 1)
+        [lines[0], `  ${ellipsis} ${lines.length - 1} rows omitted`].slice(0, rows - 1)
       );
       return;
     }
@@ -428,7 +428,7 @@ function createInteractiveReporter<TResult>(
       Math.min(lines.length - available, focus - Math.floor(available / 2))
     );
     const end = start + available;
-    const visible = [lines[0]!];
+    const visible = [lines[0]];
     if (start > 1) visible.push(`  ${ellipsis} ${start - 1} rows above`);
     visible.push(...lines.slice(start, end));
     if (end < lines.length) visible.push(`  ${ellipsis} ${lines.length - end} rows below`);

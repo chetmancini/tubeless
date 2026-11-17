@@ -475,7 +475,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
       items,
       { concurrency, signal: context.signal },
       async (item, itemIndex): Promise<void> => {
-        const key = keys[itemIndex]!;
+        const key = keys[itemIndex];
         progress?.start(key);
         try {
           throwIfAborted(context.signal, `Mapped child pipeline ${config.pipeline.id}`);

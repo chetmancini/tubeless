@@ -50,15 +50,15 @@ describe("typed step overrides", () => {
     expect(result).toMatchObject({ status: "completed", value: 42, finalized: true });
     expect(result.steps.map(({ status }) => status)).toEqual(["completed", "completed"]);
     expect(complete).toHaveBeenCalledTimes(2);
-    expect(complete.mock.calls[0]![0]).toMatchObject({
+    expect(complete.mock.calls[0][0]).toMatchObject({
       outputSource: "override",
       id: "load",
       status: "completed",
       attemptId: expect.any(String),
     });
-    expect(complete.mock.calls[1]![0].id).toBe("double");
-    expect(complete.mock.calls[1]![0]).not.toHaveProperty("outputSource");
-    expect(started.mock.calls[0]![0]).toMatchObject({
+    expect(complete.mock.calls[1][0].id).toBe("double");
+    expect(complete.mock.calls[1][0]).not.toHaveProperty("outputSource");
+    expect(started.mock.calls[0][0]).toMatchObject({
       outputSource: "override",
       status: "running",
     });

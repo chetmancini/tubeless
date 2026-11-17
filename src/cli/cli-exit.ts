@@ -52,7 +52,7 @@ export function isCliValidationError(
  * and a pointer to `--help`, so the errors are not buried under the full option list.
  */
 export function cliValidationReportLines(errors: readonly string[], helpText: string): string[] {
-  const usage = helpText.split("\n", 1)[0]!;
+  const usage = helpText.split("\n", 1)[0];
   return [
     ...errors.map((error) => `Error: ${error}`),
     "",

@@ -142,16 +142,16 @@ describe("code mode", () => {
         },
       },
     ]);
-    const capabilities = contexts[0]!.capabilities;
+    const capabilities = contexts[0].capabilities;
     expect(capabilities.map(({ name }) => name)).toEqual(["codemode"]);
-    const description = capabilities[0]!.description;
+    const description = capabilities[0].description;
     expect(description).toContain("declare const tools: {");
     expect(description).toContain("/** Word to transform */");
     expect(description).toContain(
       "upper(input: {\n    /** Word to transform */\n    word: string;\n  }): Promise<{\n    upper: string;\n  }>;"
     );
     expect(description).toContain("read(input: {");
-    expect(requests[0]!.instructions).toContain("Code mode: your only tool is codemode.");
+    expect(requests[0].instructions).toContain("Code mode: your only tool is codemode.");
   });
 
   it("records nested calls as child runs of the script with their own call identities", async () => {
@@ -216,17 +216,17 @@ describe("code mode", () => {
       model,
     });
     const results = outcomes((await agent.runOrThrow({ task: "go" })).answer);
-    expect(results[0]!.value!.result).toEqual(["ToolError", "NOT_FOUND", "No word missing"]);
-    expect(results[1]!.value!.result).toBe("CODEMODE_INVALID_CALL");
-    expect(results[2]!.value!.result).toBe("TypeError");
-    expect(results[3]!.error).toEqual({
+    expect(results[0].value!.result).toEqual(["ToolError", "NOT_FOUND", "No word missing"]);
+    expect(results[1].value!.result).toBe("CODEMODE_INVALID_CALL");
+    expect(results[2].value!.result).toBe("TypeError");
+    expect(results[3].error).toEqual({
       code: "CODEMODE_SCRIPT_ERROR",
       message: "NOT_FOUND: No word missing (line 1, column 24)\nLogs:\nbefore",
     });
-    expect(results[4]!.error!.code).toBe("CODEMODE_SCRIPT_ERROR");
-    expect(results[4]!.error!.message).toContain("SyntaxError");
-    expect(results[5]!.error!.code).toBe("CODEMODE_RESULT_TOO_LARGE");
-    expect(results[6]!.value!.result).toBeNull();
+    expect(results[4].error!.code).toBe("CODEMODE_SCRIPT_ERROR");
+    expect(results[4].error!.message).toContain("SyntaxError");
+    expect(results[5].error!.code).toBe("CODEMODE_RESULT_TOO_LARGE");
+    expect(results[6].value!.result).toBeNull();
   });
 
   it("exposes only realm-local objects without host globals or code generation", async () => {
@@ -256,7 +256,7 @@ describe("code mode", () => {
       environment: remote(),
       model,
     });
-    expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0]!.value!.result).toEqual({
+    expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0].value!.result).toEqual({
       process: "ReferenceError",
       require: "ReferenceError",
       timers: "ReferenceError",
@@ -283,7 +283,7 @@ describe("code mode", () => {
     });
     const run = await limited.run({ task: "go" });
     expect(run.status).toBe("failed");
-    expect(run.errors[0]!.message).toContain("maxCalls");
+    expect(run.errors[0].message).toContain("maxCalls");
 
     const broken = defineAgent({
       id: "codemode-fatal",
@@ -352,7 +352,7 @@ describe("code mode", () => {
         release.resolve();
       }
       const [result] = outcomes((await running).answer);
-      expect(result!.value!.result).toEqual(["A", "B", "C"]);
+      expect(result.value!.result).toEqual(["A", "B", "C"]);
       expect(peak).toBe(maxConcurrency);
     }
   });
@@ -428,8 +428,8 @@ describe("code mode on defineAgentLoop", () => {
       decide,
       dryRun: dryRun ? decide : undefined,
       reduce: (state, outcomes) => {
-        expectTypeOf(outcomes[0]!.tool).toEqualTypeOf<"codemode">();
-        if (outcomes[0]!.ok) expectTypeOf(outcomes[0]!.value).toEqualTypeOf<CodemodeResult>();
+        expectTypeOf(outcomes[0].tool).toEqualTypeOf<"codemode">();
+        if (outcomes[0].ok) expectTypeOf(outcomes[0].value).toEqualTypeOf<CodemodeResult>();
         reduced.push(...outcomes);
         return { turn: state.turn + 1 };
       },
@@ -471,7 +471,7 @@ describe("code mode on defineAgentLoop", () => {
     );
     const run = await write.agent.run({}, { dryRun: true });
     expect(run.status).toBe("failed");
-    expect(run.errors[0]!.message).toContain("Required pipeline outputs missing");
+    expect(run.errors[0].message).toContain("Required pipeline outputs missing");
   });
 
   it("rejects code mode without any tool for scripts to call", () => {
@@ -818,7 +818,7 @@ describe("code-mode identity and call IDs", () => {
               decision: { kind: "finish", result: { answer: JSON.stringify(request.outcomes) } },
             },
     });
-    expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0]!.value!.result).toBe("A");
+    expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0].value!.result).toBe("A");
   });
 });
 
@@ -979,7 +979,7 @@ describe("code-mode executor option", () => {
       tools: { upper },
       model: scripted("remote script").model,
     });
-    expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0]!.value!.result).toEqual({
+    expect(outcomes((await agent.runOrThrow({ task: "go" })).answer)[0].value!.result).toEqual({
       upper: "EDGE",
     });
     expect(executions).toEqual(["remote script"]);

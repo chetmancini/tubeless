@@ -664,7 +664,7 @@ describe("incremental pipeline run projector", () => {
     completed.error!.message = "producer changed";
     completed.error!.cause!.message = "producer changed cause";
 
-    const first = projector.snapshot(10).runs[0]!;
+    const first = projector.snapshot(10).runs[0];
     expect(first).toMatchObject({
       correlationId: "original",
       dryRun: false,
@@ -673,7 +673,7 @@ describe("incremental pipeline run projector", () => {
     });
     first.error!.cause!.message = "consumer changed cause";
     projector.append([event(2, "pipeline.log", { payload: { message: "late log" } })]);
-    const next = projector.snapshot(20).runs[0]!;
+    const next = projector.snapshot(20).runs[0];
     expect(next.error).toMatchObject({
       message: "original failure",
       cause: { message: "original cause" },
@@ -699,12 +699,12 @@ describe("incremental pipeline run projector", () => {
     ];
     const projector = createPipelineRunProjector({ retainArtifacts: false });
     projector.append(events);
-    const summary = projector.snapshot(1).runs[0]!;
-    const full = projectPipelineRunStore(events, 1).runs[0]!;
-    expect(full.steps[0]!.artifacts).toHaveLength(1);
-    const { artifacts: _artifacts, ...step } = full.steps[0]!;
+    const summary = projector.snapshot(1).runs[0];
+    const full = projectPipelineRunStore(events, 1).runs[0];
+    expect(full.steps[0].artifacts).toHaveLength(1);
+    const { artifacts: _artifacts, ...step } = full.steps[0];
     expect(summary).toEqual({ ...full, steps: [step] });
-    expect(summary.steps[0]!.status).toBe("failed");
+    expect(summary.steps[0].status).toBe("failed");
     expect(summary.eventCount).toBe(4);
   });
 

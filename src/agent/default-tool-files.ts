@@ -265,7 +265,7 @@ export async function searchTool(input: { query: string; path?: string | null },
       }
       const lines = text.split(/\r?\n/);
       for (let index = 0; index < lines.length; index++) {
-        const source = lines[index]!;
+        const source = lines[index];
         const match = source.indexOf(input.query);
         if (match < 0) continue;
         const line = clippedText(source, MAX_SEARCH_SNIPPET_BYTES);
@@ -287,7 +287,7 @@ export async function searchTool(input: { query: string; path?: string | null },
       }
       const children = await sortedEntries(path, context.signal);
       for (let index = 0; index < children.length; index++) {
-        const entry = children[index]!;
+        const entry = children[index];
         throwIfAborted(context.signal, "Search files");
         if (
           ++entries > MAX_SEARCH_ENTRIES ||
@@ -307,7 +307,7 @@ export async function searchTool(input: { query: string; path?: string | null },
               entries + files.length <= MAX_SEARCH_ENTRIES &&
               children[index + files.length]?.isFile()
             )
-              files.push(children[index + files.length]!);
+              files.push(children[index + files.length]);
             const reads = await Promise.allSettled(
               files.map((file) => readText(join(path, file.name), context.signal))
             );
@@ -324,7 +324,7 @@ export async function searchTool(input: { query: string; path?: string | null },
                 }
               }
               try {
-                collectFileMatches(join(path, files[offset]!.name), reads[offset]!);
+                collectFileMatches(join(path, files[offset].name), reads[offset]);
               } catch (error) {
                 throwIfAborted(context.signal, "Search files");
                 if (!unavailableEntry(error)) throw error;
@@ -342,7 +342,7 @@ export async function searchTool(input: { query: string; path?: string | null },
     }
     if ((await stat(root)).isFile()) {
       const [read] = await Promise.allSettled([readText(root, context.signal)]);
-      collectFileMatches(root, read!);
+      collectFileMatches(root, read);
     } else await walk(root, 0);
     return { matches, truncated, skippedFiles };
   });

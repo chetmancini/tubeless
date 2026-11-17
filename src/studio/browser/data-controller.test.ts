@@ -86,13 +86,13 @@ describe("StudioDataController", () => {
     const requests = [deferred<StudioSnapshot>(), deferred<StudioSnapshot>()];
     const loadSnapshot = vi
       .fn()
-      .mockReturnValueOnce(requests[0]!.promise)
-      .mockReturnValueOnce(requests[1]!.promise);
+      .mockReturnValueOnce(requests[0].promise)
+      .mockReturnValueOnce(requests[1].promise);
     const instance = controller(api({ loadSnapshot }), "linked");
     expect(instance.getState().selection).toEqual({ status: "loading", runId: "linked" });
     instance.refresh();
     instance.selectRun("missing");
-    requests[0]!.resolve(snapshot([run("linked")], "linked"));
+    requests[0].resolve(snapshot([run("linked")], "linked"));
     await settle();
     expect(instance.getState().selection).toMatchObject({ status: "loading", runId: "missing" });
     expect(loadSnapshot).toHaveBeenLastCalledWith({
@@ -100,7 +100,7 @@ describe("StudioDataController", () => {
       offset: 0,
       selectedRunId: "missing",
     });
-    requests[1]!.resolve(snapshot([]));
+    requests[1].resolve(snapshot([]));
     await settle();
     expect(instance.getState().selection).toEqual({ status: "unavailable", runId: "missing" });
   });
@@ -138,12 +138,12 @@ describe("StudioDataController", () => {
     const requests = [deferred<StudioSnapshot>(), deferred<StudioSnapshot>()];
     const loadSnapshot = vi
       .fn()
-      .mockReturnValueOnce(requests[0]!.promise)
-      .mockReturnValueOnce(requests[1]!.promise);
+      .mockReturnValueOnce(requests[0].promise)
+      .mockReturnValueOnce(requests[1].promise);
     const instance = controller(api({ loadSnapshot }));
     instance.setHistoryQuery({ offset: 50 });
     instance.setHistoryQuery({ query: "child" });
-    requests[0]!.resolve(snapshot([run("old-page")]));
+    requests[0].resolve(snapshot([run("old-page")]));
     await settle();
     expect(instance.getState().snapshot).toBeNull();
     expect(loadSnapshot).toHaveBeenLastCalledWith({
@@ -151,7 +151,7 @@ describe("StudioDataController", () => {
       offset: 0,
       selectedRunId: null,
     });
-    requests[1]!.resolve(snapshot([run("new-page")]));
+    requests[1].resolve(snapshot([run("new-page")]));
     await settle();
     expect(instance.getState().snapshot?.runs[0]?.runId).toBe("new-page");
   });
@@ -226,7 +226,7 @@ describe("StudioDataController", () => {
     );
     instance.refresh();
     await settle();
-    requests[0]!.resolve(studioRunDetail(run("live")));
+    requests[0].resolve(studioRunDetail(run("live")));
     await settle();
     for (const count of [2, 3, 4]) {
       eventCount = count;
@@ -235,10 +235,10 @@ describe("StudioDataController", () => {
     }
     expect(detail(instance)?.run.eventCount).toBe(1);
     expect(loadRunDetail).toHaveBeenCalledTimes(2);
-    requests[1]!.resolve(studioRunDetail(run("live", 2)));
+    requests[1].resolve(studioRunDetail(run("live", 2)));
     await settle();
     expect(loadRunDetail).toHaveBeenCalledTimes(3);
-    requests[2]!.resolve(studioRunDetail(run("live", 4)));
+    requests[2].resolve(studioRunDetail(run("live", 4)));
     await settle();
     expect(detail(instance)?.run.eventCount).toBe(4);
   });
@@ -263,13 +263,13 @@ describe("StudioDataController", () => {
       );
       instance.refresh();
       await settle();
-      requests[0]!.resolve(studioRunDetail(run("live")));
+      requests[0].resolve(studioRunDetail(run("live")));
       await settle();
       eventCount = 2;
       instance.refresh();
       await settle();
-      if (outcome === "missing") requests[1]!.resolve(null);
-      else requests[1]!.reject(new Error("offline"));
+      if (outcome === "missing") requests[1].resolve(null);
+      else requests[1].reject(new Error("offline"));
       await settle();
       eventCount = 3;
       instance.refresh();
@@ -277,7 +277,7 @@ describe("StudioDataController", () => {
       expect(detail(instance)?.run.eventCount).toBe(1);
       expect(loadRunDetail).toHaveBeenCalledTimes(2);
       await vi.advanceTimersByTimeAsync(50);
-      requests[2]!.resolve(studioRunDetail(run("live", 3)));
+      requests[2].resolve(studioRunDetail(run("live", 3)));
       await settle();
       expect(detail(instance)?.run.eventCount).toBe(3);
     }
@@ -298,10 +298,10 @@ describe("StudioDataController", () => {
       instance.selectRun(id);
       await settle();
     }
-    requests[2]!.resolve(studioRunDetail(run("first", 2)));
+    requests[2].resolve(studioRunDetail(run("first", 2)));
     await settle();
-    requests[0]!.resolve(studioRunDetail(run("first")));
-    requests[1]!.resolve(studioRunDetail(run("second")));
+    requests[0].resolve(studioRunDetail(run("first")));
+    requests[1].resolve(studioRunDetail(run("second")));
     await settle();
     expect(detail(instance)?.run).toMatchObject({ runId: "first", eventCount: 2 });
   });
@@ -322,17 +322,17 @@ describe("StudioDataController", () => {
     const requests = [deferred<StudioSnapshot>(), deferred<StudioSnapshot>()];
     const loadSnapshot = vi
       .fn()
-      .mockReturnValueOnce(requests[0]!.promise)
-      .mockReturnValueOnce(requests[1]!.promise);
+      .mockReturnValueOnce(requests[0].promise)
+      .mockReturnValueOnce(requests[1].promise);
     const instance = controller(api({ loadSnapshot }));
     instance.refresh();
     instance.refresh(true);
     expect(loadSnapshot).toHaveBeenCalledTimes(1);
-    requests[0]!.resolve(snapshot([run("first")]));
+    requests[0].resolve(snapshot([run("first")]));
     await settle();
     expect(loadSnapshot).toHaveBeenCalledTimes(2);
     instance.refresh();
-    requests[1]!.resolve(snapshot([run("second")]));
+    requests[1].resolve(snapshot([run("second")]));
     await settle();
     expect(loadSnapshot).toHaveBeenCalledTimes(2);
     expect(instance.getState().manualRefreshing).toBe(false);
@@ -375,14 +375,14 @@ describe("StudioDataController", () => {
     instance.refresh();
     await settle();
     instance.invalidate({ delayMs: 20 });
-    requests[0]!.resolve(studioRunDetail(run("selected")));
+    requests[0].resolve(studioRunDetail(run("selected")));
     await settle();
     expect(detail(instance)).toBeNull();
     await vi.advanceTimersByTimeAsync(19);
     expect(loadRunDetail).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(loadRunDetail).toHaveBeenCalledTimes(2);
-    requests[1]!.resolve(studioRunDetail(run("selected", 2)));
+    requests[1].resolve(studioRunDetail(run("selected", 2)));
     await settle();
     expect(detail(instance)?.run.eventCount).toBe(2);
   });

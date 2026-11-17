@@ -18,7 +18,7 @@ export function renderTerminal(output: string, columns = Number.POSITIVE_INFINIT
     rows[row] ??= [];
   };
   for (const [token, params, command] of output.matchAll(TERMINAL_TOKEN)) {
-    const cells = rows[row]!;
+    const cells = rows[row];
     if (command === "F") {
       row = Math.max(0, row - (Number(params) || 1));
       column = 0;
@@ -38,7 +38,7 @@ export function renderTerminal(output: string, columns = Number.POSITIVE_INFINIT
       pendingWrap = false;
     } else {
       if (pendingWrap) nextRow();
-      const target = rows[row]!;
+      const target = rows[row];
       while (target.length < column) target.push(" ");
       target[column] = token;
       if (column + 1 >= columns) pendingWrap = true;

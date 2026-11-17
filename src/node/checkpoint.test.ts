@@ -219,7 +219,7 @@ describe("openCheckpoint", () => {
 
     const actualFs = await vi.importActual<typeof import("fs")>("fs");
     vi.mocked(fs.writeFileSync).mockImplementation((target, data, options) => {
-      actualFs.writeFileSync(target, data, options as never);
+      actualFs.writeFileSync(target, data, options);
       throw new Error("write exploded");
     });
     try {

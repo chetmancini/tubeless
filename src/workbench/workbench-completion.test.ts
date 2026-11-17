@@ -89,8 +89,8 @@ async function complete(
       lines.push(":files");
     } else {
       expect(kind).toBe("v");
-      values.push(value!);
-      lines.push(description ? `${value}\t${description}` : value!);
+      values.push(value);
+      lines.push(description ? `${value}\t${description}` : value);
     }
   }
   return {
@@ -448,7 +448,7 @@ describe("tubeless __complete", () => {
 
   it("mirrors every subcommand's --help options", async () => {
     const commands = [...(await help("--help")).matchAll(/^ {2}tubeless (\S+)/gm)].map(
-      (match) => match[1]!
+      (match) => match[1]
     );
     expect(commands).toContain("completion");
     for (const command of commands.filter((name) => name !== "cloud")) {

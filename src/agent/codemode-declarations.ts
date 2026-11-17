@@ -18,7 +18,7 @@ const key = (name: string) => (identifier.test(name) ? name : JSON.stringify(nam
 
 function comment(text: string, indent: string): string[] {
   const lines = text.replaceAll("*/", "*\\/").trim().split(/\r?\n/);
-  if (lines.length === 1 && lines[0]!.length <= 100) return [`${indent}/** ${lines[0]} */`];
+  if (lines.length === 1 && lines[0].length <= 100) return [`${indent}/** ${lines[0]} */`];
   return [`${indent}/**`, ...lines.map((line) => `${indent} * ${line}`.trimEnd()), `${indent} */`];
 }
 
@@ -55,11 +55,11 @@ function definition(context: Context, ref: string): unknown {
   if (!match) return undefined;
   let name: string;
   try {
-    name = decodeURIComponent(match[2]!);
+    name = decodeURIComponent(match[2]);
   } catch {
     return undefined;
   }
-  const definitions = context.root[match[1]!];
+  const definitions = context.root[match[1]];
   return isRecord(definitions)
     ? definitions[name.replaceAll("~1", "/").replaceAll("~0", "~")]
     : undefined;
@@ -194,7 +194,7 @@ export function codemodeDeclarations(
   maxCharacters = Number.POSITIVE_INFINITY
 ): string | undefined {
   const lines = ["declare const tools: {"];
-  let characters = lines[0]!.length;
+  let characters = lines[0].length;
   try {
     for (const tool of tools) {
       const input = render(

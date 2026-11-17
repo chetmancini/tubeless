@@ -43,7 +43,7 @@ const request = (jwt?: string, path = "/api/snapshot") =>
   );
 
 beforeAll(async () => {
-  keys = (await crypto.subtle.generateKey(
+  keys = await crypto.subtle.generateKey(
     {
       name: "RSASSA-PKCS1-v1_5",
       modulusLength: 2048,
@@ -52,8 +52,8 @@ beforeAll(async () => {
     },
     true,
     ["sign", "verify"]
-  )) as CryptoKeyPair;
-  jwk = { ...(await crypto.subtle.exportKey("jwk", keys.publicKey)), kid: "k1" } as TestJwk;
+  );
+  jwk = { ...(await crypto.subtle.exportKey("jwk", keys.publicKey)), kid: "k1" };
 });
 
 interface Harness {
@@ -151,7 +151,7 @@ describe("Access authenticator", () => {
     const auth = authenticator();
     expect(await (await auth(request()))!.json()).toMatchObject({ code: "access_required" });
     expect((await auth(request("a.b")))?.status).toBe(401);
-    const other = (await crypto.subtle.generateKey(
+    const other = await crypto.subtle.generateKey(
       {
         name: "RSASSA-PKCS1-v1_5",
         modulusLength: 2048,
@@ -160,7 +160,7 @@ describe("Access authenticator", () => {
       },
       true,
       ["sign", "verify"]
-    )) as CryptoKeyPair;
+    );
     expect((await auth(request(await token({}, "k1", other.privateKey))))?.status).toBe(401);
     expect(
       (await auth(request(`${encode({ alg: "none", kid: "k1" })}.${encode({})}.`)))?.status
@@ -307,7 +307,7 @@ describe("Access authenticator", () => {
   it("keeps the other keys when one JWK fails to import", async () => {
     // Node's importKey accepts most malformed RSA JWKs, so the first import is forced to reject.
     const auth = authenticator({
-      jwks: [{ kid: "bad", kty: "RSA", n: "AAAA", e: "AQAB" } as TestJwk, jwk],
+      jwks: [{ kid: "bad", kty: "RSA", n: "AAAA", e: "AQAB" }, jwk],
     });
     const importKey = vi
       .spyOn(crypto.subtle, "importKey")

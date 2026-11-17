@@ -83,8 +83,8 @@ it("materializes isolated snapshots while repeated reports retain dispatch order
     ["b", "second"],
   ]);
   expect(early.agentTurn!.calls).toHaveLength(1);
-  expect(early.agentTurn!.calls[0]!.tool).toBe("first");
-  current.agentTurn!.calls[0]!.tool = "mutated";
+  expect(early.agentTurn!.calls[0].tool).toBe("first");
+  current.agentTurn!.calls[0].tool = "mutated";
   current.agentTurn!.calls.pop();
   expect(projection.snapshot().agentTurn!.calls.map(({ tool }) => tool)).toEqual([
     "updated",
@@ -303,7 +303,7 @@ it("bounds distinct models per turn and rejects invalid or overflowing counters"
   duration.append(modelRequest(0, { "agent.model.durationMs": Number.MAX_VALUE }));
   duration.append(modelRequest(1, { "agent.model.durationMs": Number.MAX_VALUE }));
   // An overflowing sum would fail the stored run wire schema, which requires finite numbers.
-  expect(duration.snapshot().agentTurn!.usage![0]!.durationMs).toBe(Number.MAX_VALUE);
+  expect(duration.snapshot().agentTurn!.usage![0].durationMs).toBe(Number.MAX_VALUE);
 });
 
 it("isolates usage snapshots from caller mutation", () => {
@@ -312,7 +312,7 @@ it("isolates usage snapshots from caller mutation", () => {
     modelRequest(0, { "agent.model.inputTokens": 10, "agent.model.outputTokens": 5 })
   );
   const early = projection.snapshot();
-  early.agentTurn!.usage![0]!.inputTokens = 999;
+  early.agentTurn!.usage![0].inputTokens = 999;
   early.agentTurn!.usage!.push({
     provider: "openai",
     model: "injected",
@@ -325,5 +325,5 @@ it("isolates usage snapshots from caller mutation", () => {
   );
   const current = projection.snapshot();
   expect(current.agentTurn!.usage).toHaveLength(1);
-  expect(current.agentTurn!.usage![0]!.inputTokens).toBe(20);
+  expect(current.agentTurn!.usage![0].inputTokens).toBe(20);
 });

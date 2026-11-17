@@ -138,7 +138,7 @@ describe.each(sources)("%s subtree reads", (source) => {
         ).toEqual(ids.map((id) => id + offset));
       }
       const [returned] = await reader.listEvents({ runId: "child-a" });
-      returned!.parentRunId = "changed";
+      returned.parentRunId = "changed";
       expect(
         (await reader.listEvents({ rootRunId: "root", runId: "child-a" })).map(
           ({ parentRunId }) => parentRunId

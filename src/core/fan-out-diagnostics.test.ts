@@ -89,7 +89,7 @@ describe("fan-out diagnostics", () => {
       (index) => `${index}-${"k".repeat(2000)}`
     );
     const run = await pipeline.run({});
-    const diagnostics = run.errors[0]!.fanOut!;
+    const diagnostics = run.errors[0].fanOut!;
     expect(diagnostics.failureCount).toBe(40);
     expect(diagnostics.omittedFailureCount).toBe(8);
     expect(diagnostics.failures).toHaveLength(32);
@@ -98,8 +98,8 @@ describe("fan-out diagnostics", () => {
       keyTruncated: true,
       error: { cause: { message: "Circular cause" } },
     });
-    expect(diagnostics.failures[0]!.key).toHaveLength(1024);
-    expect(diagnostics.failures[0]!.error.message).toHaveLength(1024);
+    expect(diagnostics.failures[0].key).toHaveLength(1024);
+    expect(diagnostics.failures[0].error.message).toHaveLength(1024);
   });
 
   it("retains only the primary child run when many children fail", async () => {
@@ -135,12 +135,12 @@ describe("fan-out diagnostics", () => {
       throw abort;
     }).run({});
     expect(cancelled.status).toBe("cancelled");
-    expect(cancelled.errors[0]!.fanOut!.failures.every((failure) => failure.cancelled)).toBe(true);
+    expect(cancelled.errors[0].fanOut!.failures.every((failure) => failure.cancelled)).toBe(true);
     const mixed = await fixture(2, (index) => {
       throw index === 0 ? abort : new Error("failed");
     }).run({});
     expect(mixed.status).toBe("failed");
-    expect(mixed.errors[0]!.fanOut!.failures.map((failure) => failure.cancelled)).toEqual([
+    expect(mixed.errors[0].fanOut!.failures.map((failure) => failure.cancelled)).toEqual([
       true,
       false,
     ]);
@@ -157,7 +157,7 @@ describe("fan-out diagnostics", () => {
         undefined,
         phase
       ).run({});
-      const failure = run.errors[0]!.fanOut!.failures[0]!;
+      const failure = run.errors[0].fanOut!.failures[0];
       expect(failure).toMatchObject({ key: "item-0", index: 0, cancelled: false });
       expect(JSON.stringify(failure)).toContain("RETRY");
       expect(JSON.stringify(failure)).not.toContain('"steps"');
@@ -188,6 +188,6 @@ describe("fan-out diagnostics", () => {
       () => {},
       () => "same"
     ).run({});
-    expect(run.errors[0]!.fanOut).toBeUndefined();
+    expect(run.errors[0].fanOut).toBeUndefined();
   });
 });

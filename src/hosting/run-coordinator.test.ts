@@ -120,7 +120,7 @@ describe("process hosted executor through the shared coordinator", () => {
     const reopened = createSqliteLaunchStoreFixture(filename);
     try {
       expect(await reopened.store.listEvents()).toEqual(events);
-      const [id, sequence, batch] = batches.mock.calls[0]!;
+      const [id, sequence, batch] = batches.mock.calls[0];
       expect(await reopened.store.acceptBatch(id, sequence, batch)).toEqual({
         accepted: true,
         runId: result.runId,

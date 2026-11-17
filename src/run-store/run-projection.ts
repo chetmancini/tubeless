@@ -227,7 +227,7 @@ export class RunProjection {
 export function projectPipelineRun(events: readonly StoredPipelineEvent[]): StoredPipelineRun {
   if (events.length === 0) throw new Error("Cannot project an empty pipeline run event list.");
   const ordered = [...events].sort((left, right) => left.id - right.id);
-  const projection = new RunProjection(ordered[0]!);
+  const projection = new RunProjection(ordered[0]);
   for (const event of ordered.slice(1)) projection.append(event);
   return projection.snapshot();
 }

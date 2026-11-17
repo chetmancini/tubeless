@@ -63,7 +63,7 @@ async function executeRun(
     return writeUsageError(io, "--json cannot be combined with --trace -.", RUN_USAGE);
   }
   const registration = await resolveWorkbenchRegistration(
-    parsed.positionals[0]!,
+    parsed.positionals[0],
     parsed.values.export,
     parsed.values.project,
     io,

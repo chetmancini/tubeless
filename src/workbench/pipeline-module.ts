@@ -135,7 +135,7 @@ export function selectUniqueExport<T>(
     const hint = options?.hintExport === false ? "" : "; pass --export <name>";
     throw new Error(`Module exports multiple ${label}s (${names})${hint}.`);
   }
-  const [name, value] = unique[0]!;
+  const [name, value] = unique[0];
   return { exportName: name, value };
 }
 
@@ -161,7 +161,7 @@ function selectPlanSourceExport(
 
   const commands = uniqueNamedExports(moduleExports, isWorkbenchPipelineCommand);
   if (commands.length === 1) {
-    return { kind: "command", command: commands[0]![1] };
+    return { kind: "command", command: commands[0][1] };
   }
   if (commands.length > 1) {
     throw new Error(
@@ -171,7 +171,7 @@ function selectPlanSourceExport(
 
   const pipelines = uniqueNamedExports(moduleExports, isWorkbenchPipeline);
   if (pipelines.length === 1) {
-    return { kind: "pipeline", pipeline: pipelines[0]![1] };
+    return { kind: "pipeline", pipeline: pipelines[0][1] };
   }
   if (pipelines.length > 1) {
     throw new Error(

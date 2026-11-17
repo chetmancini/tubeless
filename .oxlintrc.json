@@ -97,6 +97,7 @@
     ],
     "typescript/no-mixed-enums": "error",
     "typescript/no-unnecessary-boolean-literal-compare": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
     "typescript/no-unnecessary-template-expression": "error",
     "typescript/no-unnecessary-type-constraint": "error",
     "typescript/no-unsafe-enum-comparison": "error",

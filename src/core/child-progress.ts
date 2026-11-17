@@ -35,7 +35,7 @@ function sameChildProgress(
   return (
     leftDetails.length === rightDetails.length &&
     leftDetails.every((row, index) => {
-      const other = rightDetails[index]!;
+      const other = rightDetails[index];
       return (
         row === other ||
         (row.id === other.id &&

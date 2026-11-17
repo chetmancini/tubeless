@@ -26,7 +26,7 @@ export const readAnthropicStream: AgentTextProtocol = async (events, write) => {
         throw new Error("Anthropic stream invalid block start");
       const block = { ...event.content_block };
       blocks.push(block);
-      open.add(event.index as number);
+      open.add(event.index);
       if (block.type === "text" && typeof block.text === "string") await write(block.text);
     } else if (event.type === "content_block_delta") {
       const index = event.index as number;
@@ -70,7 +70,7 @@ export const readAnthropicStream: AgentTextProtocol = async (events, write) => {
       if (!open.delete(index)) throw new Error("Anthropic stream invalid block stop");
       if (inputs.has(index)) {
         try {
-          blocks[index]!.input = JSON.parse(inputs.get(index)!);
+          blocks[index].input = JSON.parse(inputs.get(index)!);
         } catch {
           throw new Error("Anthropic stream invalid tool JSON");
         }

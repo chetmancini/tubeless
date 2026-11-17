@@ -62,7 +62,7 @@ describe("default tool selection", () => {
       [{ id: "b", tool: "bash", input: { command: "true" } }]
     ).agent.run({});
     expect(denied.status).toBe("failed");
-    expect(denied.errors[0]!.message).toContain("Unknown agent tool: bash");
+    expect(denied.errors[0].message).toContain("Unknown agent tool: bash");
   });
 
   it("grants no defaults for an empty list and keeps all six by default", async () => {

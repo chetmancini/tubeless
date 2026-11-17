@@ -120,7 +120,7 @@ export function wireEnum<const TValues extends readonly string[]>(
   const accepted = new Set<string>(values);
   return schema({ enum: values, type: "string" }, (value, path) => {
     if (typeof value !== "string" || !accepted.has(value)) throw new Error(message(path));
-    return value as TValues[number];
+    return value;
   });
 }
 
@@ -284,7 +284,7 @@ export function wireDiscriminatedUnion<
       if (typeof discriminator !== "string" || !(discriminator in variants)) {
         throw new Error(`${key} is unsupported`);
       }
-      return variants[discriminator]!.decode(value, path) as InferWireSchema<
+      return variants[discriminator].decode(value, path) as InferWireSchema<
         TVariants[keyof TVariants]
       >;
     }

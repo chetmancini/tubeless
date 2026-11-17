@@ -34,7 +34,7 @@ export function isCollectorVerifier(value: unknown): value is string {
 
 export function parseCollectorToken(value: string | null | undefined) {
   const match = typeof value === "string" ? credentialToken.exec(value) : null;
-  return match ? { credentialId: match[1]!, secret: match[2]! } : undefined;
+  return match ? { credentialId: match[1], secret: match[2] } : undefined;
 }
 
 export function encodeCollectorToken(credentialId: string, secret: string): string {

@@ -5,8 +5,7 @@ export const MINIMUM_BUN_VERSION = "1.3.14";
 
 /** True when `current` (for example "22.11.0") is at least `minimum` ("22.12.0"); prerelease tags are ignored. */
 export function versionAtLeast(current: string, minimum: string): boolean {
-  const parse = (version: string) =>
-    version.replace(/^v/, "").split("-")[0]!.split(".").map(Number);
+  const parse = (version: string) => version.replace(/^v/, "").split("-")[0].split(".").map(Number);
   const [a, b] = [parse(current), parse(minimum)];
   for (let index = 0; index < 3; index += 1) {
     const left = a[index] ?? 0;

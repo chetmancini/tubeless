@@ -6,7 +6,7 @@ const dist = fileURLToPath(new URL("../../dist/", import.meta.url));
 
 function relativeImports(source: string, directory: string): string[] {
   return [...source.matchAll(/(?:\bfrom\s+|\bimport\s*(?:\(\s*)?)["'](\.[^"']+)["']/g)].map(
-    (match) => posix.normalize(posix.join(directory, match[1]!))
+    (match) => posix.normalize(posix.join(directory, match[1]))
   );
 }
 

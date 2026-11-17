@@ -17,7 +17,7 @@ function schema<T>(validate: (value: unknown) => T | undefined): StandardSchemaV
           : { value: result };
       },
       jsonSchema: { input: () => ({ type: "object", properties: { name: { type: "string" } } }) },
-    } as StandardSchemaV1<T, T>["~standard"],
+    },
   };
 }
 const nameSchema = schema((value) => {

@@ -47,7 +47,7 @@ describe("definePipeline run and selection", () => {
       version: 2,
     });
     expect(result.finishedAtMs).toBeGreaterThanOrEqual(result.startedAtMs);
-    const report = result.steps[0]!;
+    const report = result.steps[0];
     expect(report.finishedAtMs).toBeGreaterThanOrEqual(report.startedAtMs!);
     expect(report).toMatchObject({
       attemptId: `${executionRunId}:attempt:1`,

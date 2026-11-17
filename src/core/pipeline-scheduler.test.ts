@@ -99,8 +99,8 @@ describe("parallel DAG scheduling", () => {
     const branch = async (index: number, value: number) => {
       active++;
       highWater = Math.max(highWater, active);
-      entered[index]!.resolve();
-      await releases[index]!.promise;
+      entered[index].resolve();
+      await releases[index].promise;
       active--;
       return value + index;
     };
@@ -123,10 +123,10 @@ describe("parallel DAG scheduling", () => {
     );
     await Promise.all(entered.map(({ promise }) => promise));
     expect(active).toBe(2);
-    releases[1]!.resolve();
+    releases[1].resolve();
     await rightComplete.promise;
     expect(joinRun).not.toHaveBeenCalled();
-    releases[0]!.resolve();
+    releases[0].resolve();
     const result = await outcome;
     expect(result.value).toBe(21);
     expect(highWater).toBe(2);
@@ -184,7 +184,7 @@ describe("parallel DAG scheduling", () => {
     for (let index = 0; index < 1000; index++) {
       steps.push(
         step(`step-${index}`, {
-          dependsOn: index === 0 ? [] : [steps[index - 1]!],
+          dependsOn: index === 0 ? [] : [steps[index - 1]],
           run: () => index,
         })
       );
@@ -253,17 +253,17 @@ describe("parallel DAG scheduling", () => {
     const { step } = createSteps();
     const required = step("required", {
       run: async () => {
-        await releases[0]!.promise;
+        await releases[0].promise;
         return 1;
       },
     });
     const optional = step("optional", {
       run: async () => {
-        await releases[1]!.promise;
+        await releases[1].promise;
         return 2;
       },
     });
-    const gate = step("gate", { run: () => releases[2]!.promise });
+    const gate = step("gate", { run: () => releases[2].promise });
     const consume = vi.fn((_inputs: { required: number; optional?: number }) => 3);
     const child = step("child", {
       dependsOn: [required],
@@ -279,17 +279,17 @@ describe("parallel DAG scheduling", () => {
         hooks: {
           onStepComplete: ({ step }) => {
             const index = ["required", "optional", "gate"].indexOf(step.id);
-            if (index >= 0) finished[index]!.resolve();
+            if (index >= 0) finished[index].resolve();
           },
         },
       }
     );
     for (const index of [1, 0]) {
-      releases[index]!.resolve();
-      await finished[index]!.promise;
+      releases[index].resolve();
+      await finished[index].promise;
       expect(consume).not.toHaveBeenCalled();
     }
-    releases[2]!.resolve();
+    releases[2].resolve();
     expect((await run).value).toBe(3);
     expect(consume.mock.calls[0]?.[0]).toEqual({ required: 1, optional: 2 });
   });

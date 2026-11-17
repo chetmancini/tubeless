@@ -124,7 +124,7 @@ async function runConcurrentPartialWithLabel<T, R>(
       }
 
       try {
-        results[index] = await worker(items[index]!, index, options.signal);
+        results[index] = await worker(items[index], index, options.signal);
         completedIndexes.add(index);
       } catch (error) {
         if (!failed) {

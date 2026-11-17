@@ -57,24 +57,24 @@ describe("RunDetailLoader", () => {
     const requests = [deferred(), deferred(), deferred()];
     const loadRunDetail = vi
       .fn()
-      .mockReturnValueOnce(requests[0]!.promise)
-      .mockReturnValueOnce(requests[1]!.promise)
-      .mockReturnValueOnce(requests[2]!.promise);
+      .mockReturnValueOnce(requests[0].promise)
+      .mockReturnValueOnce(requests[1].promise)
+      .mockReturnValueOnce(requests[2].promise);
     const { instance, accept } = loader({ loadRunDetail });
     instance.update(summary());
     instance.update(summary("child", 2));
     instance.update(summary("child", 3));
     expect(loadRunDetail).toHaveBeenCalledTimes(1);
-    requests[0]!.resolve(detail());
+    requests[0].resolve(detail());
     await settle();
     expect(accept).toHaveBeenLastCalledWith(detail());
     expect(loadRunDetail).toHaveBeenCalledTimes(2);
     instance.update(summary("child", 4));
-    requests[1]!.resolve(detail("child", 3));
+    requests[1].resolve(detail("child", 3));
     await settle();
     expect(accept).toHaveBeenLastCalledWith(detail("child", 3));
     expect(loadRunDetail).toHaveBeenCalledTimes(3);
-    requests[2]!.resolve(detail("child", 4));
+    requests[2].resolve(detail("child", 4));
     await settle();
     instance.update(summary("child", 4));
     expect(accept).toHaveBeenLastCalledWith(detail("child", 4));
@@ -88,22 +88,22 @@ describe("RunDetailLoader", () => {
       const requests = [deferred(), deferred(), deferred()];
       const loadRunDetail = vi
         .fn()
-        .mockReturnValueOnce(requests[0]!.promise)
-        .mockReturnValueOnce(requests[1]!.promise)
-        .mockReturnValueOnce(requests[2]!.promise);
+        .mockReturnValueOnce(requests[0].promise)
+        .mockReturnValueOnce(requests[1].promise)
+        .mockReturnValueOnce(requests[2].promise);
       const { instance, accept } = loader({ loadRunDetail });
       instance.update(summary());
-      requests[0]!.resolve(detail());
+      requests[0].resolve(detail());
       await settle();
       instance.update(summary("child", 2));
-      if (outcome === "failed") requests[1]!.reject(new Error("offline"));
-      else requests[1]!.resolve(outcome === "missing" ? null : detail("wrong"));
+      if (outcome === "failed") requests[1].reject(new Error("offline"));
+      else requests[1].resolve(outcome === "missing" ? null : detail("wrong"));
       await settle();
       instance.update(summary("child", 2));
       expect(accept).toHaveBeenCalledTimes(1);
       expect(loadRunDetail).toHaveBeenCalledTimes(2);
       await vi.advanceTimersByTimeAsync(50);
-      requests[2]!.resolve(detail("child", 2));
+      requests[2].resolve(detail("child", 2));
       await settle();
       expect(accept).toHaveBeenLastCalledWith(detail("child", 2));
     }

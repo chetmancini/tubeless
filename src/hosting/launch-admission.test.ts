@@ -38,11 +38,11 @@ it("gives a dispatch job only to the reservation creator, including concurrent a
     values: { name: "Ada", dryRun: false },
     deploymentId: "release",
   });
-  expect(await fixture.store.launchStatus(jobs[0]!.launchId)).toMatchObject({ state: "starting" });
+  expect(await fixture.store.launchStatus(jobs[0].launchId)).toMatchObject({ state: "starting" });
   expect(await fixture.events.listEvents()).toEqual([]);
   expect(await admit(request)).toEqual({
     accepted: true,
-    launchId: jobs[0]!.launchId,
+    launchId: jobs[0].launchId,
     job: undefined,
   });
   expect(await admit({ ...request, values: { name: "different" } })).toMatchObject({

@@ -60,7 +60,7 @@ describe("agent sessions", () => {
     expect(replay.conversation).toEqual(["first"]);
     expect(Object.isFrozen(replay.conversation)).toBe(true);
     expect(await replay.runOrThrow({ task: "second" })).toEqual({ answer: "first > second" });
-    expect(requests[1]!.conversation).toEqual(["first"]);
+    expect(requests[1].conversation).toEqual(["first"]);
   });
 
   it.each([undefined, null])(
@@ -85,7 +85,7 @@ describe("agent sessions", () => {
       expect(session.conversation).toBeNull();
       await session.runOrThrow({ task: "second" });
       expect(requests).toHaveLength(2);
-      expect(requests[1]!.conversation).toBeNull();
+      expect(requests[1].conversation).toBeNull();
     }
   );
 

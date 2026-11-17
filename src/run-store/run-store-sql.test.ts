@@ -36,7 +36,7 @@ describe("shared run-store SQL", () => {
       const rows = db
         .prepare("SELECT * FROM pipeline_run_events")
         .all() as unknown as RunEventRecord[];
-      const decoded = storedRunEvent(rows[0]!);
+      const decoded = storedRunEvent(rows[0]);
       expect(decoded.itemKey).toBe(itemKey);
       expect(Object.hasOwn(decoded, "itemKey")).toBe(itemKey !== undefined);
     } finally {

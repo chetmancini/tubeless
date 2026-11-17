@@ -42,7 +42,7 @@ async function loadParsedPlanSource(
   usage: string
 ) {
   const registration = await resolveWorkbenchRegistration(
-    parsed.positionals[0]!,
+    parsed.positionals[0],
     parsed.values.export,
     parsed.values.project,
     io,
@@ -139,7 +139,7 @@ export async function runValidate(argv: readonly string[], io: WorkbenchCliIo): 
       parse: parseValidateArgs,
       positionalCountError: { count: 1, message: "Pass exactly one YAML or JSON document." },
       async run(parsed, commandIo) {
-        const file = resolve(commandIo.cwd, parsed.positionals[0]!);
+        const file = resolve(commandIo.cwd, parsed.positionals[0]);
         try {
           const extension = extname(file).toLowerCase();
           if (![".yaml", ".yml", ".json"].includes(extension)) {

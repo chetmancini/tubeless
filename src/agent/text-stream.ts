@@ -53,7 +53,7 @@ export async function readAgentText(
       if (bytes > 1_048_576) throw new Error("Agent text stream exceeds 1 MiB");
       for (let start = 0; start < text.length;) {
         let end = Math.min(start + 4096, text.length);
-        if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1]!)) end--;
+        if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end--;
         throwIfAborted(signal, "Agent text stream");
         await deliver({ ...identity, kind: "delta", text: text.slice(start, end) });
         start = end;

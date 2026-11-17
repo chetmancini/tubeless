@@ -63,13 +63,13 @@ describe("PipelineRunState", () => {
   it("derives fail-fast reports, lookup state, lifecycle events, and run status together", async () => {
     const { state, statuses, steps } = setup(["build", "write", "publish"]);
     const failure = testError("step", "TUBELESS_STEP_FAILED", "build");
-    state.failStep(steps[0]!, state.beginAttempt(steps[0]!), failure);
-    state.skipStep(steps[1]!, {
+    state.failStep(steps[0], state.beginAttempt(steps[0]), failure);
+    state.skipStep(steps[1], {
       dependencyId: "build",
       message: "Not run because fail-fast stopped after build failed.",
       reason: "fail-fast",
     });
-    state.skipStep(steps[2]!, {
+    state.skipStep(steps[2], {
       dependencyId: "build",
       message: "Not run because fail-fast stopped after build failed.",
       reason: "fail-fast",
@@ -100,8 +100,8 @@ describe("PipelineRunState", () => {
     const { state, steps } = setup(["first", "second"]);
     const cancellation = testError("cancellation", "TUBELESS_RUN_CANCELLED", "first");
     state.recordRunErrors([cancellation]);
-    state.cancelStep(steps[0]!, cancellation, false);
-    state.cancelStep(steps[1]!, { ...cancellation, stepId: "second" }, false);
+    state.cancelStep(steps[0], cancellation, false);
+    state.cancelStep(steps[1], { ...cancellation, stepId: "second" }, false);
 
     const result = await state.finish();
 
@@ -115,12 +115,12 @@ describe("PipelineRunState", () => {
 
   it("publishes a policy-skip value and unlocks a later completion", async () => {
     const { state, steps } = setup(["cached", "consume"]);
-    state.skipStep(steps[0]!, {
+    state.skipStep(steps[0], {
       message: "already cached",
       output: { value: undefined },
       reason: "policy",
     });
-    state.completeStep(steps[1]!, state.beginAttempt(steps[1]!), "consumed");
+    state.completeStep(steps[1], state.beginAttempt(steps[1]), "consumed");
     state.beginFinalization();
     state.completeFinalization("done", 5);
 
@@ -146,7 +146,7 @@ describe("PipelineRunState", () => {
   ])("records a focused $name transition", async ({ code, kind }) => {
     const { state, steps } = setup(["work"]);
     const error = testError(kind, code, "work");
-    state.failStep(steps[0]!, state.beginAttempt(steps[0]!), error);
+    state.failStep(steps[0], state.beginAttempt(steps[0]), error);
 
     const result = await state.finish();
 
@@ -160,11 +160,11 @@ describe("PipelineRunState", () => {
   it("supports continue-on-error sequencing before a failed finalized run", async () => {
     const { state, steps } = setup(["optional", "independent"]);
     state.failStep(
-      steps[0]!,
-      state.beginAttempt(steps[0]!),
+      steps[0],
+      state.beginAttempt(steps[0]),
       testError("step", "TUBELESS_STEP_FAILED", "optional")
     );
-    state.completeStep(steps[1]!, state.beginAttempt(steps[1]!), "kept");
+    state.completeStep(steps[1], state.beginAttempt(steps[1]), "kept");
     state.beginFinalization();
     state.completeFinalization("partial", 3);
 
@@ -197,9 +197,9 @@ describe("PipelineRunState", () => {
         stepId: PIPELINE_FINALIZE_STEP_ID,
         message: "finalization failed",
       };
-      state.failStep(steps[1]!, state.beginAttempt(steps[1]!), secondFailure);
-      state.skipStep(steps[2]!, { reason: "filtered" });
-      state.failStep(steps[0]!, state.beginAttempt(steps[0]!), firstFailure);
+      state.failStep(steps[1], state.beginAttempt(steps[1]), secondFailure);
+      state.skipStep(steps[2], { reason: "filtered" });
+      state.failStep(steps[0], state.beginAttempt(steps[0]), firstFailure);
       state.recordRunErrors([runError]);
       state.beginFinalization();
       state.failFinalization(finalError, 1);
@@ -219,12 +219,12 @@ describe("PipelineRunState", () => {
   it("rejects invalid step and run transitions", async () => {
     const { state, steps } = setup(["work"]);
     expect(() =>
-      state.completeStep(steps[0]!, { attemptId: "missing", startedAtMs: 0 }, "x")
+      state.completeStep(steps[0], { attemptId: "missing", startedAtMs: 0 }, "x")
     ).toThrowError("Invalid step status transition for work: planned -> completed");
     await expect(state.finish()).rejects.toThrowError(
       "Cannot finish pipeline run while step work is planned"
     );
-    state.skipStep(steps[0]!, { reason: "filtered" });
+    state.skipStep(steps[0], { reason: "filtered" });
     await state.finish();
     expect(() => state.beginFinalization()).toThrowError(
       "Invalid pipeline run transition: expected running, found finished"

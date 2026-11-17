@@ -92,7 +92,7 @@ describe("agent credentials and dotenv files", () => {
         )
       ).toBe(0);
       expect(fetcher).toHaveBeenCalledOnce();
-      const request = fetcher.mock.calls[0]![1]!;
+      const request = fetcher.mock.calls[0][1]!;
       expect(new Headers(request.headers).get("Authorization")).toBe(`Bearer ${expectedKey}`);
       expect(JSON.parse(request.body as string).model).toBe(expectedModel);
       const output = io.output.join("") + io.errors.join("");
@@ -122,7 +122,7 @@ describe("agent credentials and dotenv files", () => {
         await runWorkbenchCli(["agent", "--env-file", ".env.agent", "--prompt", "hi"], io)
       ).toBe(0);
       expect(fetcher).toHaveBeenCalledOnce();
-      expect(String(fetcher.mock.calls[0]![0])).toBe(`${expectedBaseUrl}/responses`);
+      expect(String(fetcher.mock.calls[0][0])).toBe(`${expectedBaseUrl}/responses`);
       expect(process.env.OPENAI_BASE_URL).toBe(baseUrl);
     }
   );

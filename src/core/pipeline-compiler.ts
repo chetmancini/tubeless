@@ -84,7 +84,7 @@ export function compilePipeline<
     optionsSchema:
       definition.steps.length === 0
         ? undefined
-        : compiledByAuthorStep.get(definition.steps[0]!)?.[STEP_OPTIONS_SCHEMA],
+        : compiledByAuthorStep.get(definition.steps[0])?.[STEP_OPTIONS_SCHEMA],
     orderedSteps: Object.freeze([...orderedSteps]),
     compiledByAuthorStep,
     requiredFinalizerSteps: compiledRequiredFinalizerSteps

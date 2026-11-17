@@ -79,7 +79,7 @@ it("rejects corrupt and foreign entries instead of serving them", async () => {
   const cache = createFileStepCache(root);
   await cache.set("key", { value: new Uint8Array([1]), createdAtMs: 0 }, {});
   const [name] = await readdir(root);
-  const file = join(root, name!);
+  const file = join(root, name);
   await writeFile(file, "not structured-clone bytes");
   await expect(cache.get("key", {})).rejects.toThrow();
   for (const entry of [

@@ -16,7 +16,7 @@ export type {
 export function composeTraceExporters(
   exporters: readonly PipelineTraceExporter[]
 ): PipelineTraceExporter {
-  if (exporters.length === 1) return exporters[0]!;
+  if (exporters.length === 1) return exporters[0];
   const failed = new WeakSet<PipelineTraceExporter>();
   let lastError: unknown;
   let hasLastError = false;

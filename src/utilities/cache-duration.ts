@@ -21,10 +21,10 @@ export function cacheDurationMs(value: string | number | undefined): number | un
           /^(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|seconds?|m|minutes?|h|hours?|d|days?|w|weeks?)$/i
         );
     if (!match) throw new Error('maxAge must be milliseconds or a duration such as "30 days"');
-    const unit = match[2]!.toLowerCase();
-    const normalizedUnit = unit === "ms" || unit.startsWith("millisecond") ? "ms" : unit[0]!;
-    const scale = UNIT_MILLISECONDS[normalizedUnit]!;
-    const [whole, fraction = ""] = match[1]!.split(".");
+    const unit = match[2].toLowerCase();
+    const normalizedUnit = unit === "ms" || unit.startsWith("millisecond") ? "ms" : unit[0];
+    const scale = UNIT_MILLISECONDS[normalizedUnit];
+    const [whole, fraction = ""] = match[1].split(".");
     const divisor = 10n ** BigInt(fraction.length);
     const scaled = BigInt(whole + fraction) * BigInt(scale);
     if (scaled % divisor !== 0n) {

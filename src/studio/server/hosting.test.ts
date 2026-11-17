@@ -5,7 +5,7 @@ const token = "a1".repeat(32);
 function request(rawHeaders: string[]): Request {
   const headers: [string, string][] = [];
   for (let index = 0; index < rawHeaders.length; index += 2) {
-    headers.push([rawHeaders[index]!, rawHeaders[index + 1]!]);
+    headers.push([rawHeaders[index], rawHeaders[index + 1]]);
   }
   return new Request("http://studio.local/", { headers });
 }

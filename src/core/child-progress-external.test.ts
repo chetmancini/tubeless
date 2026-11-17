@@ -66,7 +66,7 @@ describe.each(["single", "mapped"] as const)("external %s child progress", (kind
                 context.reportProgress(progress);
                 context.reportProgress({
                   ...progress,
-                  details: [{ ...progress.details![0]!, label: "writing" }],
+                  details: [{ ...progress.details![0], label: "writing" }],
                 });
                 if (status === "failed") throw new Error("work failed");
                 if (status === "cancelled") {

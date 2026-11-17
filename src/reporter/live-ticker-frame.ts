@@ -231,7 +231,7 @@ export class TickerFrame {
 
 export function currentSpinner(unicode: boolean, refreshIntervalMs: number): string {
   const frames = unicode ? SPINNERS.unicode : SPINNERS.ascii;
-  return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0]!;
+  return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0];
 }
 
 export function hasLiveAnimation(lines: readonly string[]): boolean {

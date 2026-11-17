@@ -12,7 +12,7 @@ function definition(version: string): StoredPipelineDefinition {
     implementationVersion: version,
     steps: [a],
     finalize: () => 0,
-  }).definition!;
+  }).definition;
   return {
     identity: snapshot.identity,
     snapshot,

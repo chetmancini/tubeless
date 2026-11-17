@@ -63,10 +63,10 @@ describe("pipeline graph", () => {
 
     expect(compiled.orderedSteps.map(({ id }) => id)).toEqual(["source", "consume"]);
     const [compiledSource, compiledConsume] = compiled.orderedSteps;
-    expect(compiledConsume!.dependsOn).toEqual([compiledSource]);
-    expect(compiledConsume!.dependsOn.map(({ id }) => id)).toEqual(["source"]);
+    expect(compiledConsume.dependsOn).toEqual([compiledSource]);
+    expect(compiledConsume.dependsOn.map(({ id }) => id)).toEqual(["source"]);
     expect(Object.isFrozen(compiledConsume)).toBe(true);
-    expect(Object.isFrozen(compiledConsume!.dependsOn)).toBe(true);
+    expect(Object.isFrozen(compiledConsume.dependsOn)).toBe(true);
   });
 
   it("normalizes every edge policy onto compiled steps without touching author steps", () => {

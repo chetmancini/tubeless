@@ -143,7 +143,7 @@ export async function runCloud(
               throw new Error(
                 `Choose a workspace with --workspace <id>:\n${session.workspaces.map((item) => `${item.name} (${item.id})`).join("\n")}`
               );
-            workspace = session.workspaces[0]!.id;
+            workspace = session.workspaces[0].id;
           }
           if (operation.kind === "list") {
             const pipelines = await client.pipelines(workspace);
@@ -156,7 +156,7 @@ export async function runCloud(
             return 0;
           }
           if (operation.kind === "logs") {
-            let run = await client.getRun(workspace, selector!);
+            let run = await client.getRun(workspace, selector);
             admitted = { id: run.id, url: runUrl(host, workspace, run.id) };
             if (values.follow)
               run = await followRun(
@@ -198,7 +198,7 @@ export async function runCloud(
               throw new Error(
                 `Multiple pipelines match ${JSON.stringify(selector)}. Choose --id <id>:\n${matches.map((item) => `${item.slug}: ${item.name} (${item.id})`).join("\n")}`
               );
-            pipelineId = matches[0]!.id;
+            pipelineId = matches[0].id;
           }
           const { input, source, idempotencyKey: key } = operation;
           if (managed.signal.aborted) throw new Error("Run admission interrupted.");

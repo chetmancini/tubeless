@@ -43,7 +43,7 @@ describe("workbench history integration", () => {
     expect(await runWorkbenchCli(["history", "--store", databasePath], listIo)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.success
     );
-    expect(listIo.output.join("")).toContain(runId!);
+    expect(listIo.output.join("")).toContain(runId);
     expect(listIo.output.join("")).toContain("command-fixture");
     expect(listIo.output.join("")).toContain("completed");
 
@@ -56,16 +56,16 @@ describe("workbench history integration", () => {
     });
 
     const showIo = captureIo(directory);
-    expect(await runWorkbenchCli(["history", "--store", databasePath, runId!], showIo)).toBe(
+    expect(await runWorkbenchCli(["history", "--store", databasePath, runId], showIo)).toBe(
       TUBELESS_WORKBENCH_EXIT_CODE.success
     );
-    expect(showIo.output.join("")).toContain(runId!);
+    expect(showIo.output.join("")).toContain(runId);
     expect(showIo.output.join("")).toContain("work");
     expect(showIo.output.join("")).toContain("worked:hello");
 
     const jsonShowIo = captureIo(directory);
     expect(
-      await runWorkbenchCli(["history", "--json", "--store", databasePath, runId!], jsonShowIo)
+      await runWorkbenchCli(["history", "--json", "--store", databasePath, runId], jsonShowIo)
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     expect(JSON.parse(jsonShowIo.output.join(""))).toMatchObject({
       logs: [expect.objectContaining({ message: "worked:hello", stepId: "work" })],
@@ -112,7 +112,7 @@ describe("workbench history integration", () => {
 
     const scopedIo = captureIo(directory);
     expect(
-      await runWorkbenchCli(["history", "--events", "--store", databasePath, runId!], scopedIo)
+      await runWorkbenchCli(["history", "--events", "--store", databasePath, runId], scopedIo)
     ).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     expect(parseNdjson(scopedIo.output.join("")).every((event) => event.runId === runId)).toBe(
       true

@@ -67,7 +67,7 @@ export class PipelineRunStudioEventState {
       afterId: this.#lastEventId,
       limit: 100_000,
     })) {
-      this.#oldestEventId ??= page[0]!.id;
+      this.#oldestEventId ??= page[0].id;
       this.#projector.append(page);
       this.#lastEventId = page.at(-1)!.id;
       this.#revision += 1;

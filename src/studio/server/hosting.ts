@@ -31,7 +31,7 @@ export function parseStudioHosting(
     );
   // Inspect the original spelling: URL parsing normalizes dot segments and backslashes.
   const match = /^(https?):\/\/([^/?#\\]+)(\/[^?#\\]*)?$/.exec(publicUrl);
-  if (!match || /[\s@]/.test(match[2]!)) throw invalidUrl();
+  if (!match || /[\s@]/.test(match[2])) throw invalidUrl();
   const rawPath = match[3] ?? "/";
   const segments = rawPath.slice(1).split("/");
   if (segments.at(-1) === "") segments.pop();
@@ -54,10 +54,7 @@ export function parseStudioHosting(
   )
     throw invalidUrl();
   // Do not accept alternate numeric spellings that URL would coerce into loopback.
-  if (
-    url.protocol === "http:" &&
-    !/^(localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?$/i.test(match[2]!)
-  )
+  if (url.protocol === "http:" && !/^(localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?$/i.test(match[2]))
     throw invalidUrl();
   const authority = normalizeHttpAuthority(url.host, url.protocol);
   if (!authority) throw invalidUrl();
@@ -91,7 +88,7 @@ function hexBytes(hex: string): Uint8Array {
 export function constantTimeEqual(left: Uint8Array, right: Uint8Array): boolean {
   if (left.length !== right.length) return false;
   let difference = 0;
-  for (let index = 0; index < left.length; index += 1) difference |= left[index]! ^ right[index]!;
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index];
   return difference === 0;
 }
 

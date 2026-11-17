@@ -36,7 +36,7 @@ async function record(version?: string, dryRun?: "skip", offset = 0) {
       },
     }
   );
-  return { events, definition: pipeline.definition! };
+  return { events, definition: pipeline.definition };
 }
 
 describe("definition history", () => {
@@ -107,7 +107,7 @@ describe("definition history", () => {
       "skip"
     );
     expect(
-      snapshot.runs.find((run) => run.runId === legacy.events[0]!.runId)?.definitionIdentity
+      snapshot.runs.find((run) => run.runId === legacy.events[0].runId)?.definitionIdentity
     ).toBeUndefined();
   });
 

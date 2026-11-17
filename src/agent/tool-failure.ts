@@ -7,7 +7,7 @@ export function expectedToolFailure(
 ): { code: string; message: string } | undefined {
   const errors = pipelineHandlerFailures(result);
   if (!errors?.every((error) => error instanceof ToolError)) return undefined;
-  if (errors.length === 1) return { code: errors[0]!.code, message: errors[0]!.message };
+  if (errors.length === 1) return { code: errors[0].code, message: errors[0].message };
   return {
     code: "TUBELESS_TOOL_ERRORS",
     message: errors

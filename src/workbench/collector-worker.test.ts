@@ -91,7 +91,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     expect(Number((await readFile(effectFile, "utf8")).trim())).not.toBe(process.pid);
     expect(worker.cancel()).toBe(false);
     const batches = state.requests.filter((request) => request.operation === "batches");
-    expect(batches[0]!.body).toEqual(batches[1]!.body);
+    expect(batches[0].body).toEqual(batches[1].body);
     const events = await state.fixture.store.listEvents();
     const starts = events.filter((event) => event.name === "pipeline.started");
     expect(starts).toHaveLength(2);
@@ -293,7 +293,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     expect(state.fixture.readLaunch("launch")?.state).toBe("failed");
     const reports = state.requests.filter((request) => request.operation === "failure");
     expect(reports).toHaveLength(2);
-    expect(reports[0]!.body).toEqual(reports[1]!.body);
+    expect(reports[0].body).toEqual(reports[1].body);
   });
 
   it("leaves lost-contact history uncertain until termination is actually observed", async () => {

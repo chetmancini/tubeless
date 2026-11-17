@@ -259,7 +259,7 @@ function buildExpansion(
   const links =
     columns === 1
       ? placed.slice(1).map((item, index) => {
-          const previous = placed[index]!;
+          const previous = placed[index];
           const x = previous.x + previous.width / 2;
           return `M${x} ${previous.y + previous.height - 4}V${itemTop(item)}`;
         })
@@ -384,11 +384,11 @@ function buildRunScene(
           Math.max(...between.map((scene) => scene.x + scene.width)) + COLUMN_GAP / 2 + lanes * 6;
         lanes += 1;
         width = Math.max(width, lane + COLUMN_GAP / 2);
-        const below = layerTop[first]! - ROW_GAP / 2;
-        const above = layerTop[last]! - ROW_GAP / 2;
+        const below = layerTop[first] - ROW_GAP / 2;
+        const above = layerTop[last] - ROW_GAP / 2;
         path =
           `M${sx} ${sy}C${sx} ${below} ${lane} ${below} ${lane} ${layerTop[first]}` +
-          `V${layerTop[last]! - ROW_GAP}C${lane} ${above} ${tx} ${above} ${tx} ${ty - 4}`;
+          `V${layerTop[last] - ROW_GAP}C${lane} ${above} ${tx} ${above} ${tx} ${ty - 4}`;
       } else {
         const middle = (sy + ty) / 2;
         path = `M${sx} ${sy}C${sx} ${middle} ${tx} ${middle} ${tx} ${ty - 4}`;

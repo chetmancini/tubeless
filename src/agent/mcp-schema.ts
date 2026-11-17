@@ -326,7 +326,7 @@ export function mcpResultSchema(outputSchema?: unknown): StandardSchemaV1<unknow
             content: value.content as McpToolResult["content"],
             ...(value.structuredContent === undefined
               ? {}
-              : { structuredContent: value.structuredContent as Json }),
+              : { structuredContent: value.structuredContent }),
           },
         };
       },

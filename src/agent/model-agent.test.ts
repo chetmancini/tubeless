@@ -47,9 +47,7 @@ describe("model agents", () => {
             : {
                 decision: {
                   kind: "finish",
-                  result: request.outcomes[0]!.ok
-                    ? request.outcomes[0]!.value
-                    : { answer: "failed" },
+                  result: request.outcomes[0].ok ? request.outcomes[0].value : { answer: "failed" },
                 },
                 conversation: null,
               },
@@ -57,7 +55,7 @@ describe("model agents", () => {
     expect(await parent(3).runOrThrow({ task: "delegated" })).toEqual({ answer: "delegated" });
     const limited = await parent(2).run({ task: "delegated" });
     expect(limited.status).toBe("failed");
-    expect(limited.errors[0]!.message).toContain("maxDecisions");
+    expect(limited.errors[0].message).toContain("maxDecisions");
   });
 
   it("owns conversation, recovers from a tool error and completes an edit without caller schemas or reducers", async () => {
@@ -97,9 +95,9 @@ describe("model agents", () => {
       await agent.runOrThrow({ task: "Update target" }, undefined, { cwd })
     ).toEqualTypeOf<{ answer: string }>();
     expect(await readFile(join(cwd, "target"), "utf8")).toBe("updated");
-    expect(requests[0]!.instructions).toContain("Keep the answer short.");
-    expect(requests[0]!.instructions).toContain("Never claim a check passed");
-    expect(requests[1]!.instructions).toBe(requests[0]!.instructions);
+    expect(requests[0].instructions).toContain("Keep the answer short.");
+    expect(requests[0].instructions).toContain("Never claim a check passed");
+    expect(requests[1].instructions).toBe(requests[0].instructions);
   });
 
   it("isolates concurrent runs and snapshots provider-owned state", async () => {
@@ -235,7 +233,7 @@ describe("model agents", () => {
     expectTypeOf(agent.runOrThrow).toBeCallableWith({ task: "Count" });
     const counted: { count: number } = await agent.runOrThrow({ files: ["a.txt", "b.txt"] });
     expect(counted).toEqual({ count: 2 });
-    expect(requests[0]!.task).toBe("Count a.txt, b.txt");
+    expect(requests[0].task).toBe("Count a.txt, b.txt");
     expect(resultJsonSchema).toMatchObject({ properties: { count: { type: "integer" } } });
 
     const wrong = defineAgent({
@@ -272,7 +270,7 @@ describe("model agents", () => {
     });
     const run = await blank.run({ files: [] });
     expect(run.status).toBe("failed");
-    expect(run.errors[0]!.message).toContain("Agent task must be nonblank text");
+    expect(run.errors[0].message).toContain("Agent task must be nonblank text");
   });
 
   it("defaults typed agents to the task prompt and lets them opt into project context", async () => {

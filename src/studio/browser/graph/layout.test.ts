@@ -10,7 +10,7 @@ function nodes(...ids: string[]): DagNode[] {
 function edges(...pairs: string[]): DagEdge[] {
   return pairs.map((pair) => {
     const [from, to] = pair.split(">");
-    return { from: from!, to: to! };
+    return { from, to };
   });
 }
 

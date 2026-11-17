@@ -17,7 +17,7 @@ export function boundedToolOutputs<Item>(
       outcome.ok ? { ok: true, value: outcome.value } : { ok: false, error: outcome.error }
     )
   );
-  const outputs = outcomes.map((outcome, index) => wrap(outcome, texts[index]!));
+  const outputs = outcomes.map((outcome, index) => wrap(outcome, texts[index]));
   const budget = Math.min(MAX_TOOL_OUTPUT_BYTES, availableBytes);
   if (
     outputs.length === 0 ||
@@ -25,8 +25,8 @@ export function boundedToolOutputs<Item>(
   )
     return outputs;
   const entries = outputs.map((item, index) => {
-    const outcome = outcomes[index]!;
-    const bytes = utf8Bytes(texts[index]!);
+    const outcome = outcomes[index];
+    const bytes = utf8Bytes(texts[index]);
     const preview = (length: number) =>
       wrap(
         outcome,

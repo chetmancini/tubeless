@@ -160,7 +160,7 @@ describe("direct SQLite transcript capture", () => {
     expect(io.output.join("")).toContain("first:read");
     expect(io.errors.join("")).toContain("Agent transcript capture disabled after a capture error");
     expect(io.errors.join("")).not.toContain("private sink failure");
-    expect((await runs(directory))[0]!.status).toBe("completed");
+    expect((await runs(directory))[0].status).toBe("completed");
   });
 
   it.each([

@@ -38,12 +38,12 @@ const workflow = JSON.parse(
 ) as { jobs: Record<string, WorkflowJob> };
 
 function step(job: string, name: string): WorkflowStep {
-  const found = workflow.jobs[job]!.steps.find((candidate) => candidate.name === name);
+  const found = workflow.jobs[job].steps.find((candidate) => candidate.name === name);
   if (!found) throw new Error(`Missing ${job} step: ${name}`);
   return found;
 }
 function checkout(job: string): WorkflowStep {
-  return workflow.jobs[job]!.steps.find((candidate) =>
+  return workflow.jobs[job].steps.find((candidate) =>
     candidate.uses?.startsWith("actions/checkout@")
   )!;
 }
@@ -219,14 +219,14 @@ describe("publish workflow release identity", { timeout: 30_000 }, () => {
   });
 
   it("keeps the registry credential away from dependency code", () => {
-    expect(workflow.jobs.verify!.permissions).toEqual({ contents: "read" });
-    expect(workflow.jobs.publish!.permissions).toEqual({
+    expect(workflow.jobs.verify.permissions).toEqual({ contents: "read" });
+    expect(workflow.jobs.publish.permissions).toEqual({
       contents: "read",
       "id-token": "write",
     });
-    expect(workflow.jobs.publish!.needs).toContain("verify");
-    expect(workflow.jobs.publish!.if).toContain("needs.verify.result == 'success'");
-    for (const candidate of workflow.jobs.publish!.steps) {
+    expect(workflow.jobs.publish.needs).toContain("verify");
+    expect(workflow.jobs.publish.if).toContain("needs.verify.result == 'success'");
+    for (const candidate of workflow.jobs.publish.steps) {
       expect(candidate.run ?? "").not.toMatch(/bun |make /);
       expect(candidate.uses ?? "").not.toMatch(/^oven-sh\/setup-bun@/);
     }
@@ -239,14 +239,14 @@ describe("publish workflow release identity", { timeout: 30_000 }, () => {
   });
 
   it("propagates immutable identity through publication and GitHub release jobs", () => {
-    expect(workflow.jobs.cut!.outputs).toEqual({
+    expect(workflow.jobs.cut.outputs).toEqual({
       tag: "${{ steps.release.outputs.tag }}",
       commit: "${{ steps.release.outputs.commit }}",
     });
     expect(checkout("cut").with?.ref).toBe("${{ github.sha }}");
     expect(checkout("verify").with?.ref).toBe("${{ needs.cut.outputs.commit || github.sha }}");
     expect(checkout("publish").with?.ref).toBe("${{ needs.cut.outputs.commit || github.sha }}");
-    expect(workflow.jobs.publish!.outputs).toEqual({
+    expect(workflow.jobs.publish.outputs).toEqual({
       tag: "${{ steps.release.outputs.tag }}",
       commit: "${{ steps.release.outputs.commit }}",
     });

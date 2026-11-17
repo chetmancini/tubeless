@@ -39,7 +39,7 @@ export function openaiDecision(output: readonly Record<string, unknown>[]) {
   if (calls.length === 0) throw new Error("OpenAI returned no function calls");
   if (calls.some((call) => call.tool === "_finish")) {
     if (calls.length !== 1) throw new Error("OpenAI must finish without other calls");
-    return { kind: "finish", result: calls[0]!.input };
+    return { kind: "finish", result: calls[0].input };
   }
   return { kind: "continue", calls };
 }

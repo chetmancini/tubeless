@@ -4,7 +4,7 @@ import { openSqliteAgentCheckpointStore } from "tubeless/agent/node";
 import type { StandardSchemaV1 } from "tubeless";
 
 const [mode, file, effects, decisions, cwd] = process.argv.slice(2);
-const store = await openSqliteAgentCheckpointStore(file!);
+const store = await openSqliteAgentCheckpointStore(file);
 const text: StandardSchemaV1<string> = {
   "~standard": {
     version: 1,
@@ -26,7 +26,7 @@ const agent = defineAgent({
       outputSchema: text,
       inputJsonSchema: { type: "string" },
       run: async (input) => {
-        await appendFile(effects!, `${input}\n`);
+        await appendFile(effects, `${input}\n`);
         if (mode === "crash" && input === "uncertain") {
           await new Promise<void>(() => {
             setInterval(() => {}, 1000);
@@ -46,7 +46,7 @@ const agent = defineAgent({
     }),
   },
   model: async (request, context) => {
-    await appendFile(decisions!, `${context.turn}\n`);
+    await appendFile(decisions, `${context.turn}\n`);
     if (context.turn === 1)
       return {
         decision: {

@@ -111,7 +111,7 @@ const ForEachParentPipeline = definePipeline({
 const enrichSchema = {
   "~standard": {
     validate: (value: unknown) =>
-      value && typeof value === "object" && "ok" in value && (value as { ok: unknown }).ok === true
+      value && typeof value === "object" && "ok" in value && value.ok === true
         ? { value: value as { ok: true } }
         : { issues: [{ message: "ok" }] },
     vendor: "test",

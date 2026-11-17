@@ -51,7 +51,7 @@ export async function openNdjsonAgentTranscriptReader(
       let end = all.length;
       while (start < end) {
         const middle = Math.floor((start + end) / 2);
-        if (all[middle]!.sequence <= afterSequence) start = middle + 1;
+        if (all[middle].sequence <= afterSequence) start = middle + 1;
         else end = middle;
       }
       const page = all.slice(start, start + limit);

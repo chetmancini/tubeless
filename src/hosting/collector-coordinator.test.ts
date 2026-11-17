@@ -151,7 +151,7 @@ describe("owned launch preparation and dispatch", () => {
     const result = launcher.launch("greeting", values);
     values.name = "changed";
     await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
-    const packet = start.mock.calls[0]![0];
+    const packet = start.mock.calls[0][0];
     expect(packet.job.values).toEqual({ name: "Ada" });
     expect(packet.token).toMatch(/^[a-f0-9]{32}\.[a-f0-9]{64}$/);
     await vi.advanceTimersByTimeAsync(10);
@@ -200,7 +200,7 @@ describe("owned launch preparation and dispatch", () => {
     await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
     await launcher.drain();
     expect(JSON.stringify(await result)).not.toContain("PRIVATE");
-    const job = start.mock.calls[0]![0].job;
+    const job = start.mock.calls[0][0].job;
     expect(readLaunch(job.launchId)).toMatchObject({ admitted: 1, state: "starting" });
   });
 });

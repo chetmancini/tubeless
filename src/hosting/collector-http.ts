@@ -83,12 +83,12 @@ export function createHostedCollector(options: {
       try {
         const url = new URL(request.url);
         const route = /^\/v1\/launches\/([^/]+)\/([^/]+)$/.exec(url.pathname);
-        const operation = route && operations.get(route[2]!);
+        const operation = route && operations.get(route[2]);
         if (!route || !operation || url.search) return error(404, "not_found");
         if (url.protocol !== "https:") return error(400, "https_required");
         let launchId: string;
         try {
-          launchId = decodeURIComponent(route[1]!);
+          launchId = decodeURIComponent(route[1]);
         } catch {
           throw new CollectorInputError();
         }

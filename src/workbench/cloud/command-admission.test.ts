@@ -19,8 +19,8 @@ describe("Cloud admission recovery", () => {
     ).toBe(0);
     const admissions = dependencies.calls.filter((call) => call.method === "POST");
     expect(admissions).toHaveLength(2);
-    expect(admissions[0]!.key).toBe(admissions[1]!.key);
-    expect(admissions[0]!.body).toEqual({ pipelineId: pipeline.id, input: { hello: "world" } });
+    expect(admissions[0].key).toBe(admissions[1].key);
+    expect(admissions[0].body).toEqual({ pipelineId: pipeline.id, input: { hello: "world" } });
   });
 
   it("does not retry or report uncertain admission when normalized JSON exceeds the input budget", async () => {
@@ -42,7 +42,7 @@ describe("Cloud admission recovery", () => {
     const admissions = dependencies.calls.filter((call) => call.method === "POST");
     expect(admissions).toHaveLength(1);
     expect(io.errors.join("")).toContain(
-      `Workspace: workspace; idempotency key: ${admissions[0]!.key}`
+      `Workspace: workspace; idempotency key: ${admissions[0].key}`
     );
     expect(io.output.join("")).toBe("");
   });
@@ -50,17 +50,17 @@ describe("Cloud admission recovery", () => {
     const root = await fixture();
     const dependencies = service();
     const original = dependencies.fetch;
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    dependencies.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       const response = await original(url, init);
       return init?.method === "POST"
         ? Response.json({ admitted: true }, { status: 202 })
         : response;
-    }) as typeof fetch;
+    };
     const io = captureIo(root);
     expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
     const admissions = dependencies.calls.filter((call) => call.method === "POST");
     expect(admissions).toHaveLength(1);
-    expect(io.errors.join("")).toContain(`idempotency key: ${admissions[0]!.key}`);
+    expect(io.errors.join("")).toContain(`idempotency key: ${admissions[0].key}`);
   });
   it("reports the same key when interruption loses a pending POST acknowledgement", async () => {
     const root = await fixture();
@@ -71,12 +71,12 @@ describe("Cloud admission recovery", () => {
     const posted = new Promise<void>((resolve) => {
       markPosted = resolve;
     });
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    dependencies.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       const response = await original(url, init);
       if (init?.method !== "POST") return response;
       markPosted();
       return new Promise<Response>(() => {});
-    }) as typeof fetch;
+    };
     const io = { ...captureIo(root), signal: controller.signal };
     const result = runCloud(["run", pipeline.name, "--json"], io, dependencies);
     await posted;
@@ -85,7 +85,7 @@ describe("Cloud admission recovery", () => {
     const admissions = dependencies.calls.filter((call) => call.method === "POST");
     expect(admissions).toHaveLength(1);
     expect(io.errors.join("")).toContain(
-      `Workspace: workspace; idempotency key: ${admissions[0]!.key}`
+      `Workspace: workspace; idempotency key: ${admissions[0].key}`
     );
     expect(io.output.join("")).toBe("");
   });
@@ -93,18 +93,18 @@ describe("Cloud admission recovery", () => {
     const root = await fixture();
     const dependencies = service();
     const original = dependencies.fetch;
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    dependencies.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       const response = await original(url, init);
       if (init?.method === "POST") throw new Error("lost response");
       return response;
-    }) as typeof fetch;
+    };
     const io = captureIo(root);
     expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
     const admissions = dependencies.calls.filter((call) => call.method === "POST");
     expect(admissions).toHaveLength(2);
-    expect(admissions[0]!.key).toBe(admissions[1]!.key);
+    expect(admissions[0].key).toBe(admissions[1].key);
     expect(io.errors.join("").match(/Admission could not be confirmed/g)).toHaveLength(1);
-    expect(io.errors.join("")).toContain(`idempotency key: ${admissions[0]!.key}`);
+    expect(io.errors.join("")).toContain(`idempotency key: ${admissions[0].key}`);
   });
   it("definite 4xx rejection does not suggest an uncertain admission", async () => {
     const root = await fixture();

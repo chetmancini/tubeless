@@ -161,7 +161,7 @@ describe("iteration recording compatibility", () => {
         (entry) => entry.runId === run.runId
       )!;
       expect(stored.status).toBe(expectedStatus);
-      const progress = stored.steps[0]!.progress!;
+      const progress = stored.steps[0].progress!;
       expect(progress.detailCount).toBeGreaterThan(progress.details!.length);
       expect(progress.details?.[0]).toMatchObject({ id: "iteration-3", status: expectedStatus });
       expect(progress.details?.[1]).toMatchObject({
@@ -221,7 +221,7 @@ describe("iteration recording compatibility", () => {
     expect(run.status).toBe("failed");
     const stored = projectPipelineRunStore(events).runs.find((entry) => entry.runId === run.runId)!;
     expect(stored.status).toBe("failed");
-    expect(stored.steps[0]!.progress).toMatchObject({
+    expect(stored.steps[0].progress).toMatchObject({
       completed: 0,
       details: [
         { id: "iteration-1", status: "failed" },
@@ -282,7 +282,7 @@ describe("iteration recording compatibility", () => {
     if (start?.name !== "pipeline.started" || !start.payload.definitionSnapshot)
       throw new Error("Missing definition snapshot");
     const tampered = structuredClone(start);
-    tampered.payload.definitionSnapshot!.steps[0]!.nestedPipeline!.maxIterations = 99;
+    tampered.payload.definitionSnapshot!.steps[0].nestedPipeline!.maxIterations = 99;
     expect(() => decodeStoredTraceEvent(tampered)).toThrow("structural fingerprint");
   });
 });

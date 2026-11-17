@@ -49,7 +49,7 @@ function hashCanonicalValue(value: unknown): string {
     const fields: unknown[] = [];
     for (const key of Object.keys(descriptors).sort()) {
       if (array && key === "length") continue;
-      const property = descriptors[key]!;
+      const property = descriptors[key];
       if (!property.enumerable || !("value" in property)) return unsupported();
       fields.push([key, visit(property.value)]);
     }

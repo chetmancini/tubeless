@@ -93,7 +93,7 @@ export function pipelineTool<
     inputSchema,
     inputJsonSchema,
     // SAFETY: the dispatcher validates Arguments before calling this erased mapper.
-    mapOptions: definition.mapOptions as ((input: unknown) => object) | undefined,
+    mapOptions: definition.mapOptions,
     pipeline: pipeline as ChildPipeline & { readonly definition: PipelineDefinitionSnapshot },
   });
   return tool;

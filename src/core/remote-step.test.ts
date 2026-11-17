@@ -18,12 +18,7 @@ function standardSchema<TInput, TOutput>(
 }
 
 const resultSchema = standardSchema<{ ok: true }, { ok: true }>((value) => {
-  if (
-    value &&
-    typeof value === "object" &&
-    "ok" in value &&
-    (value as { ok: unknown }).ok === true
-  ) {
+  if (value && typeof value === "object" && "ok" in value && value.ok === true) {
     return { value: value as { ok: true } };
   }
   return { issues: [{ message: "expected { ok: true }" }] };
@@ -342,7 +337,7 @@ describe("fromRemote", () => {
     const { fromRemote } = createSteps();
     const transformingSchema = standardSchema<{ n: number }, { n: string }>((value) => {
       if (value && typeof value === "object" && "n" in value) {
-        const n = (value as { n: unknown }).n;
+        const n = value.n;
         if (typeof n === "number") {
           return { value: { n: String(n) } };
         }

@@ -165,9 +165,7 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
     );
   const describe = (options: object): string => {
     // SAFETY: compileAgent validated options with inputSchema, or with `{ task }` when it is absent.
-    const text = typedInput
-      ? task!(options as Output<Options>)
-      : (options as { task: string }).task;
+    const text = typedInput ? task!(options) : (options as { task: string }).task;
     if (typeof text !== "string" || !text.trim())
       throw new Error("Agent task must be nonblank text");
     if (new TextEncoder().encode(text).length > MAX_TASK_BYTES)
@@ -185,7 +183,7 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
     {
       ...config,
       // SAFETY: the key callback only receives options validated by this agent's input schema.
-      durability: config.durability as AgentDurability<object> | undefined,
+      durability: config.durability,
       codemode,
       checkDescriptors: model.checkDescriptors,
       inputSchema: config.inputSchema ?? taskInput,

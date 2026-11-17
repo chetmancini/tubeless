@@ -52,12 +52,12 @@ describe("model descriptor checks", () => {
       { checkDescriptors: (descriptors: AgentModelDescriptors) => void seen.push(descriptors) }
     );
     defineAgent({ id: "hooked", model, defaultTools: ["read"], codemode: false });
-    expect(seen[0]!.capabilities.map(({ name }) => name)).toEqual(["read"]);
-    expect(seen[0]!.resultJsonSchema).toMatchObject({ properties: { answer: { type: "string" } } });
+    expect(seen[0].capabilities.map(({ name }) => name)).toEqual(["read"]);
+    expect(seen[0].resultJsonSchema).toMatchObject({ properties: { answer: { type: "string" } } });
     typed(model, strictReport);
-    expect(seen[1]!.resultJsonSchema).toMatchObject({ required: ["count"] });
+    expect(seen[1].resultJsonSchema).toMatchObject({ required: ["count"] });
     defineAgent({ id: "hooked-codemode", model, codemode: true });
-    expect(seen[2]!.capabilities.map(({ name }) => name)).toEqual(["codemode"]);
+    expect(seen[2].capabilities.map(({ name }) => name)).toEqual(["codemode"]);
   });
 
   it("rejects an OpenAI-incompatible result schema at definition without any request", () => {

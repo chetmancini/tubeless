@@ -51,7 +51,7 @@ describe("MCP servers", () => {
       codemode: true,
       tools: mcp.tools,
       model: (request, context) => {
-        description = context.capabilities[0]!.description;
+        description = context.capabilities[0].description;
         return context.turn === 1
           ? {
               conversation: null,

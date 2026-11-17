@@ -95,7 +95,7 @@ describe("workbench UI integration", { timeout: 60_000 }, () => {
       ])
     );
 
-    const planResponse = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/plan`, {
+    const planResponse = await fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/plan`, {
       body: JSON.stringify({ dryRun: true, targets: ["work"] }),
       headers: { "content-type": "application/json", "x-tubeless-studio-plan": "1" },
       method: "POST",
@@ -113,7 +113,7 @@ describe("workbench UI integration", { timeout: 60_000 }, () => {
       fetch(`${url}/api/snapshot`).then((response) => response.json())
     ).resolves.toMatchObject({ runs: [] });
 
-    const invalid = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+    const invalid = await fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/runs`, {
       body: JSON.stringify({ values: {} }),
       headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
       method: "POST",
@@ -124,7 +124,7 @@ describe("workbench UI integration", { timeout: 60_000 }, () => {
       errors: [expect.stringContaining("Missing required option --message")],
     });
 
-    const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+    const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/runs`, {
       body: JSON.stringify({ values: { message: "from-studio", targets: ["work"] } }),
       headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
       method: "POST",
@@ -195,7 +195,7 @@ describe("workbench UI integration", { timeout: 60_000 }, () => {
     expect(commandId).toBeDefined();
 
     let resolved = false;
-    const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+    const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/runs`, {
       body: JSON.stringify({ values: { message: "x" } }),
       headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
       method: "POST",
@@ -261,7 +261,7 @@ describe("workbench UI integration", { timeout: 60_000 }, () => {
     const commandId = commands.commands[0]?.id;
     expect(commandId).toBeDefined();
 
-    const failed = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+    const failed = await fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/runs`, {
       body: JSON.stringify({ values: { message: "x" } }),
       headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
       method: "POST",
@@ -326,7 +326,7 @@ describe("workbench UI integration", { timeout: 60_000 }, () => {
     expect(commandId).toBeDefined();
 
     let resolved = false;
-    const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+    const launchPromise = fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/runs`, {
       body: JSON.stringify({ values: { message: "x" } }),
       headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
       method: "POST",
@@ -392,7 +392,7 @@ describe("workbench UI integration", { timeout: 60_000 }, () => {
     expect(commandId).toBeDefined();
 
     const launchWait = async (message: string) => {
-      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId!)}/runs`, {
+      const launched = await fetch(`${url}/api/commands/${encodeURIComponent(commandId)}/runs`, {
         body: JSON.stringify({ values: { message, mode: "wait" } }),
         headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
         method: "POST",
@@ -573,7 +573,7 @@ it("runs remote-bind commands in gateway mode and retains history without revivi
         () => expect(io.output.join("")).toContain("Tubeless gateway studio: " + publicUrl + "/"),
         { timeout: 10_000 }
       );
-      const studio = await startStudio.mock.results[0]!.value;
+      const studio = await startStudio.mock.results[0].value;
       const backendUrl = `http://127.0.0.1:${studio.port}/admin/pipelines`;
       expect(io.output.join("") + io.errors.join("")).not.toContain(token);
       expect(process.env.TUBELESS_STUDIO_GATEWAY_TOKEN).toBeUndefined();
@@ -608,7 +608,7 @@ it("runs remote-bind commands in gateway mode and retains history without revivi
         () => expect(restartIo.output.join("")).toContain("Tubeless gateway studio:"),
         { timeout: 10_000 }
       );
-      const restartedStudio = await startStudio.mock.results[1]!.value;
+      const restartedStudio = await startStudio.mock.results[1].value;
       const backendUrl = `http://127.0.0.1:${restartedStudio.port}/admin/pipelines`;
       const snapshot = await fetch(backendUrl + "/api/snapshot", { headers }).then((response) =>
         response.json()
@@ -667,7 +667,7 @@ it("keeps hosted NDJSON history read-only for every mutation", async () => {
       await vi.waitFor(() => expect(io.output.join("")).toContain("Tubeless gateway studio:"), {
         timeout: 10_000,
       });
-      const studio = await startStudio.mock.results[0]!.value;
+      const studio = await startStudio.mock.results[0].value;
       const backendUrl = `http://127.0.0.1:${studio.port}/admin/pipelines`;
       expect(
         await fetch(backendUrl + "/api/capabilities", { headers }).then((response) =>

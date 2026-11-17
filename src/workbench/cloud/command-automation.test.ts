@@ -16,13 +16,13 @@ describe("Cloud automation commands", () => {
       const token = "tlc_ci_v1.test-only-automation-bearer";
       const store = { get: vi.fn(), set: vi.fn(), delete: vi.fn() };
       dependencies.env.TUBELESS_TOKEN = token;
-      dependencies.fetch = (async (url, init) => {
+      dependencies.fetch = async (url, init) => {
         expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${token}`);
         expect(init?.credentials).toBe("omit");
         expect(String(url)).not.toContain("/session");
         if (args[0] === "run") expect(init?.method).toBe("POST");
         return fetcher(url, init);
-      }) as typeof fetch;
+      };
       const io = captureIo(await fixture());
       expect(
         await runCloud([...args, "--workspace", "workspace"], io, { ...dependencies, store })
@@ -73,13 +73,13 @@ describe("Cloud automation commands", () => {
   it("keeps the admitted run when a run-only credential cannot follow", async () => {
     const dependencies = service();
     const original = dependencies.fetch;
-    dependencies.fetch = (async (url, init) =>
+    dependencies.fetch = async (url, init) =>
       init?.method === "POST"
         ? original(url, init)
         : Response.json(
             { error: { code: "forbidden", message: "Read scope required" } },
             { status: 403 }
-          )) as typeof fetch;
+          );
     const io = captureIo(await fixture());
     expect(
       await runCloud(

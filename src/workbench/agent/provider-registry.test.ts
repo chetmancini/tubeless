@@ -84,7 +84,7 @@ describe("named agent provider registries", () => {
         )
       ).toBe(0);
       expect(fetcher).toHaveBeenCalledOnce();
-      const [url, init] = fetcher.mock.calls[0]!;
+      const [url, init] = fetcher.mock.calls[0];
       expect(url).toBe("https://inference.baseten.co/v1/messages");
       const headers = new Headers(init!.headers);
       expect(headers.get("authorization")).toBe("Bearer scoped-key");
@@ -126,7 +126,7 @@ describe("named agent provider registries", () => {
         io
       )
     ).toBe(0);
-    expect(fetcher.mock.calls[0]![0]).toBe("https://private.example/prefix/v1/messages");
+    expect(fetcher.mock.calls[0][0]).toBe("https://private.example/prefix/v1/messages");
   });
 
   it("supports an arbitrary API factory without running unused providers or reading their credentials", async () => {

@@ -45,7 +45,7 @@ export async function schedulePipelineSteps<TStep extends AnyStep>(input: {
       // Keep our place instead of rescanning the completed prefix. A newly
       // ready step can rewind the cursor to preserve stable compiled order.
       while (ready.size > 0 && running.size < maxConcurrency && !shouldStop()) {
-        const step = orderedSteps[nextReadyIndex++]!;
+        const step = orderedSteps[nextReadyIndex++];
         if (!ready.delete(step)) continue;
         pending.delete(step);
         const task = executeOneStep(step).then(() => settleStep(step));

@@ -1074,7 +1074,7 @@ describe("local pipeline run studio", () => {
     }));
     const [busy] = summarizePipelines(runs);
     expect(busy).toMatchObject({ topLevelRunCount: 200_000, latestStartedAtMs: 199_999 });
-    expect(busy!.recent).toHaveLength(10);
+    expect(busy.recent).toHaveLength(10);
   });
 
   it("pages compact roots, searches descendants and conditionally refreshes history", async () => {

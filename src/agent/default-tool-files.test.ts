@@ -204,14 +204,14 @@ describe("workspace search and listing", () => {
         completed.push(String(args[0]));
         if (completed.length === 3) started.resolve();
       });
-      if (args[0] === join(context.cwd, names[0]!)) await gate.promise;
+      if (args[0] === join(context.cwd, names[0])) await gate.promise;
       return file;
     });
     const searching = searchTool({ query: "needle" }, context);
     try {
       await started.promise;
       expect(peak).toBe(4);
-      expect(completed).not.toContain(join(context.cwd, names[0]!));
+      expect(completed).not.toContain(join(context.cwd, names[0]));
     } finally {
       gate.resolve();
     }
@@ -362,10 +362,10 @@ describe("workspace search and listing", () => {
       await fs.writeFile(join(context.cwd, "long"), `header\n${prefix}${query}${"é".repeat(1000)}`);
       const result = await searchTool({ query, path: "long" }, context);
       expect(result.matches).toHaveLength(1);
-      expect(result.matches[0]!.line).toBe(2);
-      expect(result.matches[0]!.text.startsWith(expected)).toBe(true);
-      expect(Buffer.byteLength(result.matches[0]!.text)).toBeLessThanOrEqual(1024);
-      expect(result.matches[0]!.text).not.toContain("�");
+      expect(result.matches[0].line).toBe(2);
+      expect(result.matches[0].text.startsWith(expected)).toBe(true);
+      expect(Buffer.byteLength(result.matches[0].text)).toBeLessThanOrEqual(1024);
+      expect(result.matches[0].text).not.toContain("�");
       expect(result.truncated).toBe(true);
     }
   );

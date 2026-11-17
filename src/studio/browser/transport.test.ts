@@ -131,7 +131,7 @@ describe("Studio API response parsing", () => {
           commands: [
             {
               ...valid.commands[0],
-              parameters: [{ ...valid.commands[0]!.parameters[0], [field]: { invalid: true } }],
+              parameters: [{ ...valid.commands[0].parameters[0], [field]: { invalid: true } }],
             },
           ],
         }).loadCommands()
@@ -194,7 +194,7 @@ describe("Studio API response parsing", () => {
     expect(decoded?.steps[0]?.progress?.details).not.toBe(recorded.steps[0]?.progress?.details);
     for (const field of ["name", "depth", "completed", "total", "status"]) {
       const invalid = structuredClone(recorded);
-      Object.assign(invalid.steps[0]!.progress!.details![0]!, { [field]: { invalid: true } });
+      Object.assign(invalid.steps[0].progress!.details![0], { [field]: { invalid: true } });
       expect(parseRun(invalid)).toBeUndefined();
     }
     expect(parseRun({ ...recorded, version: 999 })).toBeUndefined();
@@ -407,7 +407,7 @@ it.each(["override", "cache"] as const)(
       ],
     });
     expect(parseRun(recorded)?.steps[0]).toMatchObject({ status: "completed", outputSource });
-    recorded.steps[0]!.outputSource = "invalid" as never;
+    recorded.steps[0].outputSource = "invalid" as never;
     expect(parseRun(recorded)).toBeUndefined();
   }
 );
@@ -477,12 +477,12 @@ describe("mounted transport and access expiry", () => {
     const snapshotPromise = api.loadSnapshot();
     const denied = api.cancelRun("run");
     const settled = Promise.allSettled([launch, commands, snapshotPromise, denied]);
-    resolvers[3]!(new Response("", { status: 401 }));
+    resolvers[3](new Response("", { status: 401 }));
     await Promise.resolve();
     await Promise.resolve();
-    resolvers[0]!(jsonResponse({ accepted: true, runId: "late" }));
-    resolvers[1]!(jsonResponse({ commands: [] }));
-    resolvers[2]!(jsonResponse(snapshot()));
+    resolvers[0](jsonResponse({ accepted: true, runId: "late" }));
+    resolvers[1](jsonResponse({ commands: [] }));
+    resolvers[2](jsonResponse(snapshot()));
     expect(await settled).toEqual(
       Array.from({ length: 4 }, () => ({
         status: "rejected",

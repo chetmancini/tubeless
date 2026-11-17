@@ -132,7 +132,7 @@ export class AgentCheckpointSession {
       if (count > budget.limits[kind] - budget[kind])
         limit(kind, budget.limits[kind], budget[kind], count, id);
     }
-    for (const { key } of budgets) checkpoint.budgets[key]![kind] += count;
+    for (const { key } of budgets) checkpoint.budgets[key][kind] += count;
   }
   reserve(
     budgets: readonly BudgetReference[],

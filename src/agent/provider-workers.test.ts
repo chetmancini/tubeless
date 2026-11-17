@@ -163,7 +163,7 @@ describe.each(["openai", "anthropic"])("%s without Node compatibility", (provide
           status: "completed",
           provider,
         });
-        expect(result.observed[0]!.streamId).toMatch(/^[0-9a-f-]{36}$/);
+        expect(result.observed[0].streamId).toMatch(/^[0-9a-f-]{36}$/);
         expect(new Set(result.observed.map((event) => event.streamId)).size).toBe(1);
       } else expect(result.observed).toEqual([]);
     }

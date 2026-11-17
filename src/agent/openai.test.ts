@@ -61,7 +61,7 @@ describe("OpenAI model", () => {
         compact ? [true, false] : [false]
       );
       if (!compact)
-        expect(JSON.parse(fetcher.mock.calls[0]![1]!.body as string).input[0]).toEqual(history[0]);
+        expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).input[0]).toEqual(history[0]);
     }
   );
 
@@ -130,7 +130,7 @@ describe("OpenAI model", () => {
         projectContext: false,
         model: openaiModel({ apiKey: "fixture", reasoningEffort }),
       }).runOrThrow({ task: "Finish" });
-      const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+      const body = JSON.parse(fetcher.mock.calls[0][1]!.body as string);
       if (reasoningEffort === undefined || reasoningEffort === null)
         expect(body).not.toHaveProperty("reasoning");
       else expect(body.reasoning).toEqual({ effort: reasoningEffort });
@@ -170,7 +170,7 @@ describe("OpenAI model", () => {
     vi.stubEnv("OPENAI_MODEL", environment);
     await agent.runOrThrow({ task: "Finish" });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    const body = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+    const body = JSON.parse(fetcher.mock.calls[0][1]!.body as string);
     expect(body.model).toBe(expected);
     expect(body).not.toHaveProperty("reasoning");
   });
@@ -232,8 +232,8 @@ describe("OpenAI model", () => {
           ),
       });
       const result = await agent.run({ task: "Continue" });
-      expect(fetcher.mock.calls[0]![0]).toBe("https://api.openai.com/v1/responses/compact");
-      const compactRequest = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
+      expect(fetcher.mock.calls[0][0]).toBe("https://api.openai.com/v1/responses/compact");
+      const compactRequest = JSON.parse(fetcher.mock.calls[0][1]!.body as string);
       expect(compactRequest).not.toHaveProperty("tools");
       expect(compactRequest).not.toHaveProperty("reasoning");
       expect(compactRequest.input.at(-1)).toMatchObject({
@@ -245,7 +245,7 @@ describe("OpenAI model", () => {
         expect(Buffer.byteLength(options!.body as string)).toBeLessThanOrEqual(1_048_576);
       if (compactedKiB === 600) {
         expect(result.status).toBe("failed");
-        expect(result.errors[0]!.message).toContain("request exceeds 1 MiB");
+        expect(result.errors[0].message).toContain("request exceeds 1 MiB");
         expect(fetcher).toHaveBeenCalledTimes(1);
       } else {
         expect(result).toMatchObject({
@@ -254,7 +254,7 @@ describe("OpenAI model", () => {
           value: { answer: "Done." },
         });
         expect(fetcher).toHaveBeenCalledTimes(2);
-        const decisionRequest = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+        const decisionRequest = JSON.parse(fetcher.mock.calls[1][1]!.body as string);
         expect(decisionRequest).not.toHaveProperty("reasoning");
         expect(decisionRequest.input).toEqual(compacted);
         expect(decisionRequest.tools.some((tool: { name: string }) => tool.name === "custom")).toBe(
@@ -334,7 +334,7 @@ describe("OpenAI model", () => {
           ),
       }).run({ task: "Work" });
       expect(result.status).toBe("failed");
-      expect(result.errors[0]!.message).toContain(message);
+      expect(result.errors[0].message).toContain(message);
       expect(fetcher).not.toHaveBeenCalled();
     }
   );
@@ -369,17 +369,17 @@ describe("OpenAI model", () => {
     expect(fetcher).toHaveBeenCalledTimes(3);
     for (const [, options] of fetcher.mock.calls)
       expect(Buffer.byteLength(options!.body as string)).toBeLessThanOrEqual(1_048_576);
-    expect(fetcher.mock.calls[1]![0]).toBe("https://api.openai.com/v1/responses/compact");
-    const input = JSON.parse(fetcher.mock.calls[1]![1]!.body as string).input;
+    expect(fetcher.mock.calls[1][0]).toBe("https://api.openai.com/v1/responses/compact");
+    const input = JSON.parse(fetcher.mock.calls[1][1]!.body as string).input;
     const outputs = input.slice(101);
     expect(outputs).toHaveLength(100);
     outputs.forEach((item: { call_id: string; output: string }, index: number) => {
       expect(item.call_id).toBe(`read_${index}`);
       expect(JSON.parse(item.output)).toMatchObject({ ok: true, truncated: true });
     });
-    expect(JSON.parse(fetcher.mock.calls[2]![1]!.body as string).input).toEqual(compacted);
-    expect(requests[1]!.outcomes).toHaveLength(100);
-    for (const outcome of requests[1]!.outcomes)
+    expect(JSON.parse(fetcher.mock.calls[2][1]!.body as string).input).toEqual(compacted);
+    expect(requests[1].outcomes).toHaveLength(100);
+    for (const outcome of requests[1].outcomes)
       expect(outcome).toMatchObject({ ok: true, value: { content } });
   });
 
@@ -395,8 +395,8 @@ describe("OpenAI model", () => {
       model: openaiModel({ apiKey: "fixture", compactAfterBytes: 1, maxRetries: 0 }),
     }).run({ task: "List" }, undefined, { cwd });
     expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain("responses/compact failed (HTTP 500)");
-    expect(result.errors[0]!.message).not.toContain("private provider error");
+    expect(result.errors[0].message).toContain("responses/compact failed (HTTP 500)");
+    expect(result.errors[0].message).not.toContain("private provider error");
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -418,7 +418,7 @@ describe("OpenAI model", () => {
     expect(result.status).toBe("failed");
     expect(JSON.stringify(result.errors)).toContain("timed out after 25 ms");
     expect(JSON.stringify(result.errors)).not.toContain("TUBELESS_RUN_CANCELLED");
-    expect(fetcher.mock.calls[0]![1]!.signal!.aborted).toBe(true);
+    expect(fetcher.mock.calls[0][1]!.signal!.aborted).toBe(true);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
@@ -492,8 +492,8 @@ describe("OpenAI model", () => {
     expect(await agent.runOrThrow({ task: "Inspect workspace" }, undefined, { cwd })).toEqual({
       answer: "Done.",
     });
-    const first = JSON.parse(fetcher.mock.calls[0]![1]!.body as string);
-    const second = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+    const first = JSON.parse(fetcher.mock.calls[0][1]!.body as string);
+    const second = JSON.parse(fetcher.mock.calls[1][1]!.body as string);
     expect(first).toMatchObject({
       model: "fixture-model",
       store: false,
@@ -547,12 +547,12 @@ describe("OpenAI model", () => {
       expect(JSON.parse(options!.body as string).model).toBe("fixture-model");
       expect(new Headers(options!.headers).get("Authorization")).toBe("Bearer fixture");
     }
-    const compactBody = JSON.parse(fetcher.mock.calls[1]![1]!.body as string);
+    const compactBody = JSON.parse(fetcher.mock.calls[1][1]!.body as string);
     expect(compactBody.input.at(-1)).toMatchObject({
       type: "function_call_output",
       call_id: "call_1",
     });
-    expect(JSON.parse(fetcher.mock.calls[2]![1]!.body as string).input).toEqual(compacted);
+    expect(JSON.parse(fetcher.mock.calls[2][1]!.body as string).input).toEqual(compacted);
     expect(log.log).toHaveBeenCalledWith("Compacted agent conversation");
   });
 
@@ -618,10 +618,10 @@ describe("OpenAI model", () => {
     expect(fetcher).not.toHaveBeenCalled();
     vi.stubEnv("OPENAI_API_KEY", " \t\nlate-credential\r\n ");
     await agent.runOrThrow({ task: "Do work" });
-    expect(fetcher.mock.calls[0]![1]!.headers).toMatchObject({
+    expect(fetcher.mock.calls[0][1]!.headers).toMatchObject({
       Authorization: "Bearer late-credential",
     });
-    expect(fetcher.mock.calls[0]![1]!.signal).toBeInstanceOf(AbortSignal);
+    expect(fetcher.mock.calls[0][1]!.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("targets compatible Responses servers by option or OPENAI_BASE_URL", async () => {
@@ -733,7 +733,7 @@ describe("OpenAI model", () => {
       model: openaiModel({ apiKey: "fixture" }),
     }).run({ task: "Finish" });
     expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain("HTTP 429");
+    expect(result.errors[0].message).toContain("HTTP 429");
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
@@ -774,8 +774,8 @@ describe("OpenAI model", () => {
       model: openaiModel({ apiKey: "fixture", timeoutMs: 1000 }),
     }).run({ task: "Finish" });
     expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain("HTTP 429");
-    expect(result.errors[0]!.message).not.toContain("timed out");
+    expect(result.errors[0].message).toContain("HTTP 429");
+    expect(result.errors[0].message).not.toContain("timed out");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 

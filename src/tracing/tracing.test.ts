@@ -402,7 +402,7 @@ describe("pipeline tracing", () => {
     expect(result.value).toBe(42);
     expect(log.warnings).toEqual([expect.stringContaining("[unprintable error]")]);
     expect(onExporterError).toHaveBeenCalledOnce();
-    expect(onExporterError.mock.calls[0]![0]).toBe(failure);
+    expect(onExporterError.mock.calls[0][0]).toBe(failure);
   });
 
   it("isolates an unprintable flush failure", async () => {
@@ -430,7 +430,7 @@ describe("pipeline tracing", () => {
     expect(result.value).toBe(42);
     expect(log.warnings).toEqual([expect.stringContaining("flush failed: [unprintable error]")]);
     expect(onExporterError).toHaveBeenCalledOnce();
-    expect(onExporterError.mock.calls[0]![0]).toBe(failure);
+    expect(onExporterError.mock.calls[0][0]).toBe(failure);
   });
 
   it.each([false, true])(
@@ -498,7 +498,7 @@ describe("pipeline tracing", () => {
     expect(result.value).toBe(42);
     expect(failed.export).toHaveBeenCalledOnce();
     expect(onExporterError).toHaveBeenCalledOnce();
-    expect(onExporterError.mock.calls[0]![0]).toBe(failure);
+    expect(onExporterError.mock.calls[0][0]).toBe(failure);
     expect(events.at(-1)?.name).toBe("pipeline.completed");
     expect(log.warnings).toEqual([
       expect.stringContaining("healthy exporters continue: [unprintable error]"),

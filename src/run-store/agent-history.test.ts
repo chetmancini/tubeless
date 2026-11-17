@@ -254,11 +254,11 @@ describe("agent history projection", () => {
         });
       }
     }
-    const root = projectAgentHistory(runs).agents[0]!;
+    const root = projectAgentHistory(runs).agents[0];
     // Bound work by calls, rather than wall-clock time or the chosen collection type.
     expect(callIdReads).toBeLessThanOrEqual(70 * 10);
-    expect(root.turns[0]!.calls).toHaveLength(70);
-    expect(new Set(root.turns[0]!.calls.map((call) => call.callId)).size).toBe(70);
+    expect(root.turns[0].calls).toHaveLength(70);
+    expect(new Set(root.turns[0].calls.map((call) => call.callId)).size).toBe(70);
     for (const run of runs) {
       for (const step of run.steps) {
         if (step.attempt) expect(step.attempt.retries).toEqual([]);
@@ -296,17 +296,17 @@ describe("agent history projection", () => {
       [2, "continue", 1, 2, 1, 5],
       [3, "finish", 2, undefined, 0, 5],
     ]);
-    const first = root.turns[0]!;
+    const first = root.turns[0];
     expect(first.calls.map((call) => [call.callId, call.tool, call.status])).toEqual([
       ["same", "double", "failed"],
       ["left", "left", "completed"],
       ["right", "right", "completed"],
       ["wrapped", "wrapped", "completed"],
     ]);
-    expect(first.calls[0]!.error?.sourceCode).toBe("MISSING");
-    const repeated = root.turns[1]!.calls[0]!;
+    expect(first.calls[0].error?.sourceCode).toBe("MISSING");
+    const repeated = root.turns[1].calls[0];
     expect(repeated).toMatchObject({ callId: "same", tool: "double", status: "completed" });
-    expect(repeated.runId).not.toBe(first.calls[0]!.runId);
+    expect(repeated.runId).not.toBe(first.calls[0].runId);
     expect(agents).toHaveLength(4);
     for (const call of first.calls.slice(1)) {
       expect(call.childAgentRunIds).toHaveLength(1);
@@ -358,9 +358,9 @@ describe("agent history projection", () => {
     const root = projectAgentHistory(projectPipelineRunStore(older).runs).agents.find(
       (agent) => agent.pipelineId === "history-agent"
     )!;
-    expect(root.turns[0]!.calls.find((call) => call.callId === "same")?.tool).toBe("double");
-    expect(root.turns[0]!.calls.find((call) => call.callId === "left")?.tool).toBeUndefined();
-    expect(root.turns[0]!.calls.find((call) => call.callId === "right")?.tool).toBeUndefined();
+    expect(root.turns[0].calls.find((call) => call.callId === "same")?.tool).toBe("double");
+    expect(root.turns[0].calls.find((call) => call.callId === "left")?.tool).toBeUndefined();
+    expect(root.turns[0].calls.find((call) => call.callId === "right")?.tool).toBeUndefined();
     expect(root.termination).toBe("finish");
   });
 
@@ -397,7 +397,7 @@ describe("agent history projection", () => {
       ...missing.reverse(),
       { ...call, runId: "duplicate-child" },
     ]);
-    const calls = history.agents.find((entry) => entry.runId === run.runId)!.turns[0]!.calls;
+    const calls = history.agents.find((entry) => entry.runId === run.runId)!.turns[0].calls;
     expect(calls.map((entry) => [entry.callId, entry.tool, entry.status])).toEqual([
       ["same", "double", "failed"],
       ["left", "left", "completed"],
@@ -405,7 +405,7 @@ describe("agent history projection", () => {
       ["right", "right", "unknown"],
       ["wrapped", "wrapped", "completed"],
     ]);
-    expect(calls[2]!.runId).toBe("duplicate-child");
+    expect(calls[2].runId).toBe("duplicate-child");
   });
 
   it("attributes nested runs to the step and call that started them, with planned edges", async () => {
@@ -468,8 +468,8 @@ describe("agent history projection", () => {
       });
       const { events } = await record(agent, expected === "skipped", controller.signal);
       const history = projectAgentHistory(projectPipelineRunStore(events).runs);
-      expect(history.agents[0]!.termination).toBe(expected);
-      expect(history.agents[0]!.turns.flatMap((turn) => turn.calls)).toEqual([]);
+      expect(history.agents[0].termination).toBe(expected);
+      expect(history.agents[0].turns.flatMap((turn) => turn.calls)).toEqual([]);
     }
   );
 
@@ -594,7 +594,7 @@ describe("agent history projection", () => {
     });
     const { events } = await record(agent);
     const history = projectAgentHistory(projectPipelineRunStore(events).runs);
-    const root = history.agents[0]!;
+    const root = history.agents[0];
     const perModel = (model: string) => ({
       provider: "openai",
       model,
@@ -679,7 +679,7 @@ describe("agent history projection", () => {
     const root = projectAgentHistory(runs).agents.find(
       (entry) => entry.pipelineId === "usage-durable"
     )!;
-    const resumed = root.turns[0]!;
+    const resumed = root.turns[0];
     expect(resumed.usage).toMatchObject([
       {
         provider: "anthropic",

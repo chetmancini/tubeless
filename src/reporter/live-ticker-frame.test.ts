@@ -28,9 +28,9 @@ describe("paintLiveLines", () => {
       ["first line", "界".repeat(40)]
     );
     expect(lines).toHaveLength(4);
-    expect(stripAnsi(lines[0]!)).toContain("╭─ Logs ");
-    expect(stripAnsi(lines[1]!)).toContain("│ first line");
-    expect(stripAnsi(lines[2]!)).toMatch(/… +│$/);
+    expect(stripAnsi(lines[0])).toContain("╭─ Logs ");
+    expect(stripAnsi(lines[1])).toContain("│ first line");
+    expect(stripAnsi(lines[2])).toMatch(/… +│$/);
     for (const line of lines) {
       const width = [...stripAnsi(line)].reduce((sum, char) => sum + (char === "界" ? 2 : 1), 0);
       expect(width).toBe(119);

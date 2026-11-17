@@ -95,7 +95,7 @@ describe("NDJSON transcript storage", () => {
     expect(first.records).toHaveLength(20);
     expect(first).toMatchObject({ nextSequence: 20, status: "complete" });
     const second = await reader.list({ runId: "agent:one", afterSequence: 20 });
-    expect(second.records[0]!.sequence).toBe(21);
+    expect(second.records[0].sequence).toBe(21);
     const last = await reader.list({ runId: "agent:one", afterSequence: 40 });
     expect(last.records).toHaveLength(6);
     expect(last.nextSequence).toBeUndefined();

@@ -370,7 +370,7 @@ describe("hosted job", () => {
     expect(controller.signal.aborted).toBe(true);
     expect(controller.signal.reason).toMatchObject({ message: "studio unreachable" });
     expect(attempts.map(({ sequence }) => sequence)).toEqual([0, 0, 0, 0, 0]);
-    expect(attempts.map(({ atMs }) => atMs - attempts[0]!.atMs)).toEqual([0, 250, 750, 1750, 3750]);
+    expect(attempts.map(({ atMs }) => atMs - attempts[0].atMs)).toEqual([0, 250, 750, 1750, 3750]);
     expect(failures).toEqual(["Run events could not be delivered to Studio: studio unreachable"]);
   });
 

@@ -89,7 +89,7 @@ describe("agent provider selection", () => {
         await runWorkbenchCli(["agent", "--provider", "anthropic", "--prompt", "hi"], io)
       ).toBe(0);
       expect(fetcher).toHaveBeenCalledOnce();
-      const [url, init] = fetcher.mock.calls[0]!;
+      const [url, init] = fetcher.mock.calls[0];
       expect(url).toBe("https://api.anthropic.com/v1/messages");
       const headers = new Headers(init!.headers);
       expect(headers.get(header)).toBe(expected);
@@ -153,7 +153,7 @@ describe("agent provider selection", () => {
           io
         )
       ).toBe(0);
-      const [url, init] = fetcher.mock.calls[0]!;
+      const [url, init] = fetcher.mock.calls[0];
       expect(url).toBe(`${expectedBase}/v1/messages`);
       expect(new Headers(init!.headers).get("x-api-key")).toBe(expectedKey);
       expect(JSON.parse(init!.body as string).model).toBe(expectedModel);
@@ -173,7 +173,7 @@ describe("agent provider selection", () => {
         io
       )
     ).toBe(0);
-    expect(new Headers(fetcher.mock.calls[0]![1]!.headers).get("authorization")).toBe(
+    expect(new Headers(fetcher.mock.calls[0][1]!.headers).get("authorization")).toBe(
       "Bearer file-token"
     );
     expect(process.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();

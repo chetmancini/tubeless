@@ -76,7 +76,7 @@ it("matches fresh history for filtered pages, nested activity, origins and defin
     { status: "running", eventCount: 3 },
   ];
   for (const [change, update] of updates.entries()) {
-    const id = ["grandchild", "grandchild", "sibling", "root", "root"][change]!;
+    const id = ["grandchild", "grandchild", "sibling", "root", "root"][change];
     runs = runs.map((run) => (run.runId === id ? { ...run, ...update } : run));
     const source = snapshot(runs);
     expect(history.update(source)).toBe(true);
@@ -98,12 +98,12 @@ it("matches fresh history for filtered pages, nested activity, origins and defin
       fresh.definitionRuns("work", undefined, 50)
     );
   }
-  expect(
-    history.detail(runs[0]!).children.find((child) => child.runId === "child")?.origin
-  ).toEqual({
-    stepId: "fan-out",
-    itemKey: "item",
-  });
+  expect(history.detail(runs[0]).children.find((child) => child.runId === "child")?.origin).toEqual(
+    {
+      stepId: "fan-out",
+      itemKey: "item",
+    }
+  );
 });
 
 it("leaves the old history intact when membership, parent links or start times change", () => {

@@ -26,7 +26,7 @@ const inputSchema = (minimum: number): StandardSchemaV1<{ name: string }, { name
         required: ["name"],
       }),
     },
-  } as StandardSchemaV1<{ name: string }, { name: string }>["~standard"],
+  },
 });
 const greetSteps = createSteps(inputSchema(3));
 const greet = greetSteps.step("greet", { run: (_inputs, context) => `hi ${context.options.name}` });
@@ -260,7 +260,7 @@ describe("Studio object", () => {
     expect(response.status).toBe(400);
     expect(JSON.stringify(await response.json())).toMatch(/could not confirm the run started/);
     await Promise.all(alarms);
-    const runStorage = [...runStorages.values()][0]!;
+    const runStorage = [...runStorages.values()][0];
     expect(await runStorage.get("job")).toBeUndefined();
     expect(runStorage.alarmAtMs()).toBeUndefined();
     const events = await openDurableRunStore(storage).listEvents();
@@ -322,7 +322,7 @@ describe("Studio object", () => {
     const completions = events.filter((event) => event.name === "pipeline.completed");
     expect(completions).toHaveLength(1);
     expect(completions[0]?.payload).toMatchObject({ status: "completed" });
-    const runId = completions[0]!.runId;
+    const runId = completions[0].runId;
     const detail = (await (await api(`/api/runs/${encodeURIComponent(runId)}`)).json()) as {
       run: { status: string };
     };
@@ -345,7 +345,7 @@ describe("Studio object", () => {
     gate.release();
     await Promise.all(gate.alarms);
     expect(await openDurableRunStore(storage).listEvents()).toEqual([]);
-    expect(await [...runStorages.values()][0]!.get("job")).toBeUndefined();
+    expect(await [...runStorages.values()][0].get("job")).toBeUndefined();
   });
 
   it("logs instead of throwing when recording a failed start fails", async () => {
@@ -475,7 +475,7 @@ describe("Studio object", () => {
     const original = setup({ startRuns: false, now: () => now, startTimeoutMs: 1 });
     await original.launch("greeting", { name: "ada" });
     await original.launch("greeting", { name: "ada" });
-    const launchId = original.starts[0]!.launchId;
+    const launchId = original.starts[0].launchId;
     now = 150_000;
     expect(await original.studio.admit(launchId)).toEqual({ admitted: true });
     await original.studio.appendEvents(launchId, 0, [
@@ -495,7 +495,7 @@ describe("Studio object", () => {
       ((await (await api("/api/snapshot")).json()) as { liveRunIds: string[] }).liveRunIds
     ).toEqual(["late-root"]);
     expect(await openDurableRunStore(storage).listEvents()).toHaveLength(1);
-    expect(await studio.admit(original.starts[1]!.launchId)).toEqual({ admitted: false });
+    expect(await studio.admit(original.starts[1].launchId)).toEqual({ admitted: false });
     expect(storage.alarmAtMs()).toBe(330_000);
     now = 330_000;
     await studio.alarm();

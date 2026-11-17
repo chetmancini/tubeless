@@ -325,8 +325,8 @@ export function createRunHistoryIndex<T extends RunHistoryItem>(
       const changed: T[] = [];
       let remainingWork = currentRuns.length;
       for (let index = 0; index < nextRuns.length; index++) {
-        const next = nextRuns[index]!;
-        const previous = currentRuns[index]!;
+        const next = nextRuns[index];
+        const previous = currentRuns[index];
         if (next === previous) continue;
         if (
           next.runId !== previous.runId ||

@@ -29,7 +29,7 @@ function respond(...output: unknown[]) {
   fetchMock.mockResolvedValueOnce(Response.json(completed(...output)));
 }
 function request(index: number) {
-  return JSON.parse(String(fetchMock.mock.calls[index]![1]!.body));
+  return JSON.parse(String(fetchMock.mock.calls[index][1]!.body));
 }
 function recording() {
   const events: PipelineTraceEvent[] = [];
@@ -96,8 +96,8 @@ describe("OpenAI agent recipe", () => {
     expectTypeOf(result).toEqualTypeOf<{ answer: string }>();
     expect(result).toEqual({ answer: "RED BLUE: 8 characters" });
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[0]![0]).toBe("https://api.openai.com/v1/responses");
-    expect(fetchMock.mock.calls[0]![1]).toMatchObject({
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.openai.com/v1/responses");
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",
       headers: { Authorization: "Bearer test-key-never-record" },
       signal: expect.any(AbortSignal),
@@ -271,7 +271,7 @@ describe("OpenAI agent recipe", () => {
     OpenAIAgent.toMermaid();
     const runtime = createPipelineTestRuntime();
     const preview = await runtime.run(OpenAIAgent, {}, { dryRun: true });
-    expect(preview.steps[0]!.status).toBe("skipped");
+    expect(preview.steps[0].status).toBe("skipped");
     expect(preview.finalized).toBe(false);
     const run = await runtime.run(OpenAIAgent, {});
     expect(JSON.stringify(run.errors)).toContain("OPENAI_API_KEY is required");

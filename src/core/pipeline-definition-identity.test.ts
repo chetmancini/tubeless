@@ -32,18 +32,18 @@ function pipeline(
 
 describe("compiled definition identity", () => {
   it("separates implementation and presentation from graph semantics", () => {
-    const original = pipeline().definition!;
+    const original = pipeline().definition;
     expect(pipeline({ name: "Renamed", handler: 2 }).definition).toEqual(original);
-    const updated = pipeline({ version: "build:two" }).definition!;
+    const updated = pipeline({ version: "build:two" }).definition;
     expect(updated.identity.structuralFingerprint).toBe(original.identity.structuralFingerprint);
     expect(updated.identity.definitionId).not.toBe(original.identity.definitionId);
-    expect(pipeline({ dryRun: "skip" }).definition!.identity.structuralFingerprint).not.toBe(
+    expect(pipeline({ dryRun: "skip" }).definition.identity.structuralFingerprint).not.toBe(
       original.identity.structuralFingerprint
     );
   });
 
   it("has a reproducible v1 canonical SHA-256 fingerprint", () => {
-    const snapshot = pipeline().definition!;
+    const snapshot = pipeline().definition;
     expect(snapshot.identity).toEqual({
       version: 1,
       structuralFingerprint:
@@ -61,9 +61,9 @@ describe("compiled definition identity", () => {
     const p = pipeline({ version: "git:abc" });
     expect(p.plan({ dryRun: true, stepIds: ["a"] }).definition).toBe(p.definition);
     expect(p.plan({ targets: [] }).definition).toBe(p.definition);
-    expect(Object.isFrozen(p.definition!.steps[0]!.dependencies)).toBe(true);
+    expect(Object.isFrozen(p.definition.steps[0].dependencies)).toBe(true);
     const run = await p.run({}, {}, createPipelineTestRuntime().context);
-    expect(run.definitionIdentity).toEqual(p.definition!.identity);
+    expect(run.definitionIdentity).toEqual(p.definition.identity);
   });
 
   it("records identities and snapshots even when selection fails before planning", async () => {
@@ -84,7 +84,7 @@ describe("compiled definition identity", () => {
       }
     );
     const start = events.find((event) => event.name === "pipeline.started")!;
-    expect(start.payload.definitionIdentity).toEqual(p.definition!.identity);
+    expect(start.payload.definitionIdentity).toEqual(p.definition.identity);
     expect(start.payload.definitionSnapshot).toEqual(p.definition);
     expect(decodePipelineTraceEvent(JSON.parse(JSON.stringify(start)))).toEqual(start);
   });
@@ -100,7 +100,7 @@ describe("compiled definition identity", () => {
         skipAfterFailureOf: kind === "gate" ? [a] : [],
         run: () => 3,
       });
-      return definePipeline({ id: "edges", steps: [a, b, c], finalize: () => 0 }).definition!
+      return definePipeline({ id: "edges", steps: [a, b, c], finalize: () => 0 }).definition
         .identity.structuralFingerprint;
     };
     expect(new Set([build("none"), build("required"), build("optional"), build("gate")]).size).toBe(
@@ -117,8 +117,8 @@ describe("compiled definition identity", () => {
         finalize: requireOutputs([a], () => 0),
       }),
     ])
-      expect(changed.definition!.identity.structuralFingerprint).not.toBe(
-        base.definition!.identity.structuralFingerprint
+      expect(changed.definition.identity.structuralFingerprint).not.toBe(
+        base.definition.identity.structuralFingerprint
       );
     const targets = (reverse: boolean) =>
       definePipeline({
@@ -179,7 +179,7 @@ describe("compiled definition identity", () => {
         pipeline: pipeline({ version, dryRun }),
         mapOptions: () => ({}),
       });
-      return definePipeline({ id: "parent", steps: [child], finalize: () => 0 }).definition!;
+      return definePipeline({ id: "parent", steps: [child], finalize: () => 0 }).definition;
     };
     expect(parent("one").identity.structuralFingerprint).toBe(
       parent("two").identity.structuralFingerprint
@@ -196,7 +196,7 @@ describe("compiled definition identity", () => {
         key: String,
         mapOptions: () => ({}),
       });
-      return definePipeline({ id: "parent", steps: [child], finalize: () => 0 }).definition!;
+      return definePipeline({ id: "parent", steps: [child], finalize: () => 0 }).definition;
     };
     expect(fanout(1).identity.structuralFingerprint).not.toBe(
       fanout(2).identity.structuralFingerprint
@@ -286,7 +286,7 @@ describe("compiled definition identity", () => {
       },
     ]) {
       const snapshot = build(controls);
-      expect(snapshot.steps[0]!.nestedPipeline).not.toHaveProperty("controls");
+      expect(snapshot.steps[0].nestedPipeline).not.toHaveProperty("controls");
       expect(snapshot).toEqual(omitted);
       const unnormalized = {
         ...snapshot,
@@ -305,7 +305,7 @@ describe("compiled definition identity", () => {
       { stepIds: [] },
     ]) {
       const snapshot = build(controls);
-      expect(snapshot.steps[0]!.nestedPipeline!.controls).toEqual(controls);
+      expect(snapshot.steps[0].nestedPipeline!.controls).toEqual(controls);
       expect(snapshot.identity.structuralFingerprint).not.toBe(
         omitted.identity.structuralFingerprint
       );
@@ -366,7 +366,7 @@ describe("compiled definition identity", () => {
       }
     );
     const start = events.find((event) => event.name === "pipeline.started")!;
-    expect(start.payload.definitionIdentity).toEqual(p.definition!.identity);
+    expect(start.payload.definitionIdentity).toEqual(p.definition.identity);
     expect(start.payload.definitionSnapshot).toBeUndefined();
     expect(events.at(-1)!.name).toBe("pipeline.completed");
   });

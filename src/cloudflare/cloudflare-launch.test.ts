@@ -123,7 +123,7 @@ describe("Cloudflare programmatic launch admission", () => {
     if (!receipt.accepted) throw new Error("Expected admission");
     const rows = () => storage.sql.exec("SELECT * FROM tubeless_launch_metadata").toArray();
     expect(JSON.stringify(rows())).not.toContain("never-save-this");
-    expect(JSON.parse(String(rows()[0]!.metadata_json)).inputs.recorded).toEqual([]);
+    expect(JSON.parse(String(rows()[0].metadata_json)).inputs.recorded).toEqual([]);
     const clear = () =>
       studio.fetch(
         new Request("https://studio.example/api/history", {
@@ -236,7 +236,7 @@ describe("Cloudflare programmatic launch admission", () => {
     values.name = "changed";
     options.idempotencyKey = "changed";
     const receipt = await pending;
-    expect(start.mock.calls[0]![0].values.name).toBe("Ada");
+    expect(start.mock.calls[0][0].values.name).toBe("Ada");
     expect(await launch("original")).toEqual(receipt);
     expect(start).toHaveBeenCalledTimes(1);
   });
@@ -275,7 +275,7 @@ describe("Cloudflare programmatic launch admission", () => {
       labels: ["a", "b"],
       ["__proto__"]: "own value",
     });
-    expect(Object.is(observed.mock.calls[0]![0].offset, -0)).toBe(false);
+    expect(Object.is(observed.mock.calls[0][0].offset, -0)).toBe(false);
     expect(
       await launch(
         "oversized",

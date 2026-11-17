@@ -124,7 +124,7 @@ export function createStudioApiHandler(
       }
       const childrenMatch = /^\/api\/runs\/([^/]+)\/children$/.exec(url.pathname);
       if (request.method === "GET" && childrenMatch) {
-        const runId = decodePathSegment(childrenMatch[1]!);
+        const runId = decodePathSegment(childrenMatch[1]);
         const page = await eventState.childRuns(runId, childPage(url));
         return page
           ? jsonResponse(page)
@@ -137,7 +137,7 @@ export function createStudioApiHandler(
       }
       const runMatch = /^\/api\/runs\/([^/]+)$/.exec(url.pathname);
       if (request.method === "GET" && runMatch) {
-        const runId = decodePathSegment(runMatch[1]!);
+        const runId = decodePathSegment(runMatch[1]);
         const detail = await eventState.detail(runId);
         return detail
           ? jsonResponse({
@@ -162,7 +162,7 @@ export function createStudioApiHandler(
       }
       const transcriptMatch = /^\/api\/runs\/([^/]+)\/transcript$/.exec(url.pathname);
       if (request.method === "GET" && transcriptMatch) {
-        const runId = decodePathSegment(transcriptMatch[1]!);
+        const runId = decodePathSegment(transcriptMatch[1]);
         const afterSequence = queryInteger(
           url,
           "afterSequence",
@@ -210,7 +210,7 @@ export function createStudioApiHandler(
             "Send x-tubeless-studio-cancel: 1 from the Studio origin."
           );
         }
-        const runId = decodePathSegment(cancelMatch[1]!);
+        const runId = decodePathSegment(cancelMatch[1]);
         const result = await launcher.cancel(runId);
         if (!result.cancelled) {
           return errorResponse(
@@ -247,7 +247,7 @@ export function createStudioApiHandler(
       }
       const planMatch = /^\/api\/commands\/([^/]+)\/plan$/.exec(url.pathname);
       if (request.method === "POST" && planMatch) {
-        const commandId = decodePathSegment(planMatch[1]!);
+        const commandId = decodePathSegment(planMatch[1]);
         if (!launcher?.plan || !commandById.get(commandId)?.canPlan) {
           return errorResponse(
             405,
@@ -308,7 +308,7 @@ export function createStudioApiHandler(
             "Send a values object matching the selected command descriptor."
           );
         }
-        const commandId = decodePathSegment(launchMatch[1]!);
+        const commandId = decodePathSegment(launchMatch[1]);
         if (!commandById.has(commandId)) {
           return errorResponse(
             404,

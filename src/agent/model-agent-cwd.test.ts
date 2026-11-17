@@ -86,7 +86,7 @@ it.each([true, false])(
       expect(
         await agent.runOrThrow({ task: "Update physical sibling" }, undefined, { cwd })
       ).toEqual({ answer: "Done" });
-      expect(requests[1]!.outcomes).toMatchObject([
+      expect(requests[1].outcomes).toMatchObject([
         { id: "read", ok: true, value: { path: target, content: "original" } },
         {
           id: "list",
@@ -101,10 +101,10 @@ it.each([true, false])(
         { id: "custom", ok: true },
         { id: "child", ok: true, value: { answer: physicalCwd } },
       ]);
-      expect(requests[2]!.outcomes).toMatchObject([
+      expect(requests[2].outcomes).toMatchObject([
         { id: "write", ok: true, value: { path: target } },
       ]);
-      expect(requests[3]!.outcomes).toMatchObject([
+      expect(requests[3].outcomes).toMatchObject([
         { id: "edit", ok: true, value: { path: target } },
       ]);
       expect(await readFile(target, "utf8")).toBe("edited");

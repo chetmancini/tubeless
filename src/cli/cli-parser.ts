@@ -87,10 +87,10 @@ export function commandDescriptor(
   params: CliParamsSchema,
   positionals: readonly string[]
 ): CliCommandDescriptor {
-  const positionalEntries = positionals.map((key) => [key, params[key]!] as const);
+  const positionalEntries = positionals.map((key) => [key, params[key]] as const);
   let positionalIndex = 0;
   const entries = Object.entries(params).map((entry) =>
-    positionals.includes(entry[0]) ? positionalEntries[positionalIndex++]! : entry
+    positionals.includes(entry[0]) ? positionalEntries[positionalIndex++] : entry
   );
   const parameters = entries.map(([key, param]): CliParameterDescriptor => {
     const defaultValue = param.type === "boolean" ? (param.default ?? false) : param.default;
@@ -219,7 +219,7 @@ export function renderHelp(
   domainRows.push(HELP_ROW);
   const width = Math.max(10, ...[...domainRows, ...executionRows].map(([usage]) => usage.length));
   const positionalUsage = positionals
-    .map((key) => positionalUsageToken(key, schema[key]!))
+    .map((key) => positionalUsageToken(key, schema[key]))
     .join(" ");
   const lines = [`Usage: ${name} [options]${positionalUsage ? ` ${positionalUsage}` : ""}`];
   if (description) {
@@ -305,8 +305,8 @@ export function tokenize(
   const nextPositionalEntry = (): CliParamEntry | undefined => {
     while (
       positionalIndex < positionalEntries.length &&
-      values.has(positionalEntries[positionalIndex]!.key) &&
-      !isMultipleParam(positionalEntries[positionalIndex]!.param)
+      values.has(positionalEntries[positionalIndex].key) &&
+      !isMultipleParam(positionalEntries[positionalIndex].param)
     ) {
       positionalIndex++;
     }
@@ -331,7 +331,7 @@ export function tokenize(
       next === undefined ||
       next.startsWith("--") ||
       next === "-h" ||
-      (next.length === 2 && next.startsWith("-") && paramByShort.has(next[1]!))
+      (next.length === 2 && next.startsWith("-") && paramByShort.has(next[1]))
     ) {
       errors.push(`Missing value for --${name}`);
       return undefined;
@@ -364,7 +364,7 @@ export function tokenize(
         errors.push(`Unknown option: ${token}`);
         continue;
       }
-      const entry = paramByShort.get(token[1]!);
+      const entry = paramByShort.get(token[1]);
       if (!entry) {
         errors.push(`Unknown option: ${token}`);
         continue;
@@ -714,7 +714,7 @@ export function assertValidPositionals(
   const seen = new Set<string>();
   let sawOptional = false;
   for (let index = 0; index < positionals.length; index++) {
-    const key = positionals[index]!;
+    const key = positionals[index];
     const param = Object.hasOwn(schema, key) ? schema[key] : undefined;
     if (!param) {
       throw new Error(`Unknown positional parameter "${key}"; it must be declared in params.`);

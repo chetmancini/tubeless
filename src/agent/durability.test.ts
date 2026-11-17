@@ -72,7 +72,7 @@ it("resumes an acknowledged decision without repeating argument transforms, comp
       }),
     },
     decide,
-    reduce: (_state, outcomes) => (outcomes[0]!.ok ? Number(outcomes[0]!.value) : -1),
+    reduce: (_state, outcomes) => (outcomes[0].ok ? Number(outcomes[0].value) : -1),
   });
   expect((await agent.run({})).status).toBe("failed");
   expect(handler).not.toHaveBeenCalled();
@@ -116,7 +116,7 @@ it.each([false, true])(
         context.turn === 1
           ? { kind: "continue", calls: [{ id: "work", tool: "work", input: 1 }] }
           : { kind: "finish", result: state },
-      reduce: (_state, outcomes) => (outcomes[0]!.ok ? Number(outcomes[0]!.value) : -1),
+      reduce: (_state, outcomes) => (outcomes[0].ok ? Number(outcomes[0].value) : -1),
     });
     expect((await agent.run({})).status).toBe("failed");
     expect(await agent.runOrThrow({})).toBe(committed ? 7 : -1);
@@ -264,7 +264,7 @@ it("resumes child agents through ordinary fan-out pipelines with stable identiti
       context.turn === 1
         ? { kind: "continue", calls: [{ id: "work", tool: "work", input: context.options.n }] }
         : { kind: "finish", result: state },
-    reduce: (_state, outcomes) => (outcomes[0]!.ok ? Number(outcomes[0]!.value) : -1),
+    reduce: (_state, outcomes) => (outcomes[0].ok ? Number(outcomes[0].value) : -1),
   });
   const { forEachPipeline } = createSteps(emptyInput);
   const items = forEachPipeline("children", {
@@ -288,14 +288,14 @@ it("resumes child agents through ordinary fan-out pipelines with stable identiti
         ? { kind: "continue", calls: [{ id: "children", tool: "children", input: {} }] }
         : { kind: "finish", result: state },
     reduce: (_state, outcomes) =>
-      outcomes[0]!.ok && outcomes[0]!.tool === "children" ? [...outcomes[0]!.value] : [],
+      outcomes[0].ok && outcomes[0].tool === "children" ? [...outcomes[0].value] : [],
   });
   expect((await parent.run({}, undefined, { signal: abort.signal })).status).toBe("cancelled");
   expect(await parent.runOrThrow({})).toEqual([1, 2]);
   expect(work.mock.calls.map(([n]) => n)).toEqual([1, 2, 2]);
-  expect(work.mock.calls[0]![1].execution.agent).not.toBe(work.mock.calls[1]![1].execution.agent);
-  expect(work.mock.calls[1]![1].execution).toEqual(work.mock.calls[2]![1].execution);
-  expect(work.mock.calls[0]![1].execution.agent).toBe(
+  expect(work.mock.calls[0][1].execution.agent).not.toBe(work.mock.calls[1][1].execution.agent);
+  expect(work.mock.calls[1][1].execution).toEqual(work.mock.calls[2][1].execution);
+  expect(work.mock.calls[0][1].execution.agent).toBe(
     JSON.stringify([
       '["agent","durable-parent"]',
       '["call",1,"children"]',
@@ -415,7 +415,7 @@ it.each([false, true])(
           ? { kind: "continue", calls: [{ id: "child", tool: "child", input: {} }] }
           : { kind: "finish", result: state },
       reduce: (_state, outcomes) => {
-        const outcome = outcomes[0]!;
+        const outcome = outcomes[0];
         if (!outcome.ok) throw new Error(outcome.error.message);
         return Number(outcome.value);
       },
@@ -466,7 +466,7 @@ it("rejects changed child versions before restoring a completed ancestor", async
         context.turn === 1
           ? { kind: "continue", calls: [{ id: "child", tool: "child", input: {} }] }
           : { kind: "finish", result: state },
-      reduce: (_state, outcomes) => (outcomes[0]!.ok ? Number(outcomes[0]!.value) : -1),
+      reduce: (_state, outcomes) => (outcomes[0].ok ? Number(outcomes[0].value) : -1),
     });
   };
   expect(await parent("1").runOrThrow({})).toBe(1);
@@ -520,7 +520,7 @@ it("keeps an explicitly previewed child out of a live parent's recovery state", 
       context.turn === 1
         ? { kind: "continue", calls: [{ id: "child", tool: "child", input: {} }] }
         : { kind: "finish", result: state },
-    reduce: (_state, outcomes) => (outcomes[0]!.ok ? Number(outcomes[0]!.value) : -1),
+    reduce: (_state, outcomes) => (outcomes[0].ok ? Number(outcomes[0].value) : -1),
   });
   expect(await parent.runOrThrow({})).toBe(2);
   expect(live).not.toHaveBeenCalled();
@@ -563,7 +563,7 @@ it("rehydrates a child agent's prepared options without repeating its schema tra
       context.turn === 1
         ? { kind: "continue", calls: [{ id: "child", tool: "child", input: { raw: "4" } }] }
         : { kind: "finish", result: state },
-    reduce: (_state, outcomes) => (outcomes[0]!.ok ? Number(outcomes[0]!.value) : -1),
+    reduce: (_state, outcomes) => (outcomes[0].ok ? Number(outcomes[0].value) : -1),
   });
   expect((await parent.run({})).status).toBe("failed");
   expect(await parent.runOrThrow({})).toBe(4);
@@ -715,7 +715,7 @@ it("uses a custom lossless codec for validated class arguments, outcomes and fin
         ? { kind: "continue", calls: [{ id: "date", tool: "date", input: "2026-01-01T00:00:00Z" }] }
         : { kind: "finish", result: state },
     reduce: (_state, outcomes) =>
-      outcomes[0]!.ok && outcomes[0]!.tool === "date" ? outcomes[0]!.value.getTime() : -1,
+      outcomes[0].ok && outcomes[0].tool === "date" ? outcomes[0].value.getTime() : -1,
   });
   for (let attempt = 0; attempt < 2; attempt++)
     expect(await agent.runOrThrow({})).toEqual(new Date("2026-01-01T00:00:01Z"));
@@ -745,7 +745,7 @@ it("resumes a version-one call receipt without rerunning its completed work or i
     },
     decide: (state) => ({ kind: "finish", result: state }),
     reduce: (_state, outcomes) =>
-      outcomes[0]!.ok && outcomes[0]!.tool === "work" ? outcomes[0]!.value : -1,
+      outcomes[0].ok && outcomes[0].tool === "work" ? outcomes[0].value : -1,
   });
   const key = JSON.stringify(['["agent","legacy-receipt"]']);
   const lease = await store.acquire("job");
@@ -841,8 +841,8 @@ it("persists a terminal failure when concurrent child admissions exceed the ance
   const checkpoint = checkedCheckpoint(plainAgentCheckpointCodec.decode((await lease.read())!));
   await lease.close();
   const root = JSON.stringify(['["agent","budget-parent"]']);
-  expect(checkpoint.agents[root]!.phase).toBe("failed");
-  expect(checkpoint.budgets[root]!.maxDecisions).toBe(2);
+  expect(checkpoint.agents[root].phase).toBe("failed");
+  expect(checkpoint.budgets[root].maxDecisions).toBe(2);
   await expect(parent.runOrThrow({})).rejects.toThrow();
   expect(decide).toHaveBeenCalledTimes(1);
 });

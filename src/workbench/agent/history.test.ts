@@ -62,7 +62,7 @@ it.each([
         ["--trace", trace],
         ["--store", database],
       ]) {
-        const args = ["history", source!, filename!, "--pipeline", pipelineId, runId];
+        const args = ["history", source, filename, "--pipeline", pipelineId, runId];
         const jsonIo = captureIo(cwd);
         expect(await runWorkbenchCli([...args, "--json"], jsonIo)).toBe(0);
         const detail = JSON.parse(jsonIo.output.join(""));
@@ -74,11 +74,11 @@ it.each([
         const root = history.agents.find((agent) => agent.pipelineId === "delegating-agent")!;
         expect(root.termination).toBe("finish");
         expect(root.turns.map((turn) => turn.decision)).toEqual(["continue", "continue", "finish"]);
-        expect(root.turns[0]!.calls.map((call) => [call.callId, call.tool])).toEqual([
+        expect(root.turns[0].calls.map((call) => [call.callId, call.tool])).toEqual([
           ["word-0", "processWord"],
           ["word-1", "processWord"],
         ]);
-        expect(root.turns[1]!.calls[0]!.tool).toBe("summarize");
+        expect(root.turns[1].calls[0].tool).toBe("summarize");
         expect(
           history.agents
             .flatMap((agent) => agent.turns)
@@ -98,8 +98,8 @@ it.each([
         if (runId !== root.runId) {
           const directArgs = [
             "history",
-            source!,
-            filename!,
+            source,
+            filename,
             "--pipeline",
             root.pipelineId,
             root.runId,

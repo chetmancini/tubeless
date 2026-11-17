@@ -41,9 +41,9 @@ const thinking = { type: "thinking", thinking: "", signature: "sig-1" };
 const message = (content: unknown[], stop_reason = "tool_use") =>
   Response.json({ type: "message", role: "assistant", content, stop_reason });
 const body = (fetcher: ReturnType<typeof vi.fn<typeof fetch>>, index: number) =>
-  JSON.parse(fetcher.mock.calls[index]![1]!.body as string);
+  JSON.parse(fetcher.mock.calls[index][1]!.body as string);
 const headers = (fetcher: ReturnType<typeof vi.fn<typeof fetch>>, index: number) =>
-  fetcher.mock.calls[index]![1]!.headers as Record<string, string>;
+  fetcher.mock.calls[index][1]!.headers as Record<string, string>;
 
 describe("Anthropic model", () => {
   it.each([undefined, 1_048_575])(
@@ -162,7 +162,7 @@ describe("Anthropic model", () => {
       expect(
         fetcher.mock.calls.map((_, index) => Boolean(body(fetcher, index).compaction))
       ).toEqual(compact ? [true, false] : [false]);
-      if (!compact) expect(body(fetcher, 0).messages[0].content[0].text).toBe(history[0]!.content);
+      if (!compact) expect(body(fetcher, 0).messages[0].content[0].text).toBe(history[0].content);
     }
   );
 
@@ -275,7 +275,7 @@ describe("Anthropic model", () => {
       answer: "Done.",
     });
 
-    expect(fetcher.mock.calls[0]![0]).toBe("https://api.anthropic.com/v1/messages");
+    expect(fetcher.mock.calls[0][0]).toBe("https://api.anthropic.com/v1/messages");
     expect(headers(fetcher, 0)).toMatchObject({
       "x-api-key": "fixture",
       "anthropic-version": "2023-06-01",
@@ -448,7 +448,7 @@ describe("Anthropic model", () => {
     fetcher.mockReset().mockImplementation(async () => message([text], "end_turn"));
     const result = await agent.run({ task: "Finish" });
     expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain("Anthropic returned no tool calls");
+    expect(result.errors[0].message).toContain("Anthropic returned no tool calls");
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -467,7 +467,7 @@ describe("Anthropic model", () => {
       model: anthropicModel({ apiKey: "fixture" }),
     }).run({ task: "Finish" });
     expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain(error);
+    expect(result.errors[0].message).toContain(error);
   });
 
   it("compacts on demand and carries the signed block first with the beta header", async () => {
@@ -564,7 +564,7 @@ describe("Anthropic model", () => {
         ),
     }).run({ task: "follow up" });
     expect(unfinished.status).toBe("failed");
-    expect(unfinished.errors[0]!.message).toContain("unfinished tool calls");
+    expect(unfinished.errors[0].message).toContain("unfinished tool calls");
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -626,7 +626,7 @@ describe("Anthropic model", () => {
     vi.stubEnv("ANTHROPIC_BASE_URL", "https://gateway.example.com/anthropic/");
     vi.stubEnv("ANTHROPIC_MODEL", " env-model ");
     await agent.runOrThrow({ task: "Finish" });
-    expect(fetcher.mock.calls[0]![0]).toBe("https://gateway.example.com/anthropic/v1/messages");
+    expect(fetcher.mock.calls[0][0]).toBe("https://gateway.example.com/anthropic/v1/messages");
     expect(headers(fetcher, 0)).toMatchObject({ Authorization: "Bearer gateway-token" });
     expect(headers(fetcher, 0)).not.toHaveProperty("x-api-key");
     expect(body(fetcher, 0).model).toBe("env-model");
@@ -637,7 +637,7 @@ describe("Anthropic model", () => {
       projectContext: false,
       model: anthropicModel({ model: "claude-sonnet-5-5", baseUrl: "http://localhost:4000" }),
     }).runOrThrow({ task: "Finish" });
-    expect(fetcher.mock.calls[1]![0]).toBe("http://localhost:4000/v1/messages");
+    expect(fetcher.mock.calls[1][0]).toBe("http://localhost:4000/v1/messages");
     expect(headers(fetcher, 1)).toMatchObject({ "x-api-key": "env-key" });
     expect(body(fetcher, 1).model).toBe("claude-sonnet-5-5");
   });
@@ -658,7 +658,7 @@ describe("Anthropic model", () => {
         compactAfterBytes: null,
       }),
     }).runOrThrow({ task: "Finish" });
-    expect(fetcher.mock.calls[0]![0]).toBe("https://openrouter.ai/api/v1/messages");
+    expect(fetcher.mock.calls[0][0]).toBe("https://openrouter.ai/api/v1/messages");
     expect(headers(fetcher, 0)).toMatchObject({ Authorization: "Bearer router-key" });
     expect(headers(fetcher, 0)).not.toHaveProperty("x-api-key");
     expect(body(fetcher, 0)).not.toHaveProperty("cache_control");
@@ -728,7 +728,7 @@ describe("Anthropic model", () => {
       task: "Finish",
     });
     expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain("$ref is unsupported");
+    expect(result.errors[0].message).toContain("$ref is unsupported");
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
@@ -894,7 +894,7 @@ describe("Anthropic model retries", () => {
       model: anthropicModel({ apiKey: "fixture" }),
     }).run({ task: "Finish" });
     expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain("HTTP 429");
+    expect(result.errors[0].message).toContain("HTTP 429");
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
@@ -935,8 +935,8 @@ describe("Anthropic model retries", () => {
       model: anthropicModel({ apiKey: "fixture", timeoutMs: 1000 }),
     }).run({ task: "Finish" });
     expect(result.status).toBe("failed");
-    expect(result.errors[0]!.message).toContain("HTTP 429");
-    expect(result.errors[0]!.message).not.toContain("timed out");
+    expect(result.errors[0].message).toContain("HTTP 429");
+    expect(result.errors[0].message).not.toContain("timed out");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 

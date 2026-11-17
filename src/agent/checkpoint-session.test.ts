@@ -110,13 +110,13 @@ it.each([false, true])(
       throw failure;
     });
     await expect(session.startCall("agent", "one", "safe")).rejects.toBe(failure);
-    expect(session.decision("agent")!.calls[0]!.status).toBe("pending");
+    expect(session.decision("agent")!.calls[0].status).toBe("pending");
     write.mockClear();
     await expect(session.startCall("agent", "two", "safe")).rejects.toBe(failure);
     expect(write).not.toHaveBeenCalled();
     await session.close();
     const reopened = await AgentCheckpointSession.open(storage, "job");
-    expect(reopened.decision("agent")!.calls[0]!.status).toBe(committed ? "running" : "pending");
+    expect(reopened.decision("agent")!.calls[0].status).toBe(committed ? "running" : "pending");
     expect(await reopened.startCall("agent", "one", "safe")).toEqual({ kind: "run" });
     await reopened.close();
   }
@@ -139,7 +139,7 @@ it("still rejects a nondeterministic codec before acknowledging a new transition
     code: "TUBELESS_AGENT_CHECKPOINT_CODEC",
   });
   corrupt = false;
-  expect(session.decision("agent")!.calls[0]!.status).toBe("pending");
+  expect(session.decision("agent")!.calls[0].status).toBe("pending");
   expect(await session.startCall("agent", "one", "safe")).toEqual({ kind: "run" });
   await session.close();
 });

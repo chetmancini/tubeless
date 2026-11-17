@@ -29,7 +29,7 @@ describe("inert graph metadata", () => {
     expect(pipeline.metadata).toEqual(plan.steps[0]?.metadata);
     expect(Object.isFrozen(pipeline.metadata?.annotations?.retention)).toBe(true);
     expect(() => {
-      (plan.steps[0]!.metadata!.tags as string[]).push("injected");
+      (plan.steps[0].metadata!.tags as string[]).push("injected");
     }).toThrow();
     expect(pipeline.definition.metadata).toEqual(pipeline.metadata);
     expect(await pipeline.runOrThrow()).toBe(42);

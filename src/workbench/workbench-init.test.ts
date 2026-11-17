@@ -290,8 +290,8 @@ describe("cloudflare scaffold naming and imports", () => {
     });
     const config = files.find((file) => file.path === "cloudflare.config.ts")!.contents;
     return {
-      worker: /name: "([^"]*)"/.exec(config)![1]!,
-      bucket: /bindings\.r2\(\{ name: "([^"]*)" \}\)/.exec(config)![1]!,
+      worker: /name: "([^"]*)"/.exec(config)![1],
+      bucket: /bindings\.r2\(\{ name: "([^"]*)" \}\)/.exec(config)![1],
     };
   };
 
@@ -327,7 +327,7 @@ describe("cloudflare scaffold naming and imports", () => {
       projectFile: join(cwd, projectFile),
       projectExport: "default",
     });
-    return files[0]!.contents;
+    return files[0].contents;
   };
 
   it("imports a project file from a subdirectory", () => {

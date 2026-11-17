@@ -314,7 +314,7 @@ export async function executePlannedRun<
     // An external abort takes precedence for work that never started, even
     // when an earlier failure stopped dispatch. Keep every active step's outcome.
     // Only reuse diagnostics created from this signal, never a step-local AbortError.
-    stopError = recordExternalCancellation(unstarted[0]!.id)!;
+    stopError = recordExternalCancellation(unstarted[0].id)!;
   }
   for (const step of unstarted) recordUnstartedStep(step, stopError!);
 

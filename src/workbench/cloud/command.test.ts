@@ -160,15 +160,12 @@ describe("Cloud command", () => {
     expect(selection.errors.join("")).toContain("Other (other)");
     const dependencies = service({ admission: { ...baseRun, id: remote } });
     const original = dependencies.fetch;
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) =>
+    dependencies.fetch = async (url: string | URL | Request, init?: RequestInit) =>
       init?.method === "POST" ||
       String(url).endsWith("/session") ||
       String(url).endsWith("/pipelines")
         ? original(url, init)
-        : Response.json(
-            { error: { code: "not_found", message: remote } },
-            { status: 404 }
-          )) as typeof fetch;
+        : Response.json({ error: { code: "not_found", message: remote } }, { status: 404 });
     const failed = captureIo(await fixture());
     expect(await runCloud(["run", pipeline.name], failed, dependencies)).toBe(2);
     expect(failed.errors.join("")).not.toMatch(/[\u001b\u009b\u202e]/);
@@ -245,13 +242,13 @@ describe("Cloud command", () => {
       });
       const original = dependencies.fetch;
       let polls = 0;
-      dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      dependencies.fetch = async (url: string | URL | Request, init?: RequestInit) => {
         if (String(url).endsWith(`/runs/${baseRun.id}`)) {
           const poll = polls++ - (command === "logs" ? 1 : 0);
           if ([0, 1, 3, 4].includes(poll)) throw new Error("network unavailable");
         }
         return original(url, init);
-      }) as typeof fetch;
+      };
       const io = captureIo(await fixture());
       expect(await runCloud([...args, "--json"], io, dependencies)).toBe(0);
       expect(JSON.parse(io.output.join(""))).toMatchObject({ status: "completed" });
@@ -318,10 +315,10 @@ describe("Cloud command", () => {
     const root = await fixture();
     const dependencies = service();
     const original = dependencies.fetch;
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    dependencies.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       if (String(url).endsWith("/runs/run-1")) throw new Error("network unavailable");
       return original(url, init);
-    }) as typeof fetch;
+    };
     const io = captureIo(root);
     expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
     expect(io.errors.join("")).toContain("Run run-1");
@@ -335,14 +332,14 @@ describe("Cloud command", () => {
     const dependencies = service({ runs: [{ ...baseRun, status: "running" }] });
     const original = dependencies.fetch;
     let reads = 0;
-    dependencies.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    dependencies.fetch = async (url: string | URL | Request, init?: RequestInit) => {
       if (String(url).endsWith("/runs/run-1") && ++reads > 1)
         return Response.json(
           { error: { code, message: "Run is no longer accessible" } },
           { status: Number(status) }
         );
       return original(url, init);
-    }) as typeof fetch;
+    };
     const io = captureIo(root);
     expect(await runCloud(["logs", "run-1", "--follow", "--json"], io, dependencies)).toBe(2);
     expect(reads).toBe(2);

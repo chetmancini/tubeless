@@ -207,7 +207,7 @@ describe("run navigation", () => {
       ],
     });
     const row = renderToString(
-      <StepRow step={failed.steps[1]!} steps={failed.steps} selected onSelect={() => {}} />
+      <StepRow step={failed.steps[1]} steps={failed.steps} selected onSelect={() => {}} />
     );
     expect(row).toContain('class="step failed selectable selected"');
     expect(row).toContain(
@@ -216,7 +216,7 @@ describe("run navigation", () => {
     const drawer = renderToString(
       <StepInspector
         run={failed}
-        step={failed.steps[1]!}
+        step={failed.steps[1]}
         childRuns={[]}
         childTotal={0}
         onOpenRun={() => {}}

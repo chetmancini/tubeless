@@ -302,7 +302,7 @@ it("aborts pending requests and timers on source changes and unmount", async () 
   const old = pending();
   const load = vi.fn<StudioApi["loadTranscript"]>().mockReturnValue(old.promise);
   const mounted = await mount(load);
-  const signal = load.mock.calls[0]![2]!;
+  const signal = load.mock.calls[0][2]!;
   const next = vi.fn<StudioApi["loadTranscript"]>().mockResolvedValue(live(2));
   await mounted.update("run", next);
   expect(signal.aborted).toBe(true);
@@ -325,7 +325,7 @@ it("pauses hidden tabs and resumes from the last successful cursor", async () =>
     .mockResolvedValue(live(2));
   const mounted = await mount(load);
   await tick();
-  const signal = load.mock.calls[1]![2]!;
+  const signal = load.mock.calls[1][2]!;
   await act(() => {
     document.hidden = true;
     document.dispatchEvent(new Event("visibilitychange"));
@@ -357,7 +357,7 @@ it("retires reads, clears private content and stops polling on authorization den
     return unsubscribe;
   });
   await tick();
-  const signal = load.mock.calls[1]![2]!;
+  const signal = load.mock.calls[1][2]!;
   await act(() => deny(403));
   expect(signal.aborted).toBe(true);
   expect(mounted.state.page).toBeUndefined();

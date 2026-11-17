@@ -69,7 +69,7 @@ const mutations = [
     name: "policy",
     error: "structural fingerprint",
     mutate: (event: ReturnType<typeof started>) => {
-      event.payload.definitionSnapshot!.steps[0]!.dryRun = "skip";
+      event.payload.definitionSnapshot!.steps[0].dryRun = "skip";
     },
   },
   {
@@ -109,14 +109,14 @@ const mutations = [
       mutate: (event: ReturnType<typeof started>) => {
         event.payload.definitionSnapshot!.steps[
           index
-        ]!.nestedPipeline!.identity!.implementationVersion = "forged";
+        ].nestedPipeline!.identity!.implementationVersion = "forged";
       },
     },
     {
       name: `${index === 0 ? "single" : "fan-out"} child implementation version removal`,
       error: "definition ID",
       mutate: (event: ReturnType<typeof started>) => {
-        delete event.payload.definitionSnapshot!.steps[index]!.nestedPipeline!.identity!
+        delete event.payload.definitionSnapshot!.steps[index].nestedPipeline!.identity!
           .implementationVersion;
       },
     },
@@ -125,7 +125,7 @@ const mutations = [
     name: "child definition ID",
     error: "definition ID",
     mutate: (event: ReturnType<typeof started>) => {
-      event.payload.definitionSnapshot!.steps[0]!.nestedPipeline!.identity!.definitionId = `sha256:${"0".repeat(64)}`;
+      event.payload.definitionSnapshot!.steps[0].nestedPipeline!.identity!.definitionId = `sha256:${"0".repeat(64)}`;
     },
   },
 ];

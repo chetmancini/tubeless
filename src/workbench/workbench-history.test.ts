@@ -242,7 +242,7 @@ describe("runHistory", () => {
     projector.append(failedRunEvents.map((next, id) => ({ ...next, id })));
     const snapshot = projector.snapshot();
     const runs = Array.from({ length: 150_000 }, (_, index) => ({
-      ...snapshot.runs[0]!,
+      ...snapshot.runs[0],
       runId: `run-${index}`,
     }));
     runs[runs.length - 1] = { ...runs.at(-1)!, runId: "longest-run-id-at-the-end" };
@@ -260,7 +260,7 @@ describe("runHistory", () => {
       const lines = io.output.join("").trimEnd().split("\n");
       expect(lines).toHaveLength(runs.length);
       expect(lines.at(-1)).toContain("longest-run-id-at-the-end");
-      expect(lines[0]!.indexOf("import")).toBe(lines.at(-1)!.indexOf("import"));
+      expect(lines[0].indexOf("import")).toBe(lines.at(-1)!.indexOf("import"));
     } finally {
       createProjector.mockRestore();
     }

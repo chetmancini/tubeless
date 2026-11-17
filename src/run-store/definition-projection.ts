@@ -81,13 +81,13 @@ export class DefinitionProjection {
   }
 
   snapshot(pipelineRuns: readonly StoredPipelineRun[]): StoredPipelineDefinition {
-    const identity = pipelineRuns[0]!.definitionIdentity;
+    const identity = pipelineRuns[0].definitionIdentity;
     const snapshot = this.#snapshot;
     return {
       activeRuns: pipelineRuns.filter(({ status }) => status === "running").length,
       firstSeenAtMs: this.#firstSeenAtMs,
       lastSeenAtMs: this.#lastSeenAtMs,
-      pipelineId: pipelineRuns[0]!.pipelineId,
+      pipelineId: pipelineRuns[0].pipelineId,
       ...(identity ? { identity: { ...identity } } : {}),
       ...(snapshot ? { snapshot: structuredClone(snapshot) } : {}),
       runCount: pipelineRuns.length,

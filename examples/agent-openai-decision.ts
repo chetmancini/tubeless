@@ -106,7 +106,7 @@ export async function openaiDecision(state: unknown, context: AgentDecisionConte
   if (calls.length === 0) throw new Error("OpenAI returned no function calls");
   if (calls.some((call) => call.tool === finishName)) {
     if (calls.length !== 1) throw new Error("OpenAI must finish without other calls");
-    return { kind: "finish", result: calls[0]!.arguments.result };
+    return { kind: "finish", result: calls[0].arguments.result };
   }
   // Tubeless validates registry membership, IDs, inputs, outputs and call admission.
   return {
