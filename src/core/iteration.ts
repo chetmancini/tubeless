@@ -4,7 +4,7 @@ import { isPipelineCancellation } from "./pipeline-execution-error.js";
 import type {
   Pipeline,
   PipelineExecutionContext,
-  PipelineRunControls,
+  PipelineChildRunControls,
   PipelineStepContext,
   PipelineStepProgress,
   PipelineStepProgressDetail,
@@ -22,7 +22,7 @@ interface IterationConfig<TOptions extends object> {
   stepId: string;
   pipeline: Pipeline<object, unknown>;
   maxIterations: number;
-  controls?: PipelineRunControls;
+  controls?: PipelineChildRunControls;
   initialState(
     inputs: Record<string, unknown>,
     context: PipelineExecutionContext<TOptions>

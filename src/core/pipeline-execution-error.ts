@@ -63,6 +63,14 @@ export class PipelineHandlerFailure {
   constructor(readonly error: unknown) {}
 }
 
+/** Private provenance for a host output encoder or persistence failure. */
+export class PipelineOutputObservationFailure extends Error {
+  constructor(cause: unknown) {
+    super("Step output observation failed", { cause });
+    this.name = "PipelineOutputObservationFailure";
+  }
+}
+
 function originalPipelineError(error: PipelineError): unknown {
   const failure = originalPipelineErrors.get(error);
   return failure instanceof PipelineHandlerFailure ? failure.error : failure;
@@ -238,14 +246,17 @@ export function stepExecutionError(
   const childFailure =
     error instanceof PipelineExecutionError || error instanceof PipelineChildError;
   const validationFailure = error instanceof PipelineBoundaryValidationError;
+  const observationFailure = error instanceof PipelineOutputObservationFailure;
   return toPipelineError(failure, {
     code: cancelled
       ? "TUBELESS_RUN_CANCELLED"
       : validationFailure
         ? "TUBELESS_STEP_OUTPUT_VALIDATION_FAILED"
-        : childFailure
-          ? "TUBELESS_CHILD_FAILED"
-          : "TUBELESS_STEP_FAILED",
+        : observationFailure
+          ? "TUBELESS_STEP_OUTPUT_OBSERVATION_FAILED"
+          : childFailure
+            ? "TUBELESS_CHILD_FAILED"
+            : "TUBELESS_STEP_FAILED",
     kind: cancelled
       ? "cancellation"
       : validationFailure

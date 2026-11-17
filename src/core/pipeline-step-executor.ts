@@ -12,6 +12,7 @@ import type {
 } from "./pipeline-types.js";
 import type { PipelineTraceAttributes } from "../tracing/tracing-contracts.js";
 import { validateStandardSchema } from "./pipeline-validation.js";
+import { prepareStepOutput, type RunOutputObservation } from "./pipeline-output-observer.js";
 
 export interface NormalizedStepSkipDecision {
   reason: string;
@@ -63,9 +64,10 @@ export async function executeStepAttempt<TOptions extends object>(input: {
   onProgress(progress: PipelineStepProgress): void;
   onReportAttempt(attempt: number, attributes?: PipelineTraceAttributes): void;
   outputBoundary: string;
+  observation?: RunOutputObservation;
   step: AnyStep<TOptions>;
 }): Promise<unknown> {
-  const { step } = input;
+  const { step, observation } = input;
   const leaf = !step[STEP_NESTED_PIPELINE] && !step[STEP_ORCHESTRATION];
   let acceptsReports = true;
   const stepContext = {
@@ -95,7 +97,7 @@ export async function executeStepAttempt<TOptions extends object>(input: {
       acceptsReports = false;
     }
   };
-  return executeWithStepCache({
+  const output = await executeWithStepCache({
     cache: step[STEP_CACHE],
     pipelineId: input.pipelineId,
     stepId: step.id,
@@ -106,10 +108,18 @@ export async function executeStepAttempt<TOptions extends object>(input: {
       return scope && leaf ? scope.run(run, input.context.signal) : run();
     },
     onArtifact: (record) => input.onArtifact?.(record, false),
-    validate: (value) => validateStepOutput(step, value, input.outputBoundary),
+    validate: (value, origin) =>
+      prepareStepOutput(
+        value,
+        (raw) => validateStepOutput(step, raw, input.outputBoundary),
+        observation,
+        { stepId: step.id, attemptId: input.attemptId, origin }
+      ),
     onHit: () => {
       acceptsReports = false;
       input.onCacheHit?.();
     },
   });
+  if (output.commit) await output.commit();
+  return output.value;
 }

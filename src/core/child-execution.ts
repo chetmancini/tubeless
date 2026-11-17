@@ -16,7 +16,7 @@ import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
 import { EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-identity.js";
 import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
-import { snapshotRunControls } from "./run-controls.js";
+import { rejectChildOutputObserver, snapshotRunControls } from "./run-controls.js";
 import type {
   Pipeline,
   PipelineContext,
@@ -259,6 +259,7 @@ function childRunControls(
   parentDryRun: boolean,
   cachePolicy: PipelineRunControls["cache"]
 ): PipelineRunControls {
+  rejectChildOutputObserver(controls);
   const resolved = snapshotRunControls(controls);
   if (cachePolicy !== undefined) resolved.cache = cachePolicy;
   if (parentDryRun || resolved.dryRun === true) {

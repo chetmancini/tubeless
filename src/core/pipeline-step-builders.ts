@@ -3,6 +3,7 @@ import type { ArtifactLoader, ArtifactSaver } from "./pipeline-artifacts.js";
 import { createMappedChildRunner, createSingleChildRunner } from "./child-execution.js";
 import { createIterationRunner } from "./iteration.js";
 import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
+import { rejectChildOutputObserver } from "./run-controls.js";
 import { STEP_NESTED_PIPELINE, STEP_REMOTE } from "./pipeline-step-metadata.js";
 import type {
   AnyStep,
@@ -144,6 +145,7 @@ export function buildPipelineStep<TOptions extends object>(
   id: string,
   config: SingleChildStepConfig<TOptions>
 ): AnyStep<TOptions> {
+  if (typeof config.controls !== "function") rejectChildOutputObserver(config.controls);
   const definition: StepDefinitionBody<TOptions> = {
     [STEP_NESTED_PIPELINE]: {
       mode: "single" as const,
@@ -231,6 +233,7 @@ export function buildMappedPipelineStep<TOptions extends object>(
   id: string,
   config: MappedChildStepConfig<TOptions>
 ): AnyStep<TOptions> {
+  if (typeof config.controls !== "function") rejectChildOutputObserver(config.controls);
   const configuredConcurrency = config.concurrency;
   if (
     typeof configuredConcurrency === "number" &&
@@ -290,6 +293,7 @@ export function buildIterationStep<TOptions extends object>(
   if (!Number.isSafeInteger(definition.maxIterations) || definition.maxIterations < 1) {
     throw new RangeError("iteratePipeline maxIterations must be a positive safe integer");
   }
+  rejectChildOutputObserver(definition.controls);
   const controls = definition.controls ? structuredClone(definition.controls) : undefined;
   if (controls) {
     if (controls.targets) Object.freeze(controls.targets);

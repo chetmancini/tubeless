@@ -4,7 +4,7 @@ import {
   definePipeline,
   type IterationDecision,
   type PipelineStepContext,
-  type PipelineRunControls,
+  type PipelineChildRunControls,
 } from "./pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import { defer } from "./child-pipeline.test-support.js";
@@ -24,7 +24,7 @@ function fixture(
       | Promise<IterationDecision<number, number | undefined>>;
     dryRun?: "skip";
     childDryRun?: "skip" | (() => number);
-    controls?: PipelineRunControls<"compute", "compute">;
+    controls?: PipelineChildRunControls<"compute", "compute">;
   } = {}
 ) {
   const childSteps = createSteps<{ value: number }>();
@@ -494,7 +494,9 @@ describe("bounded child iteration", () => {
   });
 
   it("captures configuration and child controls before later author mutation", async () => {
-    const controls: PipelineRunControls<"compute", "compute"> = { targets: ["compute"] };
+    const controls: PipelineChildRunControls<"compute", "compute"> = {
+      targets: ["compute"],
+    };
     const { pipeline } = fixture({ controls });
     controls.targets = [];
     const plannedControls = pipeline.plan().steps[0]?.nestedPipeline?.controls;

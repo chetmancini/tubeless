@@ -1,9 +1,10 @@
 # Host-owned step output recovery
 
 Proposed contract for [#287](https://github.com/chetmancini/tubeless/issues/287).
-Slice 1 establishes the design and [compile-only probes](./step-output-recovery.probes.ts).
-The proposed names below are not package exports. Runtime implementation starts
-in slice 2; current host guides remain accurate until the later slices ship.
+Slices 1 and 2 establish the design, [compile-only probes](./step-output-recovery.probes.ts),
+and [public output observation](../docs/step-output-observation.md). The supply
+controls and `supplied` provenance below remain proposed for slice 3. Current
+host guides retain whole-attempt retries until their recovery examples change.
 
 ## Outcome and boundary
 

@@ -26,7 +26,7 @@ import type {
   OptionalInputs,
   PipelineOptionsOf,
   PipelineResultOf,
-  PipelineRunControlsOf,
+  PipelineChildRunControlsOf,
   PlainStepFields,
   PolicySkippedOutput,
   RemoteStepDefinitionBase,
@@ -530,7 +530,7 @@ function createStepFactory<
       dependsOn?: TDeps;
       maxIterations: number;
       dryRun?: "skip";
-      controls?: PipelineRunControlsOf<TChild>;
+      controls?: PipelineChildRunControlsOf<TChild>;
       initialState(
         inputs: RequiredInputs<TDeps>,
         context: PipelineExecutionContext<TOptions>

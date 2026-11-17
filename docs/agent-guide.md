@@ -92,6 +92,11 @@ authoring.
 
 ## Caching and artifacts
 
+- Capture raw outputs with a run's `outputObserver: { encode, write }` when the
+  host needs the values. Encode losslessly before schema transformation; write
+  acknowledges persistence before dependents start. Dry runs bypass it and child
+  runs do not inherit it. Production output supply is not implemented yet. See
+  [output observation](./step-output-observation.md).
 - Opt deterministic steps into `cache: { version: "v1" }`, or `cache: true` with a
   pipeline `implementationVersion`. Run with `{ cache: "recompute" }` or
   `{ cache: "bypass" }` (`--cache` on commands); keep it out of domain options.

@@ -128,6 +128,11 @@ Agents:
 
 Optional capabilities:
 
+- Output capture: a run's `outputObserver: { encode, write }` receives raw values
+  before schema transformation and writes detached bytes after validation, before
+  dependents start. Supply a lossless codec and owned persistence; dry runs bypass
+  capture and children never inherit it. See `docs/step-output-observation.md`.
+  Production output supply is not implemented yet.
 - Artifacts: `context.recordArtifact`, `loadArtifact`, `saveArtifact`
   (`docs/artifacts.md`). Graph metadata (`docs/graph-metadata.md`). Node helpers
   from `tubeless/node` (`definePaths`, `writeJson`, `resetDir`; mark writes

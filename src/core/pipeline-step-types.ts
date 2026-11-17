@@ -15,7 +15,7 @@ import type {
   PipelineErrorCause,
   PipelineExecutionContext,
   PipelinePlanStep,
-  PipelineRunControls,
+  PipelineChildRunControls,
   PipelineStepContext,
   RemoteStepAdapter,
   StandardSchemaV1,
@@ -133,9 +133,9 @@ export type PipelineOptionsOf<TPipeline> =
     ? TOptions
     : never;
 
-export type PipelineRunControlsOf<TPipeline> =
+export type PipelineChildRunControlsOf<TPipeline> =
   TPipeline extends Pipeline<infer _TOptions, unknown, infer TStepId, infer TTargetId>
-    ? PipelineRunControls<TStepId, TTargetId>
+    ? PipelineChildRunControls<TStepId, TTargetId>
     : never;
 
 export type ChildPipelineStepDefinitionBase<
@@ -153,11 +153,11 @@ export type ChildPipelineStepDefinitionBase<
   metadata?: PipelineMetadata;
   dryRun?: "skip";
   controls?:
-    | PipelineRunControlsOf<TChildPipeline>
+    | PipelineChildRunControlsOf<TChildPipeline>
     | ((
         inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
         context: PipelineExecutionContext<TParentOptions>
-      ) => PipelineRunControlsOf<TChildPipeline>);
+      ) => PipelineChildRunControlsOf<TChildPipeline>);
 } & ([TParentOptions] extends [PipelineOptionsOf<NoInfer<TChildPipeline>>]
   ? {
       mapOptions?(
@@ -260,13 +260,13 @@ export type MappedChildPipelineStepDefinition<
   /** What happens when an item's child run fails; see {@link ForEachItemFailurePolicy}. Defaults to `"fail"`. */
   onItemFailure?: ForEachItemFailurePolicy;
   controls?:
-    | PipelineRunControlsOf<TChildPipeline>
+    | PipelineChildRunControlsOf<TChildPipeline>
     | ((
         item: TItem,
         index: number,
         inputs: RequiredInputs<TDeps> & OptionalInputs<TOptionalDeps>,
         context: PipelineExecutionContext<TParentOptions>
-      ) => PipelineRunControlsOf<TChildPipeline>);
+      ) => PipelineChildRunControlsOf<TChildPipeline>);
   mapOptions(
     item: TItem,
     index: number,

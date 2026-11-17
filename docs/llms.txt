@@ -29,6 +29,7 @@ Guides:
 - YAML and JSON pipelines: ./declarative-pipelines.md
 - Pipeline document JSON Schema v1: ./pipeline-document.schema.json
 - Step output caching: ./step-output-cache.md
+- Step output observation: ./step-output-observation.md
 - Artifacts and lineage: ./artifacts.md
 - Structured diagnostics: ./structured-diagnostics.md
 - Graph metadata and discovery: ./graph-metadata.md

@@ -3,7 +3,7 @@ import {
   createSteps,
   definePipeline,
   type Pipeline,
-  type PipelineRunControls,
+  type PipelineChildRunControls,
 } from "../core/pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import { decodeStoredTraceEvent } from "./run-store-event-decoder.js";
@@ -14,7 +14,7 @@ const { step } = createSteps<{ page: number }>();
 const page = step("page", { run: (_inputs, context) => context.options.page + 1 });
 const child = definePipeline({ id: "page", steps: [page], finalize: page });
 
-function repeated(maxIterations = 3, controls?: PipelineRunControls<"page", "page">) {
+function repeated(maxIterations = 3, controls?: PipelineChildRunControls<"page", "page">) {
   const { iteratePipeline } = createSteps();
   const repeat = iteratePipeline("repeat", {
     pipeline: child,

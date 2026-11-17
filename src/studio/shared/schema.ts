@@ -5,7 +5,7 @@ import {
 } from "./limits.js";
 import type { CliParameterDescriptor } from "../../cli/cli.js";
 import { studioLaunchMetadataSchema } from "./launch-metadata.js";
-import type { PipelinePlan, PipelineError, PipelineRunControls } from "../../core/pipeline.js";
+import type { PipelinePlan, PipelineError, PipelineChildRunControls } from "../../core/pipeline.js";
 import {
   storedDefinitionSummarySchema,
   storedPipelineDefinitionSchema,
@@ -45,12 +45,15 @@ const text = wireString({ allowEmpty: true });
 const id = wireString();
 const number = wireNumber();
 const count = wireNumber({ integer: true, minimum: 0 });
-const planControls = wireTransform(iterationControlsSchema, (controls): PipelineRunControls => {
-  const { targets, stepIds, ...common } = controls;
-  if (targets !== undefined && stepIds !== undefined)
-    throw new Error("Child selectors are mutually exclusive.");
-  return targets !== undefined ? { ...common, targets } : { ...common, stepIds };
-});
+const planControls = wireTransform(
+  iterationControlsSchema,
+  (controls): PipelineChildRunControls => {
+    const { targets, stepIds, ...common } = controls;
+    if (targets !== undefined && stepIds !== undefined)
+      throw new Error("Child selectors are mutually exclusive.");
+    return targets !== undefined ? { ...common, targets } : { ...common, stepIds };
+  }
+);
 const strings = wireArray(id);
 
 export const studioParameterSchema: WireSchema<CliParameterDescriptor> = wireRefine(

@@ -287,6 +287,31 @@ const PIPELINE_ERROR_CODE_CONTRACTS = {
         definePipeline({ id: "cache", steps: [], cache: { maxAge: "next month" } })
       ),
   },
+  TUBELESS_RUN_OUTPUT_RECOVERY_INVALID: {
+    phase: "planning",
+    kind: "validation",
+    emit: () => firstError(selectionPipeline().plan({ outputObserver: {} as never }).errors),
+  },
+  TUBELESS_STEP_OUTPUT_OBSERVATION_FAILED: {
+    phase: "execution",
+    kind: "step",
+    emit: async () =>
+      firstError(
+        (
+          await selectionPipeline().run(
+            {},
+            {
+              outputObserver: {
+                encode: () => {
+                  throw new Error("encoding failed");
+                },
+                write: () => {},
+              },
+            }
+          )
+        ).errors
+      ),
+  },
   TUBELESS_RUN_CACHE_INVALID: {
     phase: "planning",
     kind: "validation",

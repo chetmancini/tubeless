@@ -2,7 +2,7 @@ import type {
   MappedChildProgressOptions,
   PipelineExecutionContext,
   PipelineRun,
-  PipelineRunControls,
+  PipelineChildRunControls,
   PipelineStepContext,
   StandardSchemaV1,
   StepSkipDecision,
@@ -28,11 +28,11 @@ type PipelineDocumentSkipPredicate = (
 /** Application-owned wiring for one declarative `fromPipeline` step. */
 interface PipelineDocumentFromPipelineAdapter {
   controls?:
-    | PipelineRunControls
+    | PipelineChildRunControls
     | ((
         inputs: Record<string, unknown>,
         context: PipelineExecutionContext<object>
-      ) => PipelineRunControls);
+      ) => PipelineChildRunControls);
   mapOptions(inputs: Record<string, unknown>, context: PipelineExecutionContext<object>): object;
   mapResult?(
     value: unknown,
@@ -44,13 +44,13 @@ interface PipelineDocumentFromPipelineAdapter {
 /** Application-owned wiring for one declarative `forEachPipeline` step. */
 interface PipelineDocumentForEachPipelineAdapter {
   controls?:
-    | PipelineRunControls
+    | PipelineChildRunControls
     | ((
         item: unknown,
         index: number,
         inputs: Record<string, unknown>,
         context: PipelineExecutionContext<object>
-      ) => PipelineRunControls);
+      ) => PipelineChildRunControls);
   items(
     inputs: Record<string, unknown>,
     context: PipelineExecutionContext<object>
