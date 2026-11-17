@@ -30,7 +30,7 @@ export class PipelineRunStudioEventState {
   #lastEventId: number | undefined;
   #oldestEventId: number | undefined;
   #operation: Promise<void> = Promise.resolve();
-  #projector = createPipelineRunProjector({ retainLogs: false, retainArtifacts: false });
+  readonly #projector = createPipelineRunProjector({ retainLogs: false, retainArtifacts: false });
   readonly #details: StudioRunDetails;
   #revision = 0;
   #history: StudioHistory | undefined;

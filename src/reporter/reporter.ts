@@ -59,7 +59,7 @@ const ANSI = {
 function detectTerminalCapabilities(
   overrides: Partial<ReporterTerminalCapabilities> = {}
 ): ReporterTerminalCapabilities {
-  const isTTY = overrides.isTTY ?? process.stdout.isTTY === true;
+  const isTTY = overrides.isTTY ?? process.stdout.isTTY;
   const termIsDumb = process.env.TERM === "dumb";
   const forceColor = process.env.FORCE_COLOR;
   const autoColor =

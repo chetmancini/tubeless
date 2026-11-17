@@ -98,6 +98,7 @@ describe("JSON cache codec", () => {
       "a sparse array",
       (() => {
         const sparse = [1, 2, 3];
+        // oxlint-disable-next-line typescript/no-array-delete -- Deliberately builds a sparse array.
         delete sparse[1];
         return sparse;
       })(),

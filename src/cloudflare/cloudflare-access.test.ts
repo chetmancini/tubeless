@@ -1,12 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  createAccessAuthenticator,
-  parseAccessConfig,
-  type AccessConfig,
-} from "./cloudflare-access.js";
+import { createAccessAuthenticator, parseAccessConfig } from "./cloudflare-access.js";
 
 const AUD = "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2";
-const config = parseAccessConfig("https://team.cloudflareaccess.com/", AUD) as AccessConfig;
+const config = parseAccessConfig("https://team.cloudflareaccess.com/", AUD)!;
 let keys: CryptoKeyPair;
 type TestJwk = JsonWebKey & { readonly kid: string };
 let jwk: TestJwk;

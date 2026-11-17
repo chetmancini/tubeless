@@ -262,7 +262,7 @@ export function createPipelineTraceEmitter(
         if (stopExporting) return;
         return options.exporter.export(event);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         const partial = partialExporterFailure(error);
         const exporterError = partial ? partial.exporterError : error;
         captureExporterError(

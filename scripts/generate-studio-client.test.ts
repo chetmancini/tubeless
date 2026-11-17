@@ -9,7 +9,7 @@ describe("compiledClientSource", () => {
       "function createStudioRunIndex(runs) { return runs; }",
       "export { createStudioRunIndex };",
       "initStudio();",
-      `//# sourceMappingURL=${"studio-client.example.map"}`,
+      `//# sourceMappingURL=studio-client.example.map`,
       "",
     ].join("\n");
     const source = compiledClientSource(compiled);

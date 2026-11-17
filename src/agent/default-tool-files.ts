@@ -199,7 +199,7 @@ export async function editTool(
       const text = await readText(path, context.signal);
       const index = text.indexOf(input.oldText);
       if (index < 0) throw new ToolError("EDIT_NOT_FOUND", "oldText does not occur in the file");
-      if (text.indexOf(input.oldText, index + 1) >= 0)
+      if (text.includes(input.oldText, index + 1))
         throw new ToolError(
           "EDIT_AMBIGUOUS",
           "oldText occurs more than once; include more context"

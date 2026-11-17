@@ -194,7 +194,7 @@ export const pelotonRegistry: ProjectRegistry = {
         throw new Error("tech validation failed; start list must not be published");
       }
       context.log.log(
-        `tech passed for ${riders.length} riders in ${inputs["resolve-weather"]} weather`
+        `tech passed for ${riders.length} riders in ${String(inputs["resolve-weather"])} weather`
       );
       return true;
     },

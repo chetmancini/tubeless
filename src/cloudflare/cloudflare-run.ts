@@ -33,8 +33,8 @@ export function runCloudflareJob(options: {
     job: { ...options.job, maxRunDurationMs: boundedDuration(options.job) },
     output: {
       cwd: "/tmp",
-      stdout: { write: (chunk) => void console.log(chunk.trimEnd()) },
-      stderr: { write: (chunk) => void console.error(chunk.trimEnd()) },
+      stdout: { write: (chunk) => console.log(chunk.trimEnd()) },
+      stderr: { write: (chunk) => console.error(chunk.trimEnd()) },
     },
     wrapExporter: boundCloudflareTraceExporter,
   });

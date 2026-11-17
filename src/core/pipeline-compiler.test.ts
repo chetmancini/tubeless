@@ -228,8 +228,8 @@ describe("pipeline compilation", () => {
 
   it("runs class steps whose accessors use private fields", async () => {
     class PrivateStep implements AnyStep {
-      #id: string;
-      #label: string;
+      readonly #id: string;
+      readonly #label: string;
       constructor(id: string, label: string) {
         this.#id = id;
         this.#label = label;

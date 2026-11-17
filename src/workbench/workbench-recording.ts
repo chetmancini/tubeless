@@ -125,6 +125,9 @@ async function createRunTraceWriter(
   await mkdir(path.dirname(filename), { recursive: true });
   const stream = createWriteStream(filename);
   let writeError: Error | undefined;
+  // Read through a function: a stream callback can set this during an await, which TypeScript's
+  // control-flow narrowing cannot see.
+  const currentWriteError = (): Error | undefined => writeError;
   stream.on("error", (error) => {
     writeError = error;
   });
@@ -159,7 +162,8 @@ async function createRunTraceWriter(
       async export(event) {
         if (writeError) throw writeError;
         await writeEvent(stream, event);
-        if (writeError) throw writeError;
+        const failure = currentWriteError();
+        if (failure) throw failure;
       },
     },
   };
@@ -218,7 +222,7 @@ async function canonicalDestination(filename: string, depth = 0): Promise<string
   }
   try {
     const target = await readlink(filename);
-    return canonicalDestination(path.resolve(path.dirname(filename), target), depth + 1);
+    return await canonicalDestination(path.resolve(path.dirname(filename), target), depth + 1);
   } catch {
     // Not a symlink.
   }

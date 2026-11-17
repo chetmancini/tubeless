@@ -37,7 +37,7 @@ async function requestWithHost(
   }
 ): Promise<{ status: number; body: unknown }> {
   const parsed = new URL(url);
-  return await new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const request = httpRequest(
       {
         headers: { host: options.host, ...options.headers },

@@ -410,7 +410,7 @@ describe("Cloudflare application exporters", () => {
           throw new Error("app factory failed");
         },
       },
-    }).catch((error) => {
+    }).catch((error: unknown) => {
       failure = error;
     });
     try {

@@ -48,7 +48,7 @@ it("atomically replaces entries and accepts concurrent writers", async () => {
   const cache = createFileStepCache(root);
   await cache.set("key", { value: new Uint8Array([0]), createdAtMs: 0 }, {});
   await Promise.all(
-    Array.from({ length: 8 }, () =>
+    Array.from({ length: 8 }, async () =>
       cache.set("key", { value: new Uint8Array([1, 2, 3]), createdAtMs: 1 }, {})
     )
   );

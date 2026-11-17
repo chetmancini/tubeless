@@ -127,7 +127,7 @@ export function topologicalSort<TOptions extends object>(
 
   if (orderedIds.length !== steps.length) return null;
   const stepsById = new Map(steps.map((step) => [step.id, step]));
-  return orderedIds.map((id) => stepsById.get(id) as AnyStep<TOptions>);
+  return orderedIds.map((id) => stepsById.get(id)!);
 }
 
 export interface CompiledPipelineGraph<TOptions extends object> {

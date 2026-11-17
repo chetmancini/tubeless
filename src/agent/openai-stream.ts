@@ -25,7 +25,7 @@ export const readOpenAIStream: AgentTextProtocol = async (events, write) => {
       if (event.item.type === "message" && event.item.role === "assistant")
         assistants.add(index as number);
     }
-    const key = `${index}:${event.content_index}`;
+    const key = `${String(index)}:${String(event.content_index)}`;
     if (
       event.type === "response.content_part.added" &&
       assistants.has(index as number) &&

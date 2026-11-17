@@ -12,5 +12,5 @@ const { runPipeline } = proxyActivities<typeof activities>({
 });
 
 export async function normalizeWorkflow(job: activities.TemporalJob) {
-  return await runPipeline(job);
+  return runPipeline(job);
 }

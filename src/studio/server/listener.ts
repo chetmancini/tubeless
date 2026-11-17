@@ -103,7 +103,7 @@ export async function startPipelineRunStudio(
   });
   /** Fetch cannot represent methods such as TRACE; apply the gateway order without a body. */
   const rejectUnconvertible = async (request: IncomingMessage): Promise<Response> => {
-    const denial = await authenticate?.(
+    const denial = authenticate?.(
       new Request("http://studio.local/", { headers: toFetchHeaders(request) })
     );
     if (denial) return denial;

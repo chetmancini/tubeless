@@ -73,7 +73,7 @@ describe("openNdjsonPipelineRunStore", () => {
           "reuse",
           "write",
         ]);
-        expect(run.steps[0].artifacts?.every((record) => record.preview === false)).toBe(true);
+        expect(run.steps[0].artifacts?.every((record) => !record.preview)).toBe(true);
       }
     } finally {
       await ndjson.close();

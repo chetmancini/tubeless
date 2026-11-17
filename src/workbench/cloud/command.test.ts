@@ -408,7 +408,7 @@ describe("Cloud command", () => {
     const io = captureIo(await fixture());
     expect(await runCloud(["run", pipeline.slug], io, dependencies)).toBe(0);
     expect(io.output.join("")).toContain("info: synced");
-    expect(dependencies.calls.filter((call) => call.method === "POST")[0]!.body).toEqual({
+    expect(dependencies.calls.find((call) => call.method === "POST")!.body).toEqual({
       pipelineId: pipeline.id,
       input: {},
     });

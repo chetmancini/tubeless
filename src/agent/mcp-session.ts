@@ -93,7 +93,9 @@ export async function openMcpSession(
     });
     transport
       .send({ jsonrpc: "2.0", id, method, params }, deadline)
-      .catch((error: Error) => pending.get(id)?.(error));
+      .catch((error: unknown) =>
+        pending.get(id)?.(error instanceof Error ? error : new Error(String(error)))
+      );
     const { result, error } = await response;
     if (error)
       throw new McpRpcError(

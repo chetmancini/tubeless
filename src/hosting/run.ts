@@ -55,6 +55,8 @@ export function boundHostedEvent(event: PipelineTraceEvent): PipelineTraceEvent 
       }
       break;
     }
+    default:
+      break;
   }
   if ("error" in bounded && bounded.error) {
     const error = bounded.error;

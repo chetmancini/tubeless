@@ -144,14 +144,14 @@ async function sqliteSidecarExists(filename: string): Promise<boolean> {
   } catch (error) {
     // SAFETY: Node fs rejects with ErrnoException. Only ENOENT is a missing
     // directory entry; EACCES/EPERM and other inspect failures stay present.
-    if (isMissingDirectoryEntry(error as NodeJS.ErrnoException) === false) return true;
+    if (!isMissingDirectoryEntry(error as NodeJS.ErrnoException)) return true;
   }
   try {
     await lstat(filename);
     return true;
   } catch (error) {
     // SAFETY: Same Node fs ErrnoException contract as the stat() branch.
-    return isMissingDirectoryEntry(error as NodeJS.ErrnoException) === false;
+    return !isMissingDirectoryEntry(error as NodeJS.ErrnoException);
   }
 }
 
@@ -162,7 +162,7 @@ async function sqliteSidecarTargets(filename: string): Promise<readonly string[]
   } catch {
     // The file may not resolve (for example, it does not exist yet); use the filename as given.
   }
-  if (targets.includes(filename) === false) targets.push(filename);
+  if (!targets.includes(filename)) targets.push(filename);
   return targets;
 }
 
@@ -195,7 +195,7 @@ async function sqlitePendingTransactionalSidecar(filename: string): Promise<stri
   for (const target of await sqliteSidecarTargets(filename)) {
     for (const suffix of ["-journal", "-wal"] as const) {
       const sidecar = `${target}${suffix}`;
-      if ((await sqliteSidecarExists(sidecar)) === false) continue;
+      if (!(await sqliteSidecarExists(sidecar))) continue;
       try {
         if ((await stat(sidecar)).size > 0) return sidecar;
       } catch {

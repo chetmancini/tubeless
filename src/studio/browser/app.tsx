@@ -230,7 +230,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
       .then((loaded) => {
         if (!dataController.getState().accessDenied) setCommands(loaded);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (!dataController.getState().accessDenied) setToast(errorMessage(error));
       })
       .finally(() => {
@@ -243,7 +243,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
         setCanCancel(capabilities.canCancel);
         setCanClearHistory(capabilities.canClearHistory);
       })
-      .catch((error) => {
+      .catch((error: unknown) => {
         if (!dataController.getState().accessDenied) setToast(errorMessage(error));
       });
     dataController.refresh();

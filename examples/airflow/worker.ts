@@ -17,7 +17,7 @@ try {
     },
   });
   // Only a successful pipeline produces the result Python will return to XCom.
-  await writeJson(requireEnv("TUBELESS_RESULT_PATH", "Airflow worker"), result);
+  writeJson(requireEnv("TUBELESS_RESULT_PATH", "Airflow worker"), result);
 } finally {
   process.removeListener("SIGTERM", abort);
   process.removeListener("SIGINT", abort);

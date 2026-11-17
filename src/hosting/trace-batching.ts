@@ -7,7 +7,7 @@ export interface BatchingOptions {
 }
 
 export class BatchingTraceExporter implements PipelineTraceExporter {
-  #pending: PipelineTraceEvent[] = [];
+  readonly #pending: PipelineTraceEvent[] = [];
   #sequence = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #chain: Promise<void> = Promise.resolve();

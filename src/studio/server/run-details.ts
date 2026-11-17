@@ -15,7 +15,7 @@ interface RetainedRun {
 
 /** Run detail retention; the server state serializes reads and clearing. */
 export class StudioRunDetails {
-  #runs = new Map<string, RetainedRun>();
+  readonly #runs = new Map<string, RetainedRun>();
 
   constructor(private readonly store: Pick<PipelineRunEventReader, "listEvents">) {}
 

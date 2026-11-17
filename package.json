@@ -93,6 +93,7 @@
     "miniflare": "5.20261113.0-beta",
     "oxfmt": "0.79.0",
     "oxlint": "1.94.0",
+    "oxlint-tsgolint": "7.0.2007",
     "preact": "11.2.0",
     "preact-render-to-string": "6.8.3",
     "tsrs": "0.25.0-ts7.1.0-beta",

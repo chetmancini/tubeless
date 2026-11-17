@@ -233,7 +233,7 @@ export function definePipeline<
     if (result.status !== "completed") {
       throw new PipelineExecutionError(result);
     }
-    return result.value as TPipelineResult;
+    return result.value!;
   }
 
   const pipeline = {

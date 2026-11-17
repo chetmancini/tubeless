@@ -212,13 +212,18 @@ export function createAgentTurn<
             );
             if (result.ok) {
               progress.childCompleted(call.id);
-              return complete(
+              return await complete(
                 { id: call.id, tool: call.tool.name, ok: true, value: result.value },
                 result.label
               );
             }
             progress.fail(call.id, result.failure, false);
-            return complete({ id: call.id, tool: call.tool.name, ok: false, error: result.error });
+            return await complete({
+              id: call.id,
+              tool: call.tool.name,
+              ok: false,
+              error: result.error,
+            });
           } catch (error) {
             const cancelled = isPipelineCancellation(error, context);
             progress.fail(

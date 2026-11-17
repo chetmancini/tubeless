@@ -273,7 +273,7 @@ export function tokenize(
   const positionalEntries = positionals.map(
     // SAFETY: `assertValidPositionals` (run by callers before `tokenize`) rejects any
     // positional key absent from the schema, so every positional is present in `entries`.
-    (key) => entries.find((entry) => entry.key === key) as CliParamEntry
+    (key) => entries.find((entry) => entry.key === key)!
   );
   for (const entry of entries) {
     paramByFlag.set(entry.flag, entry);

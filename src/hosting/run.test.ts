@@ -11,8 +11,8 @@ import type { StudioIngest } from "./run-contract.js";
 
 const output = {
   cwd: "/tmp",
-  stdout: { write: (chunk: string) => void console.log(chunk.trimEnd()) },
-  stderr: { write: (chunk: string) => void console.error(chunk.trimEnd()) },
+  stdout: { write: (chunk: string) => console.log(chunk.trimEnd()) },
+  stderr: { write: (chunk: string) => console.error(chunk.trimEnd()) },
 };
 
 const startEvent: PipelineTraceEvent = {
