@@ -193,7 +193,7 @@ it("inherits one native journal through delegated agents and ordinary pipeline t
         ctx.turn === 1
           ? { kind: "continue", calls: [{ id: "child", tool: "child", input: {} }] }
           : { kind: "finish", result: state },
-      reduce: (_state, outcomes) => (outcomes[0]!.ok ? Number(outcomes[0]!.value) : -1),
+      reduce: (_state, outcomes) => (outcomes[0].ok ? Number(outcomes[0].value) : -1),
     });
   }
   const host = () => ({ ...retainedJournal(records), agentStore: { acquire } });
