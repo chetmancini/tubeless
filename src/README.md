@@ -116,9 +116,18 @@ Only boundaries that are not obvious from names are listed.
   scoped loggers and flushing; `pipeline-run-state.ts` owns state transitions and
   terminal reports; `pipeline-cache.ts` owns cache keys and policy around handler
   execution and imports no concrete store or codec eagerly.
-- `run-controls.ts` snapshots supported run controls for direct runs, child runs and
+- `pipeline-output-observer.ts` captures detached raw bytes before schema validation
+  and returns a prepared output whose commit waits for host persistence. The cache
+  passes that publication through while storing raw handler results only. Encoded
+  bytes never enter run state or lifecycle metadata; run observation metadata is
+  shared only within its configured invocation.
+- `run-controls.ts` snapshots graph controls for direct runs, child runs and
   static iteration identities. Its property order preserves durable definition
-  hashes; do not reorder without a definition-identity version bump.
+  hashes; do not reorder without a definition-identity version bump. Direct runs
+  snapshot their output observer separately; child controls reject it.
+- `PipelineChildRunControls` is the shared authored-control contract for child
+  constructors, project adapters, and decoded plan metadata. Keep invocation-only
+  capabilities excluded there rather than adding exclusions at each consumer.
 - `iteration.ts` invokes the existing child runner; it neither reschedules the
   parent DAG nor owns a separate lifecycle.
 - `waitForInput` is an ordinary step with an application-owned read callback; core

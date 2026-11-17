@@ -133,6 +133,9 @@ for fan-out, the whole array).
 
 ## Planning and execution controls
 
+Use `PipelineChildRunControls` when annotating reusable child policies. It excludes
+invocation-owned output observers, which belong on an explicit pipeline run.
+
 The parent plan holds one step for the child workflow ("opaque"): child steps are
 not in `PipelinePlan.steps`, but `nestedPipeline` metadata names the child pipeline,
 its declared step IDs, and whether it runs once or per item. Parent and child step

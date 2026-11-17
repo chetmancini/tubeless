@@ -5,6 +5,7 @@ import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepIds, TargetIds } from "./pipeline-definition.js";
 import { decideStepDisposition } from "./pipeline-disposition.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
+import { isStepOutputObserver } from "./pipeline-output-observer.js";
 import type { CompiledStep } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_NESTED_PIPELINE, STEP_REMOTE, STEP_AGENT } from "./pipeline-step-metadata.js";
@@ -170,6 +171,16 @@ export function buildPipelinePlan<
   const declaredTargetIds = new Set(compiled.declaredTargets.map((target) => target.id));
   const requestedStepIds = controls.stepIds ?? [];
   const requestedTargets = controls.targets ?? [];
+  if (controls.outputObserver !== undefined && !isStepOutputObserver(controls.outputObserver)) {
+    errors.push(
+      pipelineDiagnostic(
+        "TUBELESS_RUN_OUTPUT_RECOVERY_INVALID",
+        "planning",
+        "validation",
+        "outputObserver requires encode and write callbacks"
+      )
+    );
+  }
   if (controls.cache !== undefined && !isStepCachePolicy(controls.cache)) {
     errors.push(
       pipelineDiagnostic(

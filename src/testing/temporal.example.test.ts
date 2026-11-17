@@ -25,10 +25,7 @@ function environment(attempt = 1) {
 const job: TemporalJob = { lines: [" Alpha ", "", "Beta", "ALPHA"] };
 
 function execute(env: MockActivityEnvironment, input: TemporalJob) {
-  return env.run<[TemporalJob], Awaited<ReturnType<typeof runPipeline>>, typeof runPipeline>(
-    runPipeline,
-    input
-  );
+  return env.run(runPipeline, input);
 }
 
 describe("Temporal Activity recipe", () => {

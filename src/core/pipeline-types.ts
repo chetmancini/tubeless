@@ -59,11 +59,42 @@ export interface PipelineContext {
   tracing?: PipelineTracingOptions;
 }
 
+/** Cancellation context shared with host-owned step output encoding and persistence. */
+export interface PipelineStepOutputContext {
+  readonly signal?: AbortSignal;
+}
+
+/** Encoded raw step output delivered after validation and before dependent execution. */
+export interface PipelineStepOutputRecord<TStepId extends string = string> {
+  readonly pipelineId: string;
+  readonly stepId: TStepId;
+  readonly runId: string;
+  /** Absent for a policy skip that needed no validation attempt. */
+  readonly attemptId?: string;
+  readonly definitionIdentity: PipelineDefinitionIdentity;
+  readonly origin: "handler" | "cache" | "policy";
+  /** Detached raw value encoded before schema transformation; ownership transfers to the writer. */
+  readonly encodedValue: Uint8Array;
+}
+
+/** Host-owned raw output capture. Both callbacks are awaited; failures fail the step. */
+export interface PipelineStepOutputObserver<TStepId extends string = string> {
+  /** Encode losslessly without mutating the raw value, before output validation. */
+  encode(value: unknown, context: PipelineStepOutputContext): Uint8Array | Promise<Uint8Array>;
+  /** Resolve after persistence acknowledges. Independent steps may write concurrently. */
+  write(
+    record: PipelineStepOutputRecord<TStepId>,
+    context: PipelineStepOutputContext
+  ): void | Promise<void>;
+}
+
 /** Built-in run controls. Choose targets or stepIds, or omit both to run every step. */
 export type PipelineRunControls<
   TStepId extends string = string,
   TTargetId extends string = string,
 > = {
+  /** Capture this invocation's raw step outputs; bypassed in dry runs and never inherited by children. */
+  outputObserver?: PipelineStepOutputObserver<TStepId>;
   /** Maximum simultaneous steps, including skip predicates and output validation. Defaults to 1. */
   maxConcurrency?: number;
   /** Run-wide cache policy for opted-in steps, including children. */
@@ -90,6 +121,12 @@ export type PipelineRunControls<
       targets?: readonly TTargetId[];
     }
 );
+
+/** Authored child policy, excluding output persistence owned by a direct invocation. */
+export type PipelineChildRunControls<
+  TStepId extends string = string,
+  TTargetId extends string = string,
+> = PipelineRunControls<TStepId, TTargetId> & { outputObserver?: never };
 
 /** Resolved caller context. Core fills `now` and `sleep` before execution. */
 export interface PipelineRuntime extends PipelineContext {
@@ -509,7 +546,7 @@ export interface PipelinePlanStep {
     /** Upper bound for a dynamically repeated child. */
     maxIterations?: number;
     /** Static child controls, recorded for iteration identity and inspection. */
-    controls?: PipelineRunControls;
+    controls?: PipelineChildRunControls;
     identity?: PipelineDefinitionIdentity;
     concurrency?: number | "dynamic";
     pipelineId: string;

@@ -4,20 +4,21 @@ Start with the [package README](../README.md) and [getting started](./getting-st
 then use the [recipe index](./recipes.md) to find an example to adapt.
 Guides for developers and coding agents are also on the [website](https://tubeless.io/).
 
-| Document                                              | Use it for                                                       |
-| ----------------------------------------------------- | ---------------------------------------------------------------- |
-| [Getting started](./getting-started.md)               | Building, running, and testing a first pipeline                  |
-| [Recipe index](./recipes.md)                          | Finding a working example for your task                          |
-| [Core concepts](./concepts.md)                        | Dependencies, skips, failures, dry runs, and contexts            |
-| [CLI](./cli.md)                                       | `list`, `inspect`, `plan`, `graph`, `run`, `history`, exit codes |
-| [Studio](./studio.md)                                 | Run history, project commands, and gateway hosting               |
-| [Artifacts](./artifacts.md)                           | Typed loaders, savers, and recorded lineage                      |
-| [YAML and JSON pipelines](./declarative-pipelines.md) | Compiling documents with registered handlers                     |
-| [In-process agents](./agents.md)                      | Model-backed agents, tools, subagents, and durable execution     |
-| [Child pipelines](./child-pipeline-composition.md)    | Running a reusable pipeline once or per item                     |
-| [Remote steps](./remote-step-composition.md)          | Calling remote services and worker threads                       |
-| [Deploy to Cloudflare](./deploy-cloudflare.md)        | Hosting Studio and pipelines behind Access                       |
-| [Comparison](./comparison.md)                         | How Tubeless fits next to other job runners                      |
+| Document                                                | Use it for                                                        |
+| ------------------------------------------------------- | ----------------------------------------------------------------- |
+| [Getting started](./getting-started.md)                 | Building, running, and testing a first pipeline                   |
+| [Recipe index](./recipes.md)                            | Finding a working example for your task                           |
+| [Core concepts](./concepts.md)                          | Dependencies, skips, failures, dry runs, and contexts             |
+| [CLI](./cli.md)                                         | `list`, `inspect`, `plan`, `graph`, `run`, `history`, exit codes  |
+| [Studio](./studio.md)                                   | Run history, project commands, and gateway hosting                |
+| [Artifacts](./artifacts.md)                             | Typed loaders, savers, and recorded lineage                       |
+| [Step output observation](./step-output-observation.md) | Capturing raw outputs through host-owned encoding and persistence |
+| [YAML and JSON pipelines](./declarative-pipelines.md)   | Compiling documents with registered handlers                      |
+| [In-process agents](./agents.md)                        | Model-backed agents, tools, subagents, and durable execution      |
+| [Child pipelines](./child-pipeline-composition.md)      | Running a reusable pipeline once or per item                      |
+| [Remote steps](./remote-step-composition.md)            | Calling remote services and worker threads                        |
+| [Deploy to Cloudflare](./deploy-cloudflare.md)          | Hosting Studio and pipelines behind Access                        |
+| [Comparison](./comparison.md)                           | How Tubeless fits next to other job runners                       |
 
 To host pipelines in an existing engine, see [Airflow](./airflow.md),
 [Temporal](./temporal.md), [Inngest](./inngest.md), [Dagster](./dagster.md), or

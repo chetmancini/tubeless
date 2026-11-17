@@ -10,6 +10,7 @@ import type { CompiledStep } from "./pipeline-graph.js";
 import { planStepById, stepToPlanStep } from "./pipeline-plan.js";
 import { PipelineRunState, type PipelineStepAttempt } from "./pipeline-run-state.js";
 import type { AnyStep } from "./pipeline-steps.js";
+import { prepareStepOutput, type RunOutputObservation } from "./pipeline-output-observer.js";
 import { PIPELINE_FINALIZE_STEP_ID } from "./pipeline-step-metadata.js";
 import {
   evaluateStepSkip,
@@ -69,6 +70,16 @@ export async function executePlannedRun<
   if (correlationId !== undefined) identity.correlationId = correlationId;
   if (runtime.parentRunId) identity.parentRunId = runtime.parentRunId;
   const dryRun = controls.dryRun === true;
+  const observation: RunOutputObservation | undefined =
+    !dryRun && controls.outputObserver
+      ? {
+          observer: controls.outputObserver,
+          pipelineId: compiled.id,
+          runId,
+          definitionIdentity: compiled.definition.identity,
+          signal: runtime.signal,
+        }
+      : undefined;
   const lifecycle = createPipelineLifecycleObserver(compiled.id, runtime, {
     ...identity,
     itemKey: runtime.tracing?.itemKey,
@@ -201,17 +212,21 @@ export async function executePlannedRun<
   ): Promise<void> => {
     let attempt: PipelineStepAttempt | undefined;
     let published = value;
-    if (step.outputSchema) {
-      attempt = state.beginAttempt(plannedStep);
-      try {
-        published = await validateStepOutput(
-          step,
-          value,
-          `Pipeline ${compiled.id} step ${step.id} output`
-        );
-      } catch (error) {
-        return recordStepExecutionFailure(error, plannedStep, attempt);
-      }
+    if (step.outputSchema) attempt = state.beginAttempt(plannedStep);
+    try {
+      const output = await prepareStepOutput(
+        value,
+        step.outputSchema
+          ? (raw) => validateStepOutput(step, raw, `Pipeline ${compiled.id} step ${step.id} output`)
+          : undefined,
+        observation,
+        { stepId: step.id, attemptId: attempt?.attemptId, origin: "policy" }
+      );
+      if (output.commit) await output.commit();
+      published = output.value;
+    } catch (error) {
+      attempt ??= state.beginAttempt(plannedStep);
+      return recordStepExecutionFailure(error, plannedStep, attempt);
     }
     state.skipStep(plannedStep, {
       attempt,
@@ -296,6 +311,7 @@ export async function executePlannedRun<
         onReportAttempt: (number, attributes) =>
           lifecycle.reportAttempt(step.id, number, attributes, attempt.attemptId),
         outputBoundary: `Pipeline ${compiled.id} step ${step.id} output`,
+        observation,
         step,
       });
       state.completeStep(plannedStep, attempt, output);

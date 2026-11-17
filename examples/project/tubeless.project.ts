@@ -9,6 +9,7 @@ import { CountPipeline } from "../precise-result.ts";
 import { WelcomePipeline } from "../inherited-inputs.ts";
 import { OverrideExamplePipeline } from "../step-output-overrides.ts";
 import { CachedCountCommand } from "../step-output-cache.ts";
+import { OutputObservationPipeline } from "../step-output-observation.ts";
 import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
 import { DelegatingAgentCommand } from "../agent-delegation.ts";
@@ -48,6 +49,11 @@ export default defineProject(
     definePipelineCommand(MetadataPipeline, { params: {} }),
     // Plain cached results and their receipts appear in history and Studio.
     CachedCountCommand,
+    // For host-owned output capture, call runOutputObservationExample in ../step-output-observation.ts.
+    // This CLI registration runs the pipeline without attaching an output store.
+    definePipelineCommand(OutputObservationPipeline, {
+      params: { text: { type: "string", required: true } },
+    }),
     ScriptedAgent,
     // For transcript capture, use createTranscriptAgent in ../agent-transcript.ts
     // with openNdjsonAgentTranscriptWriter from tubeless/agent/node and an explicit path.

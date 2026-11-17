@@ -5,6 +5,12 @@ type RunControlFields<TStepId extends string, TTargetId extends string> = Pick<
   keyof PipelineRunControls
 >;
 
+/** Output persistence is an invocation capability, not an authored child control. */
+export function rejectChildOutputObserver(controls: PipelineRunControls | undefined): void {
+  if (controls?.outputObserver !== undefined)
+    throw new TypeError("outputObserver belongs on a direct pipeline run, not child controls");
+}
+
 export function snapshotRunControls<TStepId extends string, TTargetId extends string>(
   controls?: PipelineRunControls<TStepId, TTargetId>
 ): PipelineRunControls<TStepId, TTargetId>;

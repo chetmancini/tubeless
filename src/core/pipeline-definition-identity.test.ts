@@ -5,7 +5,7 @@ import {
   createSteps,
   definePipeline,
   requireOutputs,
-  type PipelineRunControls,
+  type PipelineChildRunControls,
 } from "./pipeline.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
@@ -263,7 +263,7 @@ describe("compiled definition identity", () => {
 
   it("omits empty iteration controls while retaining defined fields", () => {
     const { iteratePipeline } = createSteps();
-    const build = (controls?: PipelineRunControls<"a", "a">) => {
+    const build = (controls?: PipelineChildRunControls<"a", "a">) => {
       const repeat = iteratePipeline("repeat", {
         pipeline: pipeline(),
         maxIterations: 1,

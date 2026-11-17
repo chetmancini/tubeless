@@ -169,20 +169,20 @@ async function cacheOperation<T>(
   }
 }
 
-/** One execution path: cache raw handler results, then validate every publication. */
-export async function executeWithStepCache<TOptions extends object>(input: {
+/** Cache only raw handler results; the validator's returned publication remains execution-owned. */
+export async function executeWithStepCache<TOptions extends object, TValidated>(input: {
   cache: CompiledStepCache<TOptions> | undefined;
   pipelineId: string;
   stepId: string;
   inputs: Record<string, unknown>;
   context: PipelineExecutionContext<TOptions>;
   run(): Promise<unknown>;
-  validate(value: unknown): Promise<unknown>;
+  validate(value: unknown, source: "handler" | "cache"): Promise<TValidated>;
   onHit(): void;
   onArtifact(record: ArtifactRecord): void;
-}): Promise<unknown> {
+}): Promise<TValidated> {
   const { cache, context } = input;
-  const uncached = async () => input.validate(await input.run());
+  const uncached = async () => input.validate(await input.run(), "handler");
   if (!cache || context.dryRun) return uncached();
   const policy = await cacheOperation(
     "policy",
@@ -260,7 +260,7 @@ export async function executeWithStepCache<TOptions extends object>(input: {
       const raw = await cacheOperation("decode", io, () =>
         codec.decode(Uint8Array.from(entry.value))
       );
-      const value = await input.validate(raw);
+      const value = await input.validate(raw, "cache");
       throwIfAborted(context.signal, "Step cache");
       recordArtifact("reuse", entry.createdAtMs, entry.artifact);
       return value;
@@ -272,7 +272,7 @@ export async function executeWithStepCache<TOptions extends object>(input: {
     if (!(encoded instanceof Uint8Array)) throw new Error("Cache codec must encode bytes");
     return Uint8Array.from(encoded);
   });
-  const value = await input.validate(raw);
+  const value = await input.validate(raw, "handler");
   await cacheOperation("write", io, async () => {
     const createdAtMs = context.now();
     const receipt = await store.set(scopedKey, { value: bytes, createdAtMs }, io);

@@ -1,5 +1,5 @@
 /**
- * Compile-only proposal for #287; no proposed API is implemented or exported.
+ * Compile-only probes for #287: output observation is public; supply remains proposed.
  * Run through design/tsconfig.json, never execute this file.
  */
 import { expectTypeOf } from "vitest";
@@ -8,44 +8,23 @@ import {
   definePipeline,
   type Pipeline,
   type PipelineContext,
-  type PipelineDefinitionIdentity,
+  type PipelineChildRunControls,
   type PipelineHooks,
   type PipelinePlan,
   type PipelineResult,
   type PipelineRun,
   type PipelineRunControls,
+  type PipelineStepOutputObserver,
+  type PipelineStepOutputRecord,
   type StandardSchemaV1,
 } from "tubeless";
 
-// Local proposed declarations keep this experiment outside the public API report.
-interface ProposedOutputContext {
-  readonly signal?: AbortSignal;
-}
-
-interface ProposedStepOutputRecord<TStepId extends string = string> {
-  readonly pipelineId: string;
-  readonly stepId: TStepId;
-  readonly runId: string;
-  readonly attemptId?: string;
-  readonly definitionIdentity: PipelineDefinitionIdentity;
-  readonly origin: "handler" | "cache" | "policy";
-  readonly encodedValue: Uint8Array;
-}
-
-interface ProposedStepOutputObserver<TStepId extends string = string> {
-  encode(value: unknown, context: ProposedOutputContext): Uint8Array | Promise<Uint8Array>;
-  write(
-    record: ProposedStepOutputRecord<TStepId>,
-    context: ProposedOutputContext
-  ): void | Promise<void>;
-}
-
+// Supply remains a local proposal; observation uses the real public declarations.
 type ProposedRunControls<TStepId extends string, TTargetId extends string> = PipelineRunControls<
   TStepId,
   TTargetId
 > & {
   readonly suppliedOutputs?: ReadonlyMap<TStepId, unknown>;
-  readonly outputObserver?: ProposedStepOutputObserver<TStepId>;
 };
 
 // This facade probes adding controls to the existing call shape without widening
@@ -57,11 +36,6 @@ declare const proposed: {
     controls?: ProposedRunControls<NoInfer<TStepId>, NoInfer<TTargetId>>,
     context?: Partial<PipelineContext>
   ): Promise<PipelineRun<TResult>>;
-  runOrThrow<TOptions extends object, TResult, TStepId extends string, TTargetId extends string>(
-    pipeline: Pipeline<TOptions, TResult, TStepId, TTargetId>,
-    options: NoInfer<TOptions>,
-    controls?: ProposedRunControls<NoInfer<TStepId>, NoInfer<TTargetId>>
-  ): Promise<TResult>;
   plan<TOptions extends object, TResult, TStepId extends string, TTargetId extends string>(
     pipeline: Pipeline<TOptions, TResult, TStepId, TTargetId>,
     controls?: ProposedRunControls<NoInfer<TStepId>, NoInfer<TTargetId>>
@@ -71,7 +45,7 @@ declare const proposed: {
 declare const numericText: StandardSchemaV1<string, number>;
 declare const decodedFromStorage: unknown;
 declare const encodeLosslessly: (value: unknown) => Promise<Uint8Array>;
-declare const save: (record: ProposedStepOutputRecord) => Promise<void>;
+declare const save: (record: PipelineStepOutputRecord) => Promise<void>;
 
 const { step } = createSteps<{ source: string }>();
 const parse = step("parse", {
@@ -99,7 +73,7 @@ const pipeline = definePipeline({
 expectTypeOf<Awaited<ReturnType<typeof parse.run>>>().toEqualTypeOf<string>();
 expectTypeOf<PipelineResult<typeof pipeline>>().toEqualTypeOf<number>();
 
-const observer: ProposedStepOutputObserver<"parse" | "finish"> = {
+const observer: PipelineStepOutputObserver<"parse" | "finish"> = {
   async encode(value, context) {
     expectTypeOf(value).toEqualTypeOf<unknown>();
     expectTypeOf(context.signal).toEqualTypeOf<AbortSignal | undefined>();
@@ -111,10 +85,6 @@ const observer: ProposedStepOutputObserver<"parse" | "finish"> = {
     expectTypeOf(record.attemptId).toEqualTypeOf<string | undefined>();
     expectTypeOf(record.encodedValue).toEqualTypeOf<Uint8Array>();
     expectTypeOf(context.signal).toEqualTypeOf<AbortSignal | undefined>();
-    // Even after narrowing an ID, untrusted bytes do not become a typed output.
-    if (record.stepId === "parse") {
-      expectTypeOf(record.encodedValue).toEqualTypeOf<Uint8Array>();
-    }
     await save(record);
   },
 };
@@ -132,9 +102,6 @@ const run = proposed.run(
 );
 expectTypeOf(run).toEqualTypeOf<Promise<PipelineRun<number>>>();
 expectTypeOf(
-  proposed.runOrThrow(pipeline, { source: "21" }, { suppliedOutputs: supplied })
-).toEqualTypeOf<Promise<number>>();
-expectTypeOf(
   proposed.plan(pipeline, { suppliedOutputs: supplied, targets: ["finish"] })
 ).toEqualTypeOf<PipelinePlan>();
 
@@ -151,26 +118,26 @@ proposed.plan(pipeline, { stepIds: ["parse"], targets: ["finish"] });
 const noValue = createSteps().step("no-value", { run: (): undefined => undefined });
 const undefinedPipeline = definePipeline({ id: "undefined-output", steps: [noValue] });
 expectTypeOf(
-  proposed.runOrThrow(
+  proposed.run(
     undefinedPipeline,
     {},
     {
       suppliedOutputs: new Map([["no-value", undefined]]),
     }
   )
-).toEqualTypeOf<Promise<undefined>>();
+).toEqualTypeOf<Promise<PipelineRun<undefined>>>();
 
 // 4. The encoding/write split supports async persistence and rejects a raw-value sink.
-const synchronousObserver: ProposedStepOutputObserver = {
+const synchronousObserver: PipelineStepOutputObserver = {
   encode: () => new Uint8Array(),
   write: () => {},
 };
-const invalidEncoder: ProposedStepOutputObserver = {
+const invalidEncoder: PipelineStepOutputObserver = {
   // @ts-expect-error Encoding must produce bytes, not an arbitrary domain value.
   encode: () => ({ text: "not encoded" }),
   write: () => {},
 };
-const invalidWriter: ProposedStepOutputObserver = {
+const invalidWriter: PipelineStepOutputObserver = {
   encode: () => new Uint8Array(),
   // @ts-expect-error A writer receives encoded bytes and metadata, not raw schema input.
   write: (_record: { readonly value: string }) => {},
@@ -179,17 +146,23 @@ void [synchronousObserver, invalidEncoder, invalidWriter];
 
 // 5. A wrapper is one recovery slot; its child's internal IDs do not enter the map.
 const { fromPipeline } = createSteps<{ source: string }>();
+const childControls: PipelineChildRunControls<"parse" | "finish", "finish"> = {
+  targets: ["finish"],
+  maxConcurrency: 2,
+};
+fromPipeline("configured-child", { pipeline, controls: childControls });
 const wrapped = fromPipeline("wrapped", { pipeline });
 const parent = definePipeline({ id: "recovery-parent", steps: [wrapped] });
 void proposed.run(parent, { source: "21" }, { suppliedOutputs: new Map([["wrapped", 42]]) });
 // @ts-expect-error The child's parse step is outside the parent's recovery scope.
 void proposed.run(parent, { source: "21" }, { suppliedOutputs: supplied });
 
-// 6. This proposal does not silently make recovery part of the currently shipped API.
+// 6. Supply is still absent; observation is accepted by the shipped run controls.
 // @ts-expect-error Production run controls do not expose supplied outputs yet.
 void pipeline.run({ source: "21" }, { suppliedOutputs: supplied });
-// @ts-expect-error Production run controls do not expose the output observer yet.
 void pipeline.run({ source: "21" }, { outputObserver: observer });
+// @ts-expect-error Output observation is invocation-local, not an authored child control.
+fromPipeline("invalid-observer", { pipeline, controls: { outputObserver: observer } });
 const hooks: PipelineHooks = {
   onStepComplete(event) {
     // @ts-expect-error Step lifecycle hooks remain metadata-only.
