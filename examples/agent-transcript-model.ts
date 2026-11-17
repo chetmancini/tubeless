@@ -16,23 +16,21 @@ const createModel: AgentModelFactory =
         provider: "anthropic" as const,
         turn: context.turn,
       };
-      let completed = false;
       try {
         for (const word of ["The ", "directory ", "listing ", "is complete."]) {
           await context.sleep(80);
           await text({ ...identity, kind: "delta", text: word }, signal);
         }
-        completed = true;
-      } finally {
+      } catch (error) {
+        // Best effort: the original failure matters more than a failed end event.
         try {
-          await text(
-            { ...identity, kind: "end", status: completed ? "completed" : "interrupted" },
-            signal
-          );
-        } catch (error) {
-          if (completed) throw error;
+          await text({ ...identity, kind: "end", status: "interrupted" }, signal);
+        } catch {
+          // Ignored so the original error propagates.
         }
+        throw error;
       }
+      await text({ ...identity, kind: "end", status: "completed" }, signal);
     }
     return {
       conversation: null,
