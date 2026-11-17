@@ -30,7 +30,9 @@ export function sqliteTransaction<T>(
   } catch (error) {
     try {
       database.exec("ROLLBACK");
-    } catch {}
+    } catch {
+      // Best-effort rollback; the original error is rethrown below.
+    }
     throw error;
   }
 }

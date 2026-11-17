@@ -189,7 +189,7 @@ describe("pipeline run store projections", () => {
     const tracing = {
       exporter: {
         export(event: PipelineTraceEvent) {
-          events.push(Object.assign({ id: events.length }, event));
+          events.push({ id: events.length, ...event });
         },
       },
     };

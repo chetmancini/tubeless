@@ -108,13 +108,14 @@ export function snapshotTranscriptContent<T>(
   budget: number,
   maxDepth = MAX_CONTENT_DEPTH
 ): T {
+  let remaining = budget;
   const ancestors = new Set<object>();
   const charge = (size: number) => {
-    budget -= size;
-    if (budget < 0) throw new TranscriptContentOmission("record-limit");
+    remaining -= size;
+    if (remaining < 0) throw new TranscriptContentOmission("record-limit");
   };
   const string = (value: string) => {
-    if (value.length > budget) throw new TranscriptContentOmission("record-limit");
+    if (value.length > remaining) throw new TranscriptContentOmission("record-limit");
     charge(bytes(JSON.stringify(value)));
   };
   const copy = (value: unknown, depth: number): unknown => {
@@ -140,7 +141,7 @@ export function snapshotTranscriptContent<T>(
     ancestors.add(value);
     charge(2);
     const result: Record<string, unknown> | unknown[] = Array.isArray(value) ? [] : {};
-    if (Array.isArray(value) && value.length > budget)
+    if (Array.isArray(value) && value.length > remaining)
       throw new TranscriptContentOmission("record-limit");
     const keys = Reflect.ownKeys(value);
     if (Array.isArray(value) && keys.length !== value.length + 1)

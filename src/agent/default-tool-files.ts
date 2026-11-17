@@ -117,7 +117,8 @@ export async function readTool(
   });
 }
 
-async function writeDestination(path: string, signal?: AbortSignal) {
+async function writeDestination(requestedPath: string, signal?: AbortSignal) {
+  let path = requestedPath;
   for (let links = 0; ; links++) {
     throwIfAborted(signal, "Write file");
     await mkdir(dirname(path), { recursive: true });

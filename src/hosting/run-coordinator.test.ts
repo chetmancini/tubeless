@@ -24,7 +24,6 @@ afterEach(async () => {
 function setup(options: { filename?: string; startTimeoutMs?: number } = {}) {
   const fixture = createSqliteLaunchStoreFixture(options.filename);
   cleanups.push(() => fixture.store.close());
-  let coordinator!: HostedRunCoordinator;
   let ingest!: StudioIngest;
   const output = { cwd: process.cwd(), stdout: { write: vi.fn() }, stderr: { write: vi.fn() } };
   const executor = createProcessHostedExecutor({ commands, output, ingest: () => ingest });
@@ -41,7 +40,7 @@ function setup(options: { filename?: string; startTimeoutMs?: number } = {}) {
     },
     fixture.store
   );
-  coordinator = hosted.launcher;
+  const coordinator: HostedRunCoordinator = hosted.launcher;
   ingest = hosted.ingest;
   return { ...fixture, coordinator, ingest, executor, scheduleReconcile };
 }

@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { readCheckReport } from "../../utilities/check-report.js";
-import { structuredError, STRUCTURED_ERROR_LIMITS } from "../../utilities/check-report.js";
+import {
+  readCheckReport,
+  structuredError,
+  STRUCTURED_ERROR_LIMITS,
+} from "../../utilities/check-report.js";
 import { runCloud } from "./command.js";
 import { parseCliRun } from "./protocol.js";
 import { captureIo } from "../workbench.test-support.js";

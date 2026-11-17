@@ -108,8 +108,8 @@ export function compileDocumentSteps(
     };
   });
   const byId = new Map(entries.map((entry) => [entry.step.id, entry.step]));
-  const resolveSteps = (ids: readonly string[] = [], fieldPath: string): AnyStep[] =>
-    ids.map((stepId, index) => {
+  const resolveSteps = (ids: readonly string[] | undefined, fieldPath: string): AnyStep[] =>
+    (ids ?? []).map((stepId, index) => {
       const found = byId.get(stepId);
       if (!found)
         throw new PipelineDocumentError(

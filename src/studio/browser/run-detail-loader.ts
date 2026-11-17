@@ -60,7 +60,8 @@ export class RunDetailLoader {
     )
       return;
     const revision = this.#wanted;
-    const request = (this.#request = {});
+    const request = {};
+    this.#request = request;
     void this.api.loadRunDetail(this.runId).then(
       (detail) => {
         if (this.#request !== request) return;

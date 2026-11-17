@@ -19,16 +19,16 @@ import type {
 import { markPipelineCommand } from "../utilities/pipeline-command-marker.js";
 import { STEP_CACHE_POLICIES } from "../tracing/tracing-constants.js";
 import { hasConflictingSelectionControls } from "../core/pipeline-plan.js";
-import {
-  type Pipeline,
-  type PipelineHooks,
-  type PipelineInput,
-  type PipelineMermaidOptions,
-  type StepCachePolicy,
-  type PipelinePlan,
-  type PipelineResult,
-  type PipelineRunControls,
-  type StandardSchemaV1,
+import type {
+  Pipeline,
+  PipelineHooks,
+  PipelineInput,
+  PipelineMermaidOptions,
+  StepCachePolicy,
+  PipelinePlan,
+  PipelineResult,
+  PipelineRunControls,
+  StandardSchemaV1,
 } from "../core/pipeline.js";
 import {
   createPipelineReporter,

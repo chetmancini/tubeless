@@ -19,17 +19,17 @@ export function renderPipelineMermaid<TOptions extends object>(
   steps: readonly CompiledStep<TOptions>[],
   options: PipelineMermaidOptions
 ): string {
-  steps = steps.filter((step) => matchesStepQuery(step.metadata, options.query ?? {}));
+  const selected = steps.filter((step) => matchesStepQuery(step.metadata, options.query ?? {}));
   const direction = options.direction ?? "TD";
   if (!PIPELINE_MERMAID_DIRECTIONS.includes(direction)) {
     throw new Error(`Invalid Mermaid flowchart direction: ${direction}`);
   }
   const nodeIdByStep = new Map<AnyStep<TOptions>, string>(
-    steps.map((step, index) => [step, `step${index}`])
+    selected.map((step, index) => [step, `step${index}`])
   );
   const lines = [`flowchart ${direction}`];
 
-  for (const step of steps) {
+  for (const step of selected) {
     const nodeId = nodeIdByStep.get(step)!;
     const displayName = step.name ?? step.id;
     let label =
@@ -44,7 +44,7 @@ export function renderPipelineMermaid<TOptions extends object>(
   }
 
   const edgeLines: string[] = [];
-  for (const step of steps) {
+  for (const step of selected) {
     const targetId = nodeIdByStep.get(step)!;
     const required = new Set<AnyStep<TOptions>>(step.dependsOn);
     const optional = new Set<AnyStep<TOptions>>(step.optionalDependsOn);

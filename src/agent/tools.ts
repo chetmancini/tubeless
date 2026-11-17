@@ -119,7 +119,9 @@ function outputDescriptor(schema: StandardSchemaV1): Readonly<Record<string, unk
     const descriptor: unknown = converter.output({ target: "draft-2020-12" });
     if (descriptor !== null && typeof descriptor === "object" && !Array.isArray(descriptor))
       return ownState(descriptor as Record<string, unknown>);
-  } catch {}
+  } catch {
+    // Descriptor conversion is best effort; fall back to no descriptor.
+  }
   return undefined;
 }
 

@@ -71,11 +71,11 @@ describe("readPipelineEventPages", () => {
   });
 
   it("advances through nonmatching pages while enforcing both query filters", async () => {
-    const listEvents = vi.fn(async (query: PipelineRunEventQuery = {}) => {
-      return [event(1, "other"), event(2, "run", "other"), event(3)]
+    const listEvents = vi.fn(async (query: PipelineRunEventQuery = {}) =>
+      [event(1, "other"), event(2, "run", "other"), event(3)]
         .filter(({ id }) => query.afterId === undefined || id > query.afterId)
-        .slice(0, 1);
-    });
+        .slice(0, 1)
+    );
     const result = await collect(
       readPipelineEventPages(
         { listEvents },

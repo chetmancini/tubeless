@@ -50,6 +50,7 @@ describe("example type probes", () => {
   it("narrows partial concurrency results through the public package import", async () => {
     for (const input of [1, -1]) {
       const partial = await runConcurrentPartial([input], {}, async (item) => {
+        // oxlint-disable-next-line no-throw-literal -- Probes rejection with a non-Error value.
         if (item < 0) throw undefined;
         return item;
       });

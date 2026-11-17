@@ -20,7 +20,7 @@ function provider(value: unknown): value is AgentProvider {
   return (
     record(value) &&
     typeof value.model === "string" &&
-    !!value.model.trim() &&
+    Boolean(value.model.trim()) &&
     typeof value.createModel === "function" &&
     (value.modelEnv === undefined || envName(value.modelEnv)) &&
     (value.credentialEnv === undefined ||

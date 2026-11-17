@@ -25,6 +25,7 @@ import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import { emptyInput, schema, textSchema } from "./agent.test-support.js";
 import { runCodemodeScript as runWith, type CodemodeExecutor } from "./codemode-executor.js";
 import { createNodeCodemodeExecutor } from "./codemode-node.js";
+import { remote } from "./environment.test-support.js";
 
 const node = createNodeCodemodeExecutor();
 
@@ -36,7 +37,6 @@ function signal() {
   return { promise, resolve };
 }
 const runCodemodeScript = (script: Parameters<typeof runWith>[1]) => runWith(node, script);
-import { remote } from "./environment.test-support.js";
 
 const word = schema<{ word: string }>(
   (value) =>
@@ -877,7 +877,6 @@ describe("code-mode executor contract", () => {
   });
 
   it("stops waiting for an executor that ignores its signal, and rejects later calls", async () => {
-    let late: Promise<string> | undefined;
     let call!: (name: string, input: string) => Promise<string>;
     const executor: CodemodeExecutor = {
       execute: (execution) => {
@@ -892,7 +891,7 @@ describe("code-mode executor contract", () => {
         call: async () => ({ ok: true, value: null }),
       })
     ).toMatchObject({ ok: false, code: "CODEMODE_TIMEOUT" });
-    late = call("echo", "{}");
+    const late = call("echo", "{}");
     expect(JSON.parse(await late)).toMatchObject({ ok: false, code: "CODEMODE_STOPPED" });
   });
 

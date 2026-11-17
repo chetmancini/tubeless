@@ -161,10 +161,10 @@ describe("pipeline finalizers", () => {
     });
     const absent = step("absent", { run: () => 1 });
     expect(
-      thrownDefinitionErrors(() => {
+      thrownDefinitionErrors(() =>
         // @ts-expect-error A finalizer step must belong to the declared step tuple.
-        return definePipeline({ id: "absent", steps: [first, last], finalize: absent });
-      })[0]?.code
+        definePipeline({ id: "absent", steps: [first, last], finalize: absent })
+      )[0]?.code
     ).toBe("TUBELESS_DEFINITION_FINALIZER_STEP_NOT_IN_STEPS");
     expect(
       thrownDefinitionErrors(() =>

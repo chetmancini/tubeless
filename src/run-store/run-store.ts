@@ -238,9 +238,9 @@ export function createPipelineRunProjector(
       runsByPipeline.set(key, pipelineRuns);
     }
     const definitions = [...runsByPipeline.entries()]
-      .map(([key, pipelineRuns]): StoredPipelineDefinition => {
-        return pipelines.get(key)!.snapshot(pipelineRuns);
-      })
+      .map(([key, pipelineRuns]): StoredPipelineDefinition =>
+        pipelines.get(key)!.snapshot(pipelineRuns)
+      )
       .sort((left, right) => right.lastSeenAtMs - left.lastSeenAtMs);
 
     return {

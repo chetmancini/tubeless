@@ -8,7 +8,7 @@ import {
 import { isAbortError, throwIfAborted } from "../utilities/abort.js";
 import { cacheDurationMs } from "../utilities/cache-duration.js";
 import { defaultCacheKey } from "../utilities/cache-key.js";
-import { isStepCachePolicy, STEP_CACHE_POLICIES } from "../tracing/tracing-constants.js";
+import { isStepCachePolicy, type STEP_CACHE_POLICIES } from "../tracing/tracing-constants.js";
 import type { PipelineExecutionContext } from "./pipeline-types.js";
 
 /** Cache I/O is cancellable and independent of pipeline scheduling. */

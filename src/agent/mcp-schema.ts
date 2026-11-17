@@ -206,7 +206,9 @@ function decodeAny(options: unknown[], value: unknown, path: string, optional: W
     try {
       const decoded = decode(option, value, path, optional);
       matches.push(decoded);
-    } catch {}
+    } catch {
+      // This union option did not match; try the next one.
+    }
   }
   if (matches.length === 0) throw new Error(`${path} matches no allowed schema`);
   if (matches.some((match) => !jsonEqual(match, matches[0])))

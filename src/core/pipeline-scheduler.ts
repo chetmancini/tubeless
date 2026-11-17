@@ -29,6 +29,17 @@ export async function schedulePipelineSteps<TStep extends AnyStep>(input: {
     }
   }
 
+  const settleStep = (step: TStep): void => {
+    running.delete(step);
+    terminal.add(step);
+    for (const dependent of dependents.get(step) ?? []) {
+      if (prerequisites.get(dependent)!.every((edge) => terminal.has(edge))) {
+        ready.add(dependent);
+        nextReadyIndex = Math.min(nextReadyIndex, indexByStep.get(dependent)!);
+      }
+    }
+  };
+
   try {
     while (ready.size > 0 || running.size > 0) {
       // Keep our place instead of rescanning the completed prefix. A newly
@@ -37,16 +48,7 @@ export async function schedulePipelineSteps<TStep extends AnyStep>(input: {
         const step = orderedSteps[nextReadyIndex++]!;
         if (!ready.delete(step)) continue;
         pending.delete(step);
-        const task = executeOneStep(step).then(() => {
-          running.delete(step);
-          terminal.add(step);
-          for (const dependent of dependents.get(step) ?? []) {
-            if (prerequisites.get(dependent)!.every((edge) => terminal.has(edge))) {
-              ready.add(dependent);
-              nextReadyIndex = Math.min(nextReadyIndex, indexByStep.get(dependent)!);
-            }
-          }
-        });
+        const task = executeOneStep(step).then(() => settleStep(step));
         running.set(step, task);
       }
       if (running.size === 0) break;

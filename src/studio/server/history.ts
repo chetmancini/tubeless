@@ -219,7 +219,7 @@ function pipelineRuns(
         run.pipelineId === pipelineId &&
         (!needle ||
           run.runId.toLowerCase().includes(needle) ||
-          !!run.correlationId?.toLowerCase().includes(needle))
+          Boolean(run.correlationId?.toLowerCase().includes(needle)))
     )
     .sort(activeFirst);
 }

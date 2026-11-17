@@ -56,13 +56,13 @@ export function createModuleRegistration(
   cwd: string,
   exportName?: string
 ): WorkbenchRegistration {
-  filePath = path.resolve(cwd, filePath);
+  const resolvedPath = path.resolve(cwd, filePath);
   return {
     cwd,
-    identity: `${filePath}\0${exportName ?? ""}`,
-    source: filePath,
+    identity: `${resolvedPath}\0${exportName ?? ""}`,
+    source: resolvedPath,
     async loadPlan(io) {
-      const loaded = await loadPlanSource(filePath, exportName, { ...io, cwd });
+      const loaded = await loadPlanSource(resolvedPath, exportName, { ...io, cwd });
       if ("exitCode" in loaded) return loaded;
       return {
         view: loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline,
@@ -70,7 +70,7 @@ export function createModuleRegistration(
     },
     async loadCommand(io) {
       const commandIo = { ...io, cwd };
-      const loaded = await loadPlanSource(filePath, exportName, commandIo);
+      const loaded = await loadPlanSource(resolvedPath, exportName, commandIo);
       if ("exitCode" in loaded) return loaded;
       if (loaded.source.kind === "command") {
         return { command: loaded.source.command, commandIo };

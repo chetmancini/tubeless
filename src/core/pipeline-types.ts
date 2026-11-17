@@ -6,7 +6,16 @@ import type { ArtifactRecord } from "../tracing/artifact-metadata.js";
 import type {
   PipelineDefinitionIdentityContract,
   PipelineDefinitionSnapshotContract,
+  PipelineErrorKindContract,
+  PipelineErrorPhaseContract,
 } from "../tracing/tracing-schema.js";
+import type { RUN_MODEL_VERSION } from "./pipeline-ids.js";
+import { PIPELINE_ERROR_CODES as PIPELINE_ERROR_CODE_VALUES } from "../tracing/tracing-schema.js";
+import type {
+  PipelineTraceAttributes,
+  PipelineTraceContext,
+  PipelineTracingOptions,
+} from "../tracing/tracing-contracts.js";
 
 /** Versioned graph identity, separate from the optional handler implementation version. */
 export type PipelineDefinitionIdentity = Readonly<PipelineDefinitionIdentityContract>;
@@ -16,18 +25,6 @@ type ReadonlyDefinition<T> = T extends object
   : T;
 /** Immutable snapshot of the compiled pipeline definition recorded for inspection and tracing. */
 export type PipelineDefinitionSnapshot = ReadonlyDefinition<PipelineDefinitionSnapshotContract>;
-
-import type { RUN_MODEL_VERSION } from "./pipeline-ids.js";
-import { PIPELINE_ERROR_CODES as PIPELINE_ERROR_CODE_VALUES } from "../tracing/tracing-schema.js";
-import type {
-  PipelineErrorKindContract,
-  PipelineErrorPhaseContract,
-} from "../tracing/tracing-schema.js";
-import type {
-  PipelineTraceAttributes,
-  PipelineTraceContext,
-  PipelineTracingOptions,
-} from "../tracing/tracing-contracts.js";
 
 /** Minimal logger used by pipeline execution, reporters, and CLI adapters. */
 export interface PipelineLogger {

@@ -4,7 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { openCheckpoint, type CheckpointStore } from "../node/checkpoint.js";
 import { definePipelineCommand, type CliContext, type CliParamsSchema } from "./cli.js";
-import { type ReporterOutput } from "../reporter/interactive-reporter.js";
+import type { ReporterOutput } from "../reporter/interactive-reporter.js";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { defer } from "../core/child-pipeline.test-support.js";
 import { stubCheckpointStore } from "../utilities/checkpoint-store.test-support.js";

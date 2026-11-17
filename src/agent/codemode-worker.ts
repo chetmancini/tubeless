@@ -57,7 +57,7 @@ async function main(): Promise<CodemodeWorkerMessage> {
       ok: false,
       message,
       logs: scriptLogLines(logs),
-      logsTruncated: !!truncated,
+      logsTruncated: Boolean(truncated),
     };
   };
   let script: (tools: unknown, console: unknown) => unknown;
@@ -85,7 +85,7 @@ async function main(): Promise<CodemodeWorkerMessage> {
       ok: true,
       result,
       logs: scriptLogLines(logs),
-      logsTruncated: !!truncated,
+      logsTruncated: Boolean(truncated),
     };
   } catch (error) {
     return failed(describeScriptError(error));

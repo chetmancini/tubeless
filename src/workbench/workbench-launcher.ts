@@ -26,7 +26,9 @@ function findOnPath(name: string): string | undefined {
     try {
       accessSync(candidate, constants.X_OK);
       if (statSync(candidate).isFile()) return candidate;
-    } catch {}
+    } catch {
+      // Not an executable candidate; keep searching.
+    }
   }
   return undefined;
 }

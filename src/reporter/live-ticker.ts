@@ -241,7 +241,9 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
             type: "stop",
           } satisfies TickerWorkerMessage);
           workerStopped = state.waitForStop(500);
-        } catch {}
+        } catch {
+          // If posting fails, `workerStopped` stays false and the fallback below runs.
+        }
         if (!workerStopped) {
           const ticker = createFallback();
           if (ticker) {

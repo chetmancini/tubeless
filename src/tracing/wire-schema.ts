@@ -219,7 +219,9 @@ export function wireUnion<const TSchemas extends readonly WireSchema<unknown>[]>
     for (const candidate of schemas) {
       try {
         return candidate.decode(value, path) as InferWireSchema<TSchemas[number]>;
-      } catch {}
+      } catch {
+        // This candidate did not match; try the next schema.
+      }
     }
     throw new Error(message?.(path) ?? `${path} is unsupported`);
   });

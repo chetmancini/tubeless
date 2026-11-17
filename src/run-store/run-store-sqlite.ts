@@ -159,7 +159,9 @@ async function sqliteSidecarTargets(filename: string): Promise<readonly string[]
   const targets: string[] = [];
   try {
     targets.push(await realpath(filename));
-  } catch {}
+  } catch {
+    // The file may not resolve (for example, it does not exist yet); use the filename as given.
+  }
   if (targets.includes(filename) === false) targets.push(filename);
   return targets;
 }

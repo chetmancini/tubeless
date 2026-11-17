@@ -197,7 +197,8 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       if (!response.ok) throw responseError(payload, "Child runs request failed.", response.status);
       return decodeResponse(studioChildRunsSchema, payload, "child runs");
     },
-    async loadTranscript(runId, afterSequence = 0, signal) {
+    async loadTranscript(runId, requestedAfterSequence, signal) {
+      const afterSequence = requestedAfterSequence ?? 0;
       const response = await request(
         "/api/runs/" + encodeURIComponent(runId) + "/transcript?afterSequence=" + afterSequence,
         { cache: "no-store", signal }

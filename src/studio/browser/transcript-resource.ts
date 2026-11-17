@@ -40,7 +40,8 @@ export function useTranscript(api: TranscriptApi, runId: string) {
       if (!active || request || hidden()) return;
       if (timer !== undefined) clearTimeout(timer);
       timer = undefined;
-      const current = (request = new AbortController());
+      const current = new AbortController();
+      request = current;
       publish(true);
       void api.loadTranscript(runId, afterSequence, current.signal).then(
         (next) => {

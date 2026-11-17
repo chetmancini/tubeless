@@ -19,9 +19,10 @@ export async function* readPipelineEventPages(
   const selection = { ...query, limit: query.limit ?? DEFAULT_RUN_EVENT_PAGE_SIZE };
   let afterId = query.afterId;
   for (;;) {
-    const page = await reader.listEvents({ ...selection, afterId });
+    const pageAfterId = afterId;
+    const page = await reader.listEvents({ ...selection, afterId: pageAfterId });
     const ordered = [...page]
-      .filter((event) => afterId === undefined || event.id > afterId)
+      .filter((event) => pageAfterId === undefined || event.id > pageAfterId)
       .sort((left, right) => left.id - right.id);
     if (ordered.length === 0) return;
     const next: StoredPipelineEvent[] = [];

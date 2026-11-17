@@ -12,7 +12,9 @@ export function writeAtomicText(filePath: string, text: string): void {
   } catch (error) {
     try {
       fs.rmSync(tmpPath, { force: true });
-    } catch {}
+    } catch {
+      // Best-effort temp file cleanup; the original error is rethrown below.
+    }
     throw error;
   }
 }

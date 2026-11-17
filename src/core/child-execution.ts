@@ -296,7 +296,7 @@ async function runChildPipeline(
   controls: PipelineRunControls,
   context: PipelineContext,
   hooks: PipelineHooks,
-  messagePrefix = "",
+  messagePrefix: string,
   plan: PipelinePlan
 ): Promise<PipelineRun<unknown>> {
   if (!plan.ok) {

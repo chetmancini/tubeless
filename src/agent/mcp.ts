@@ -49,7 +49,8 @@ interface McpToolInfo {
 
 const MAX_TOOLS = 4096;
 const MAX_TOOL_PAGES = 1024;
-const nonblank = (value: unknown): value is string => typeof value === "string" && !!value.trim();
+const nonblank = (value: unknown): value is string =>
+  typeof value === "string" && Boolean(value.trim());
 
 function plan(label: string, server: McpServer): ServerPlan {
   if (!/^[A-Za-z][A-Za-z0-9-]{0,31}$/.test(label))

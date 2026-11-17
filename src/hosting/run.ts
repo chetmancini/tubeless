@@ -10,7 +10,7 @@ import type {
   PipelineTraceExporterOptions,
 } from "../tracing/tracing.js";
 import { createLaunchTracing, type LaunchTracing } from "./launch-tracing.js";
-import { type RunJob, type HostedRunTraceContext, type StudioIngest } from "./run-contract.js";
+import type { RunJob, HostedRunTraceContext, StudioIngest } from "./run-contract.js";
 import { BatchingTraceExporter } from "./trace-batching.js";
 import { withRetry } from "../utilities/retry.js";
 

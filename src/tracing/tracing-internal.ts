@@ -301,10 +301,10 @@ export function createPipelineTraceEmitter(
         },
         pipelineId,
       }),
-    log: (level, message, params = [], stepId, attemptId) => {
+    log: (level, message, params, stepId, attemptId) => {
       const fields: Extract<PipelineTraceEmission, { name: "pipeline.log" }> = {
         name: "pipeline.log",
-        payload: { level, message: [message, ...params].map(formatLogValue).join(" ") },
+        payload: { level, message: [message, ...(params ?? [])].map(formatLogValue).join(" ") },
         pipelineId,
       };
       if (attemptId) fields.attemptId = attemptId;
@@ -439,11 +439,11 @@ export function createPipelineTraceEmitter(
       if (event.attemptId) fields.attemptId = event.attemptId;
       emit(fields);
     },
-    reportAttempt: (stepId, attempt, attributes = {}, attemptId) => {
+    reportAttempt: (stepId, attempt, attributes, attemptId) => {
       if (!Number.isFinite(attempt)) return;
       const fields: Extract<PipelineTraceEmission, { name: "step.attempted" }> = {
         name: "step.attempted",
-        payload: { attempt, attributes: compactAttributes(attributes) },
+        payload: { attempt, attributes: compactAttributes(attributes ?? {}) },
         pipelineId,
         stepId,
       };

@@ -19,14 +19,12 @@ export const AirflowHostedPipeline = definePipeline({
   id: "airflow-hosted",
   implementationVersion: "airflow-example-v1",
   steps: [normalize],
-  finalize: requireOutputs([normalize], (outputs, context) => {
-    return {
-      rows: outputs.normalize,
-      count: outputs.normalize.length,
-      runId: context.runId,
-      preview: context.dryRun,
-    };
-  }),
+  finalize: requireOutputs([normalize], (outputs, context) => ({
+    rows: outputs.normalize,
+    count: outputs.normalize.length,
+    runId: context.runId,
+    preview: context.dryRun,
+  })),
 });
 
 // The Python task provides this envelope through stdin. Validate before using

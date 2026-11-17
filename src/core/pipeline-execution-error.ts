@@ -254,7 +254,7 @@ export function stepExecutionError(
           ? "child"
           : "step",
     phase: "execution",
-    stepId: stepId,
+    stepId,
   });
 }
 

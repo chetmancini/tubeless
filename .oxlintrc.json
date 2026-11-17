@@ -23,6 +23,22 @@
     "no-fallthrough": "error",
     "no-unsafe-optional-chaining": "error",
     "no-control-regex": "off",
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "prefer-const": ["error", { "ignoreReadBeforeAssign": true }],
+    "no-empty": ["error", { "allowEmptyCatch": false }],
+    "no-param-reassign": "error",
+    "default-param-last": "error",
+    "no-multi-assign": "error",
+    "no-implicit-coercion": "error",
+    "no-loop-func": "error",
+    "prefer-object-spread": "error",
+    "no-throw-literal": "error",
+    "object-shorthand": "error",
+    "arrow-body-style": "error",
+    "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
+    "typescript/no-import-type-side-effects": "error",
+    "import/no-duplicates": "error",
+    "import/first": "error",
     "no-array-constructor": "error",
     "no-eval": "error",
     "no-implied-eval": "error",
@@ -51,5 +67,13 @@
     "import/no-mutable-exports": "error",
     "import/no-self-import": "error",
     "import/no-unassigned-import": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-loop-func": "off"
+      }
+    }
+  ]
 }
