@@ -139,7 +139,7 @@ function orderedCommands(commands: NodeCheckCommand[]): NodeCheckCommand[] {
   if (byId.size !== commands.length) throw new TypeError("Checks require unique IDs.");
   const reports = commands
     .filter((command) => command.kind === "vitest")
-    .map((command) => command.report.path);
+    .map((command) => command.report.path.toLowerCase());
   if (reports.length > 2 || new Set(reports).size !== reports.length)
     throw new TypeError("At most two unique Vitest reports are supported.");
   // This orders step construction only; Tubeless remains the execution scheduler.

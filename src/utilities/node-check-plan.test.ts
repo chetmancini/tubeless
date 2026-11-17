@@ -60,6 +60,26 @@ describe("portable Node recipe resolution", () => {
       expect(decodeNodeCheckPlan(plan)).toBeUndefined();
     }
   );
+  it("rejects report paths that collide on case-insensitive hosts", () => {
+    const configuration = {
+      ...config,
+      maxConcurrency: 2,
+      checks: [
+        { id: "a", vitest: { report: ".tubeless-reports/Test.json" } },
+        { id: "b", vitest: { report: ".tubeless-reports/other.json" } },
+      ],
+    };
+    const transported = resolveNodeCheckPlan(configuration, manifest);
+    configuration.checks[1].vitest.report = ".tubeless-reports/test.json";
+    expect(() => resolveNodeCheckPlan(configuration, manifest)).toThrow("unique Vitest reports");
+    const command = transported.commands[2];
+    if (command.kind !== "vitest") throw new Error("Expected Vitest fixture.");
+    command.report.path = ".tubeless-reports/test.json";
+    command.argv = command.argv.map((arg) =>
+      arg.startsWith("--outputFile=") ? `--outputFile=${command.report.path}` : arg
+    );
+    expect(decodeNodeCheckPlan(transported)).toBeUndefined();
+  });
 });
 
 it("decodes transported plans without accepting modified argv or dependencies", () => {

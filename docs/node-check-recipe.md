@@ -95,6 +95,7 @@ an otherwise successful Vitest invocation fail the gate; a native failure always
 remains a failure. A truncated report remains visibly incomplete.
 
 Reports must be unique `.tubeless-reports/<simple-name>.json` files, at most two.
+Paths that differ only by case are rejected so reports remain distinct on macOS and Linux.
 Old files are removed before invocation. Directory/leaf symlinks and nonregular
 files are rejected; reads are bounded even if files grow. Linux additionally
 checks the opened file descriptor's resolved location. Raw input is limited to
