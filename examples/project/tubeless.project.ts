@@ -72,6 +72,8 @@ export default defineProject(
     // A typed model-backed agent consumes an extract step's output inside a pipeline.
     ExtractTriageCommand,
     DurableWorkspaceAgent,
+    // For host-owned recovery, pass a fenced executionJournal to handleHostJob in
+    // ../host-embedding.ts. CLI history/--resume do not create an execution journal.
     // Record with --trace/--store; history <run-id> shows turns, calls and child agents.
     DelegatingAgentCommand,
     AgentPipelineCommand,

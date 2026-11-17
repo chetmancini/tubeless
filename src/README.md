@@ -116,13 +116,20 @@ Only boundaries that are not obvious from names are listed.
   scoped loggers and flushing; `pipeline-run-state.ts` owns state transitions and
   terminal reports; `pipeline-cache.ts` owns cache keys and policy around handler
   execution and imports no concrete store or codec eagerly.
+- `core/execution-journal.ts` owns host journal acknowledgements, logical paths,
+  compatibility bindings, per-step recovery and shared infrastructure failure state.
+  Scheduling delegates the step protocol; handler failures stay outside the host
+  acknowledgement boundary. It imports no
+  storage or agent runtime. Child composition extends its scope; native agents
+  consume a structural byte-store handoff and suppress the outer journal.
 - `run-controls.ts` snapshots supported run controls for direct runs, child runs and
   static iteration identities. Its property order preserves durable definition
   hashes; do not reorder without a definition-identity version bump.
 - `iteration.ts` invokes the existing child runner; it neither reschedules the
   parent DAG nor owns a separate lifecycle.
 - `waitForInput` is an ordinary step with an application-owned read callback; core
-  has no terminal or UI dependency.
+  has no terminal or UI dependency. Reader errors retain handler provenance
+  independently of leaf permit admission.
 - `child-execution.ts` owns inherited child runtime context; invocation-specific hooks
   and identities stay with callers. Core carries the agent's opaque execution scope
   through child execution; orchestration steps hold no leaf permit.

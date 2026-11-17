@@ -3,6 +3,7 @@ import type { CompiledStepCache } from "./pipeline-cache.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import {
   STEP_CACHE,
+  STEP_INPUT,
   STEP_NESTED_PIPELINE,
   STEP_OPTIONS_SCHEMA,
   STEP_REMOTE,
@@ -56,6 +57,7 @@ function compileStep<TOptions extends object>(
     Object.assign(compiled, { [STEP_OPTIONS_SCHEMA]: optionsSchema });
   if (metadata !== undefined) Object.assign(compiled, { metadata });
   if (step[STEP_ORCHESTRATION]) Object.assign(compiled, { [STEP_ORCHESTRATION]: true });
+  if (step[STEP_INPUT]) Object.assign(compiled, { [STEP_INPUT]: true });
   if (agent !== undefined) Object.assign(compiled, { [STEP_AGENT]: agent });
   if (name !== undefined) Object.assign(compiled, { name });
   if (description !== undefined) Object.assign(compiled, { description });

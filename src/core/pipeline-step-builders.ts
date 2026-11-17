@@ -3,7 +3,7 @@ import type { ArtifactLoader, ArtifactSaver } from "./pipeline-artifacts.js";
 import { createMappedChildRunner, createSingleChildRunner } from "./child-execution.js";
 import { createIterationRunner } from "./iteration.js";
 import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
-import { STEP_NESTED_PIPELINE, STEP_REMOTE } from "./pipeline-step-metadata.js";
+import { STEP_NESTED_PIPELINE, STEP_REMOTE, STEP_INPUT } from "./pipeline-step-metadata.js";
 import type {
   AnyStep,
   AnyStepDryRunHandler,
@@ -46,6 +46,7 @@ export function buildInputStep<TOptions extends object>(
     throw new TypeError("Input steps cannot use policy skips; gate dependent work instead.");
   return buildStep(id, {
     ...fields,
+    [STEP_INPUT]: true,
     dryRun,
     run: async (inputs, context) => {
       throwIfAborted(context.signal, "Wait for input");
