@@ -168,7 +168,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|testing|workbench)/",
+                "regex": "(^|/)(check|cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|testing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/agent may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -190,7 +190,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cloudflare|hosting|project|render|run-store|studio|testing|workbench)/",
+                "regex": "(^|/)(check|agent|cloudflare|hosting|project|render|run-store|studio|testing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/cli may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -217,7 +217,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(node|render|reporter|testing|workbench)/",
+                "regex": "(^|/)(check|node|render|reporter|testing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/cloudflare may not import these modules at runtime. See the dependency table in src/README.md."
               }
@@ -235,7 +235,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(node|render|reporter|testing|workbench)/",
+                "regex": "(^|/)(check|node|render|reporter|testing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/cloudflare may not import these modules at runtime. See the dependency table in src/README.md."
               }
@@ -254,7 +254,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|testing|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|testing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/core may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -276,7 +276,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cloudflare|node|reporter|testing|workbench)/",
+                "regex": "(^|/)(check|agent|cloudflare|node|reporter|testing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/hosting may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -299,7 +299,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|core|hosting|project|render|reporter|run-store|studio|testing|tracing|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|core|hosting|project|render|reporter|run-store|studio|testing|tracing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/node may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -321,7 +321,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|render|reporter|run-store|studio|testing|tracing|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|hosting|node|render|reporter|run-store|studio|testing|tracing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/project may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -344,7 +344,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|reporter|run-store|studio|testing|tracing|utilities|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|hosting|node|project|reporter|run-store|studio|testing|tracing|utilities|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/render may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -367,7 +367,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|render|run-store|studio|testing|tracing|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|hosting|node|project|render|run-store|studio|testing|tracing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/reporter may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -389,7 +389,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|render|reporter|studio|testing|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|hosting|node|project|render|reporter|studio|testing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/run-store may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -411,7 +411,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|core|hosting|node|project|render|reporter|testing|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|core|hosting|node|project|render|reporter|testing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/studio may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -433,7 +433,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/testing may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -455,7 +455,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|core|hosting|node|project|render|reporter|run-store|studio|testing|utilities|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|core|hosting|node|project|render|reporter|run-store|studio|testing|utilities|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/tracing may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -478,7 +478,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(agent|cli|cloudflare|core|hosting|node|project|render|reporter|run-store|studio|testing|tracing|workbench)/",
+                "regex": "(^|/)(check|agent|cli|cloudflare|core|hosting|node|project|render|reporter|run-store|studio|testing|tracing|workbench)/",
                 "allowTypeImports": true,
                 "message": "src/utilities may not import these modules at runtime. See the dependency table in src/README.md."
               },
@@ -500,13 +500,31 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(cloudflare|node|testing)/",
+                "regex": "(^|/)(check|cloudflare|node|testing)/",
                 "allowTypeImports": true,
                 "message": "src/workbench may not import these modules at runtime. See the dependency table in src/README.md."
               },
               {
                 "regex": "^cloudflare:",
                 "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/check/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|hosting|project|render|reporter|run-store|studio|testing|tracing|workbench)/",
+                "allowTypeImports": true,
+                "message": "Check integration composes core, Node adapters and utilities only."
               }
             ]
           }

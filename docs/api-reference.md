@@ -28,6 +28,8 @@ Package: `tubeless`
 | `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `5dd67bc5dfb46dbdb9e55bac81d95be77bbc1e56300677766b69ae0bbd9f2701` |                4 |
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
 | `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
+| `tubeless/check-plan`            | `./dist/utilities/node-check-plan.d.ts`        | `23fef204664df9348fcfab6d1d87dd782f58d75cd9b61a868793d246ba80fb10` |                6 |
+| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `808b631331c09e0e701ac17e26b18c2a392071562c3615f773bc593941663564` |                3 |
 
 ## Symbols
 
@@ -399,3 +401,22 @@ Package: `tubeless`
 | [`structuredError`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/structured-error.ts#L39)          | Select existing framework error fields and enforce the final serialized byte bound.         |
 | [`StructuredError`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/structured-error.ts#L5)           | Bounded projection of the existing OSS PipelineError, including legacy message-only errors. |
 | [`StructuredErrors`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/structured-error.ts#L139)        | Bounded run-level error observations; omissions include invalid or unretained entries.      |
+
+### `tubeless/check-plan`
+
+| Symbol                                                                                                            | Description                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [`decodeNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L267)  | Decode the bounded command contract directly; arbitrary argv and execution kinds are rejected. |
+| [`isNodeCheckReportPath`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L93) | Report files are confined to one dedicated directory; no absolute or traversing paths.         |
+| [`NodeCheckCommand`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L19)      | One resolved native command, with metadata appropriate to its execution kind.                  |
+| [`NodeCheckConfig`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L2)        | Portable, deliberately restricted Node 24 / Bun 1.4.4 check recipe.                            |
+| [`NodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L26)         | All commands, dependency edges and script bodies are part of admission identity.               |
+| [`resolveNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L184) | Resolve data only.                                                                             |
+
+### `tubeless/node/check`
+
+| Symbol                                                                                                | Description                                                                                |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`NodeCheckExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L21) | Original pipeline result, independent native outcomes and collected test-report envelopes. |
+| [`readNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L29)  | Load only JSON and a committed Bun text lock.                                              |
+| [`runNodeCheck`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L58)       | Execute an admitted plan with the ordinary Tubeless scheduler.                             |

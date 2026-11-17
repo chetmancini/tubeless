@@ -45,6 +45,7 @@ const allowedDependencies: Record<string, readonly string[]> = {
   tracing: [],
   utilities: [],
   node: ["utilities"],
+  check: ["core", "node", "utilities"],
   reporter: ["core", "utilities"],
   render: ["core"],
   "run-store": ["core", "tracing", "utilities"],
@@ -86,6 +87,17 @@ function moduleName(file: string): string {
 }
 
 describe("module runtime boundaries", () => {
+  it("keeps the optional Node recipe outside core and within its execution adapters", () => {
+    const pending = [resolve(dist, "check/node-check.js")],
+      visited = new Set<string>();
+    while (pending.length) {
+      const file = pending.pop()!;
+      if (visited.has(file)) continue;
+      visited.add(file);
+      expect(["check", "core", "node", "tracing", "utilities"]).toContain(moduleName(file));
+      pending.push(...dependencies(file));
+    }
+  });
   it("keeps graph scene construction independent of UI, transport and server modules", () => {
     const allowed = new Set([
       "studio/browser/graph/scene.js",

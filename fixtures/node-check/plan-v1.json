@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "recipe": "node-check-v1",
+  "toolchain": {
+    "node": "24",
+    "bun": "1.4.4"
+  },
+  "lockfile": "bun.lock",
+  "maxConcurrency": 1,
+  "commands": [
+    {
+      "kind": "install",
+      "id": "install",
+      "argv": ["bun", "install", "--frozen-lockfile"],
+      "dependsOn": [],
+      "timeoutMs": 300000,
+      "reason": "Install the committed bun.lock without updating it."
+    },
+    {
+      "id": "types",
+      "dependsOn": ["install"],
+      "timeoutMs": 60000,
+      "kind": "script",
+      "argv": ["bun", "run", "--silent", "types"],
+      "script": {
+        "name": "types",
+        "body": "node --check app.js"
+      },
+      "reason": "Explicitly configured repository gate."
+    },
+    {
+      "id": "test",
+      "dependsOn": ["install", "types"],
+      "timeoutMs": 60000,
+      "kind": "vitest",
+      "argv": [
+        "node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--reporter=json",
+        "--outputFile=.tubeless-reports/vitest.json",
+        "--includeTaskLocation"
+      ],
+      "report": {
+        "adapter": "vitest",
+        "version": "5.1.0",
+        "path": ".tubeless-reports/vitest.json"
+      },
+      "reason": "Explicitly configured repository gate."
+    }
+  ]
+}
