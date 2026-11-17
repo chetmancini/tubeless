@@ -137,7 +137,7 @@ describe("Studio launches supervised collector workers", { timeout: 15_000 }, ()
     const history = await fixture.state.fixture.store.listEvents();
     expect(history.filter((event) => event.name === "pipeline.completed")).toHaveLength(2);
     await host.close();
-    fixture.restartCollector();
+    await fixture.restartCollector();
     const reopened = await fixture.createHost();
     const detail = await (await reopened.studio.fetch(request(`/api/runs/${result.runId}`))).json();
     expect(detail.run).toMatchObject({ runId: result.runId, status: "completed" });

@@ -133,7 +133,7 @@ describe("example type probes", () => {
       });
 
       // @ts-expect-error Options are inferred from the schema input.
-      ValidatedPipeline.runOrThrow({});
+      void ValidatedPipeline.runOrThrow({});
 
       // SAFETY: an empty array literal has no elements that could violate readonly string[].
       const duplicate = step("load", { run: () => [] as readonly string[] });

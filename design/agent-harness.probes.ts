@@ -53,11 +53,11 @@ const immediate = defineAgentLoop({
 expectTypeOf<PipelineInput<typeof immediate>>().toEqualTypeOf<{ question: string }>();
 expectTypeOf<PipelineResult<typeof immediate>>().toEqualTypeOf<{ answer: string; checked: true }>();
 expectTypeOf(immediate.id).toEqualTypeOf<"immediate">();
-immediate.runOrThrow({ question: "What changed?" });
+void immediate.runOrThrow({ question: "What changed?" });
 // @ts-expect-error The input schema's required raw question is preserved.
-immediate.runOrThrow({});
+void immediate.runOrThrow({});
 // @ts-expect-error Schema-transformed fields are not caller options.
-immediate.runOrThrow({ question: "What changed?", limit: 10 });
+void immediate.runOrThrow({ question: "What changed?", limit: 10 });
 // @ts-expect-error Runtime calls are not declared static step IDs.
 immediate.plan({ stepIds: ["turn-1/search"] });
 
@@ -68,7 +68,7 @@ const optional = defineAgentLoop({
   initialState: (options) => options.question,
   decide: (state) => ({ kind: "finish", result: state }),
 });
-optional.runOrThrow();
+void optional.runOrThrow();
 
 // 2. Two tools, ordered outcomes, one reducer, then finish.
 const search = defineTool({

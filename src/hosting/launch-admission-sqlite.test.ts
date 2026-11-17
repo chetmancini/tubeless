@@ -3,8 +3,8 @@ import { createSqliteLaunchStoreFixture } from "./launch-store-sqlite.test-suppo
 import { SqliteHostedLaunchStore } from "./launch-store-sqlite.js";
 
 const fixtures: ReturnType<typeof createSqliteLaunchStoreFixture>[] = [];
-afterEach(() => {
-  for (const fixture of fixtures.splice(0)) fixture.store.close();
+afterEach(async () => {
+  for (const fixture of fixtures.splice(0)) await fixture.store.close();
 });
 
 it("atomically binds a key to its launch and returns the original record after adapter recreation", async () => {

@@ -64,10 +64,10 @@ describe("agent definition and recorded execution", () => {
           ...runtime.context,
           tracing: {
             exporter: {
-              export(event) {
+              async export(event) {
                 const decoded = decodeStoredTraceEvent(JSON.parse(JSON.stringify(event)));
                 events.push({ ...decoded, id: events.length + 1 });
-                store.export(decoded);
+                await store.export(decoded);
               },
             },
           },

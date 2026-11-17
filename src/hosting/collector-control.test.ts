@@ -61,7 +61,7 @@ describe("durable owned-attempt cancellation", () => {
     expect(await first.store.requestAttemptCancellation("launch", "attempt")).toBe(true);
     expect(first.readLaunch("launch")?.state).toBe("running");
     expect(await first.events.listEvents()).toMatchObject([started()]);
-    first.store.close();
+    await first.store.close();
     const reopened = createSqliteLaunchStoreFixture(filename);
     const store = new SqliteHostedLaunchStore(reopened.storage, reopened.events, () => 101);
     cleanup.push(() => store.close());

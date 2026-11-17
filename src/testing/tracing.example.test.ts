@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createOpenTelemetryExporter } from "../../examples/tracing.js";
 
 describe("OpenTelemetry tracing recipe", () => {
-  it("keeps trace identities and attempt attributes queryable", () => {
+  it("keeps trace identities and attempt attributes queryable", async () => {
     const span = {
       addEvent: vi.fn(),
       end: vi.fn(),
@@ -12,7 +12,7 @@ describe("OpenTelemetry tracing recipe", () => {
     const tracer = { startSpan: vi.fn(() => span) };
     const exporter = createOpenTelemetryExporter(tracer);
 
-    exporter.export({
+    await exporter.export({
       correlationId: "job-1",
       name: "pipeline.started",
       payload: { dryRun: false, planOk: true, stepCount: 1, targetIds: [] },
@@ -21,7 +21,7 @@ describe("OpenTelemetry tracing recipe", () => {
       timestampMs: 10,
       version: 2,
     });
-    exporter.export({
+    await exporter.export({
       attemptId: "attempt-1",
       correlationId: "job-1",
       durationMs: 3,
@@ -35,7 +35,7 @@ describe("OpenTelemetry tracing recipe", () => {
       timestampMs: 11,
       version: 2,
     });
-    exporter.export({
+    await exporter.export({
       attemptId: "attempt-1",
       error: {
         code: "TUBELESS_STEP_FAILED",
@@ -51,7 +51,7 @@ describe("OpenTelemetry tracing recipe", () => {
       timestampMs: 12,
       version: 2,
     });
-    exporter.export({
+    await exporter.export({
       durationMs: 5,
       name: "pipeline.completed",
       payload: {

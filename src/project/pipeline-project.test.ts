@@ -200,7 +200,7 @@ describe("pipeline project", () => {
       // @ts-expect-error Commands preserve literal pipeline ids.
       project.get("missing");
       // @ts-expect-error Commands preserve domain input requirements.
-      selected.runOrThrow({ value: 1 });
+      void selected.runOrThrow({ value: 1 });
       // @ts-expect-error Commands preserve target ids.
       selected.plan({ targets: ["read-beta"] });
       // @ts-expect-error Commands are entries, not a project option.

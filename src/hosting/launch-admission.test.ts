@@ -4,8 +4,8 @@ import { createSqliteLaunchStoreFixture } from "./launch-store-sqlite.test-suppo
 import { commands } from "./run.test-support.js";
 
 const fixtures: ReturnType<typeof createSqliteLaunchStoreFixture>[] = [];
-afterEach(() => {
-  for (const fixture of fixtures.splice(0)) fixture.store.close();
+afterEach(async () => {
+  for (const fixture of fixtures.splice(0)) await fixture.store.close();
 });
 
 it("gives a dispatch job only to the reservation creator, including concurrent admission and later replay", async () => {

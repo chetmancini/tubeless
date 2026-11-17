@@ -134,7 +134,7 @@ describe("authenticated collector persistence", () => {
     const bytes = batch(0, [started()]);
     await first.store.acceptCollectorBatch(first.authority, "worker", bytes);
     await first.store.reportCollectorFailure(first.authority, "worker", failure());
-    first.store.close();
+    await first.store.close();
     const second = createSqliteLaunchStoreFixture(filename);
     const store = new SqliteHostedLaunchStore(second.storage, second.events, () => 101);
     cleanup.push(() => store.close());

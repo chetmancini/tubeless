@@ -199,7 +199,7 @@ describe("supervised collector workers over HTTPS", { timeout: 15_000 }, () => {
     await vi.waitFor(() => expect(state.fixture.readLaunch("launch")?.state).toBe("running"));
     expect(await state.fixture.store.requestAttemptCancellation("launch", "attempt")).toBe(true);
     expect(state.fixture.readLaunch("launch")?.state).toBe("running");
-    restartCollector();
+    await restartCollector();
     expect(await worker.completed).toMatchObject({
       code: 0,
       outcome: { status: "history-confirmed" },

@@ -47,8 +47,8 @@ export async function workerFixture() {
     failureWhileAlive: false,
     pid: undefined as number | undefined,
   };
-  const restartCollector = () => {
-    state.fixture.store.close();
+  const restartCollector = async () => {
+    await state.fixture.store.close();
     state.fixture = createSqliteLaunchStoreFixture(database);
     state.collector = createHostedCollector({ store: state.fixture.store });
   };
@@ -106,7 +106,7 @@ export async function workerFixture() {
       }
       if (operation === "batches" && state.dropBatchAndRestart) {
         state.dropBatchAndRestart = false;
-        restartCollector();
+        await restartCollector();
         target.destroy();
         return;
       }
@@ -241,7 +241,7 @@ export async function workerFixture() {
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      state.fixture.store.close();
+      await state.fixture.store.close();
       await rm(directory, { recursive: true, force: true });
     },
   };

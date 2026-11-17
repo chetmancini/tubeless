@@ -147,7 +147,6 @@
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
       "rules": {
         "no-loop-func": "off",
-        "typescript/no-floating-promises": "off",
         "typescript/only-throw-error": "off",
         "typescript/prefer-promise-reject-errors": "off",
         "typescript/restrict-template-expressions": "off"
@@ -156,7 +155,6 @@
     {
       "files": ["design/**", "scripts/**"],
       "rules": {
-        "typescript/no-floating-promises": "off",
         "typescript/restrict-template-expressions": "off"
       }
     },

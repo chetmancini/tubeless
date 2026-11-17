@@ -1084,7 +1084,7 @@ describe("SQLite pipeline run store", () => {
     try {
       await writer.export(startedEvent("run-2", 20));
       expect(await reader.listEvents()).toEqual([expect.objectContaining({ runId: "run-1" })]);
-      writer.flush!();
+      await writer.flush!();
       await expect(reader.listEvents()).rejects.toThrow(/write-ahead|journal|sidecar/i);
     } finally {
       await writer.close();
@@ -1109,7 +1109,7 @@ describe("SQLite pipeline run store", () => {
     await store.export(startedEvent("run-1", 10));
     await store.export(startedEvent("run-1", 11));
     await store.export(startedEvent("run-1", 12));
-    store.flush!();
+    await store.flush!();
     const peek = new DatabaseSync(filename);
     expect(
       (

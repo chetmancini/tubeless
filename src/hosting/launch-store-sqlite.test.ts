@@ -21,8 +21,8 @@ const completed = (runId: string): PipelineTraceEvent => ({
 });
 
 const fixtures: ReturnType<typeof createSqliteLaunchStoreFixture>[] = [];
-afterEach(() => {
-  for (const fixture of fixtures.splice(0)) fixture.store.close();
+afterEach(async () => {
+  for (const fixture of fixtures.splice(0)) await fixture.store.close();
 });
 function setup() {
   const fixture = createSqliteLaunchStoreFixture();

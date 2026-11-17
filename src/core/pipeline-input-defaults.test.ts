@@ -73,13 +73,13 @@ describe("pipeline input defaults", () => {
     // oxlint-disable-next-line no-constant-condition -- typecheck-only required input probes
     if (false) {
       // @ts-expect-error Required domain options cannot be omitted.
-      required.run();
+      void required.run();
       // @ts-expect-error Required domain options cannot be omitted.
-      required.runOrThrow();
+      void required.runOrThrow();
       // @ts-expect-error Explicit undefined cannot bypass required input fields.
-      required.run(undefined, { dryRun: true });
+      void required.run(undefined, { dryRun: true });
       // @ts-expect-error Schema output fields do not determine whether input is required.
-      schemaRequired.runOrThrow();
+      void schemaRequired.runOrThrow();
     }
   });
 });

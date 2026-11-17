@@ -128,7 +128,7 @@ describe("process hosted executor through the shared coordinator", () => {
       expect(await reopened.store.listEvents()).toEqual(events);
       expect(await reopened.store.launchIdForRun(result.runId)).toBeUndefined();
     } finally {
-      reopened.store.close();
+      await reopened.store.close();
     }
   });
 
