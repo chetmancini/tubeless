@@ -212,6 +212,8 @@ compatible saved fields, leaves unsaved values blank, and asks for missing requi
 inputs. Review the current defaults and configured environment fallbacks shown with
 each field; blank unsaved inputs can use those fallbacks. A saved empty string is
 an explicit supplied value and can remain blank even for a required parameter.
+Restored booleans are also submitted explicitly, including values equal to a
+current default, so environment fallbacks cannot replace the reviewed value.
 Removed fields and changed types, choices or numeric constraints are
 discarded with an explanation. A changed or unavailable definition identity is
 shown before submission; a removed command cannot be rerun. Current command and

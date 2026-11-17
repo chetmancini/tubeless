@@ -195,7 +195,7 @@ export function CommandFields({ command, onChange, form }: CommandFieldsProps) {
             index={index}
             onChange={onChange}
             parameter={parameter}
-            savedEmpty={form.emptyKeys.has(parameter.key)}
+            savedEmpty={form.preservedKeys.has(parameter.key) && form.values[index]?.[0] === ""}
             values={form.values[index] ?? []}
           />
         ))}
@@ -260,7 +260,9 @@ export function LaunchModal({
   const [selectedId, setSelectedId] = useState(commandId);
   const command = commands.find((candidate) => candidate.id === selectedId);
   const [form, setForm] = useState<StudioLaunchForm>(() =>
-    command ? createStudioLaunchForm(command, previousLaunch) : { values: [], emptyKeys: new Set() }
+    command
+      ? createStudioLaunchForm(command, previousLaunch)
+      : { values: [], preservedKeys: new Set() }
   );
   const [plan, setPlan] = useState<PipelinePlan | null>(null);
   const [error, setError] = useState("");
@@ -278,7 +280,7 @@ export function LaunchModal({
     setForm(
       command
         ? createStudioLaunchForm(command, previousLaunch)
-        : { values: [], emptyKeys: new Set() }
+        : { values: [], preservedKeys: new Set() }
     );
     setPlan(null);
     setError("");

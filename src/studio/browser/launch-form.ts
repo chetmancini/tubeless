@@ -8,10 +8,10 @@ import type {
 
 export type StudioParameterValue = boolean | number | string;
 
-/** Display values and the intentional empty strings that must survive submission. */
+/** Display values and saved fields whose presence must override defaults and environment fallbacks. */
 export interface StudioLaunchForm {
   readonly values: readonly (readonly StudioParameterValue[])[];
-  readonly emptyKeys: ReadonlySet<string>;
+  readonly preservedKeys: ReadonlySet<string>;
   readonly review?: { readonly skipped: readonly string[]; readonly definitionChanged: boolean };
 }
 
@@ -45,9 +45,9 @@ export function createStudioLaunchForm(
   command: PipelineRunStudioCommand,
   previous?: StudioLaunchMetadata
 ): StudioLaunchForm {
-  const emptyKeys = new Set<string>();
+  const preservedKeys = new Set<string>();
   if (previous?.commandId !== command.id)
-    return { values: command.parameters.map(initialValue), emptyKeys };
+    return { values: command.parameters.map(initialValue), preservedKeys };
   const saved = new Map(previous.inputs.recorded.map((input) => [input.key, input]));
   const skipped: string[] = [];
   const values = command.parameters.map((parameter): StudioParameterValue[] => {
@@ -67,14 +67,14 @@ export function createStudioLaunchForm(
       skipped.push(parameter.key);
       return blank;
     }
-    if (input.value === "") emptyKeys.add(parameter.key);
+    if (input.value === "" || typeof input.value === "boolean") preservedKeys.add(parameter.key);
     return parameter.multiple && !parameter.choices ? [values.join("\n")] : [...values];
   });
   const keys = new Set(command.parameters.map((parameter) => parameter.key));
   for (const key of saved.keys()) if (!keys.has(key)) skipped.push(key);
   return {
     values,
-    emptyKeys,
+    preservedKeys,
     review: {
       skipped,
       definitionChanged:
@@ -110,7 +110,7 @@ export function serializeLaunchValues(
     let value: PipelineRunStudioLaunchRequest["values"][string];
     if (parameter.type === "boolean") {
       const checked = parameterValue[0];
-      if (checked === Boolean(parameter.default)) return;
+      if (checked === Boolean(parameter.default) && !form.preservedKeys.has(parameter.key)) return;
       value = checked;
     } else if (parameter.multiple) {
       value =
@@ -119,7 +119,7 @@ export function serializeLaunchValues(
           : parameterValue.filter((value): value is string => typeof value === "string");
     } else {
       const single = parameterValue[0];
-      if (single === undefined || (single === "" && !form.emptyKeys.has(parameter.key))) return;
+      if (single === undefined || (single === "" && !form.preservedKeys.has(parameter.key))) return;
       value = single;
     }
     entries.push([parameter.key, value]);

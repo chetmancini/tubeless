@@ -28,7 +28,7 @@ function command(parameters: readonly CliParameterDescriptor[]): PipelineRunStud
 }
 
 function form(values: StudioLaunchForm["values"]): StudioLaunchForm {
-  return { values, emptyKeys: new Set() };
+  return { values, preservedKeys: new Set() };
 }
 
 describe("Studio form serialization", () => {

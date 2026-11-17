@@ -7,6 +7,7 @@ import { createStudioLaunchForm, serializeLaunchValues } from "./launch-form.js"
 import { LaunchHistory } from "./components/launch-history.js";
 import { CommandFields, LaunchModal } from "./components/launch.js";
 import { createStudioApi } from "./transport.js";
+import { defineCommand } from "../../cli/cli.js";
 
 const parameter = (
   key: string,
@@ -57,6 +58,42 @@ const launch: StudioLaunchMetadata = {
 };
 
 describe("Studio rerun review", () => {
+  it.each([false, true])(
+    "preserves a restored %s boolean against an opposite environment fallback",
+    (saved) => {
+      const cli = defineCommand({
+        name: "Boolean fixture",
+        params: { enabled: { type: "boolean", default: saved, env: "ENABLED" } },
+        run: (values) => values.enabled,
+      });
+      const current = { ...command, parameters: cli.descriptor.parameters };
+      const previous: StudioLaunchMetadata = {
+        ...launch,
+        inputs: {
+          recorded: [{ key: "enabled", type: "boolean", multiple: false, value: saved }],
+          omitted: [],
+        },
+      };
+      const context = { env: { ENABLED: String(!saved) } };
+      expect(cli.parseValues({}, context)).toMatchObject({
+        kind: "values",
+        values: { enabled: !saved },
+      });
+      const form = createStudioLaunchForm(current, previous);
+      const enabledIndex = current.parameters.findIndex((parameter) => parameter.key === "enabled");
+      expect(form.values[enabledIndex]).toEqual([saved]);
+      const submitted = serializeLaunchValues(current, form);
+      expect(submitted).toEqual({ enabled: saved });
+      expect(cli.parseValues(submitted, context)).toMatchObject({
+        kind: "values",
+        values: { enabled: saved },
+      });
+      const unrecorded = { ...previous, inputs: { recorded: [], omitted: ["enabled"] } };
+      expect(serializeLaunchValues(current, createStudioLaunchForm(current, unrecorded))).toEqual(
+        {}
+      );
+    }
+  );
   it("shows current scalar defaults and environment fallbacks for unsaved rerun fields", () => {
     const current = {
       ...command,

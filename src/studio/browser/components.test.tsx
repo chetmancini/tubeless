@@ -54,7 +54,7 @@ describe("Studio components", () => {
     const markup = renderToString(
       <CommandFields
         command={command}
-        form={{ values: [[""]], emptyKeys: new Set() }}
+        form={{ values: [[""]], preservedKeys: new Set() }}
         onChange={() => {}}
       />
     );
@@ -663,7 +663,7 @@ describe("run detail hierarchy", () => {
             },
           ],
         }}
-        form={{ values: [[""], [false]], emptyKeys: new Set() }}
+        form={{ values: [[""], [false]], preservedKeys: new Set() }}
         onChange={() => {}}
       />
     );
