@@ -1,7 +1,9 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "import"],
-  "options": { "typeAware": true },
+  "options": {
+    "typeAware": true
+  },
   "ignorePatterns": [
     "dist/**",
     "node_modules/**",
@@ -24,9 +26,25 @@
     "no-fallthrough": "error",
     "no-unsafe-optional-chaining": "error",
     "no-control-regex": "off",
-    "eqeqeq": ["error", "always", { "null": "ignore" }],
-    "prefer-const": ["error", { "ignoreReadBeforeAssign": true }],
-    "no-empty": ["error", { "allowEmptyCatch": false }],
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
+    "prefer-const": [
+      "error",
+      {
+        "ignoreReadBeforeAssign": true
+      }
+    ],
+    "no-empty": [
+      "error",
+      {
+        "allowEmptyCatch": false
+      }
+    ],
     "no-param-reassign": "error",
     "default-param-last": "error",
     "no-multi-assign": "error",
@@ -36,7 +54,12 @@
     "no-throw-literal": "error",
     "object-shorthand": "error",
     "arrow-body-style": "error",
-    "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "disallowTypeAnnotations": false
+      }
+    ],
     "typescript/no-import-type-side-effects": "error",
     "import/no-duplicates": "error",
     "import/first": "error",
@@ -66,7 +89,12 @@
     "typescript/no-for-in-array": "error",
     "typescript/no-implied-eval": "error",
     "typescript/no-meaningless-void-operator": "error",
-    "typescript/no-misused-promises": ["error", { "checksVoidReturn": false }],
+    "typescript/no-misused-promises": [
+      "error",
+      {
+        "checksVoidReturn": false
+      }
+    ],
     "typescript/no-mixed-enums": "error",
     "typescript/no-unnecessary-boolean-literal-compare": "error",
     "typescript/no-unnecessary-template-expression": "error",
@@ -74,10 +102,20 @@
     "typescript/no-unsafe-enum-comparison": "error",
     "typescript/no-unsafe-unary-minus": "error",
     "typescript/non-nullable-type-assertion-style": "error",
-    "typescript/only-throw-error": ["error", { "allowThrowingUnknown": true }],
+    "typescript/only-throw-error": [
+      "error",
+      {
+        "allowThrowingUnknown": true
+      }
+    ],
     "typescript/prefer-find": "error",
     "typescript/prefer-includes": "error",
-    "typescript/prefer-promise-reject-errors": ["error", { "allowThrowingUnknown": true }],
+    "typescript/prefer-promise-reject-errors": [
+      "error",
+      {
+        "allowThrowingUnknown": true
+      }
+    ],
     "typescript/prefer-readonly": "error",
     "typescript/prefer-reduce-type-parameter": "error",
     "typescript/prefer-string-starts-ends-with": "error",
@@ -85,7 +123,9 @@
     "typescript/return-await": "error",
     "typescript/switch-exhaustiveness-check": [
       "error",
-      { "considerDefaultExhaustiveForUnions": true }
+      {
+        "considerDefaultExhaustiveForUnions": true
+      }
     ],
     "typescript/use-unknown-in-catch-callback-variable": "error",
     "typescript/no-dynamic-delete": "error",
@@ -118,6 +158,360 @@
       "rules": {
         "typescript/no-floating-promises": "off",
         "typescript/restrict-template-expressions": "off"
+      }
+    },
+    {
+      "files": ["src/agent/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|testing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/agent may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/cli/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cloudflare|hosting|project|render|run-store|studio|testing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/cli may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/cloudflare/**"],
+      "excludeFiles": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.test-support.ts",
+        "src/cloudflare/cloudflare.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(node|render|reporter|testing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/cloudflare may not import these modules at runtime. See the dependency table in src/README.md."
+              }
+            ]
+          }
+        ],
+        "import/no-nodejs-modules": "error"
+      }
+    },
+    {
+      "files": ["src/cloudflare/cloudflare.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(node|render|reporter|testing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/cloudflare may not import these modules at runtime. See the dependency table in src/README.md."
+              }
+            ]
+          }
+        ],
+        "import/no-nodejs-modules": "error"
+      }
+    },
+    {
+      "files": ["src/core/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|testing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/core may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/hosting/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cloudflare|node|reporter|testing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/hosting may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ],
+        "import/no-nodejs-modules": "error"
+      }
+    },
+    {
+      "files": ["src/node/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|core|hosting|project|render|reporter|run-store|studio|testing|tracing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/node may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/project/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|render|reporter|run-store|studio|testing|tracing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/project may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ],
+        "import/no-nodejs-modules": "error"
+      }
+    },
+    {
+      "files": ["src/render/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|reporter|run-store|studio|testing|tracing|utilities|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/render may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ],
+        "import/no-nodejs-modules": "error"
+      }
+    },
+    {
+      "files": ["src/reporter/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|render|run-store|studio|testing|tracing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/reporter may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/run-store/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|render|reporter|studio|testing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/run-store may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/studio/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|core|hosting|node|project|render|reporter|testing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/studio may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/testing/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|hosting|node|project|render|reporter|run-store|studio|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/testing may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/tracing/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|core|hosting|node|project|render|reporter|run-store|studio|testing|utilities|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/tracing may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ],
+        "import/no-nodejs-modules": "error"
+      }
+    },
+    {
+      "files": ["src/utilities/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(agent|cli|cloudflare|core|hosting|node|project|render|reporter|run-store|studio|testing|tracing|workbench)/",
+                "allowTypeImports": true,
+                "message": "src/utilities may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/workbench/**"],
+      "excludeFiles": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)(cloudflare|node|testing)/",
+                "allowTypeImports": true,
+                "message": "src/workbench may not import these modules at runtime. See the dependency table in src/README.md."
+              },
+              {
+                "regex": "^cloudflare:",
+                "message": "Only src/cloudflare/cloudflare.ts may import cloudflare:workers."
+              }
+            ]
+          }
+        ]
       }
     }
   ]

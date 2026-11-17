@@ -52,8 +52,15 @@ re-exports and lazy imports, and fails on any edge outside this table.
 | `cloudflare`           | `agent`, `cli`, `core`, `hosting`, `project`, `run-store`, `studio`, `tracing`, `utilities` |
 | `workbench`            | everything above except `node`, `testing` and `cloudflare`                                  |
 
-Runtime import cycles are rejected. Computed imports are allowed only in the
-module-loader owners listed in the test. Keep allowed lists narrow when adding
+The same table is enforced on source files by per-directory `no-restricted-imports`
+overrides in `.oxlintrc.json`, so a forbidden import fails lint before the build. Type-only
+imports are allowed, and test files (`*.test.ts`, `*.test-support.ts`) are exempt. The
+overrides also forbid Node built-ins in `tracing`, `hosting`, `project`, `render` and
+`cloudflare`, and `cloudflare:` imports everywhere except `cloudflare/cloudflare.ts`.
+Change the table, the test allowlist and these overrides together.
+
+Runtime import cycles are rejected (`import/no-cycle` in lint, plus the graph test). Computed
+imports are allowed only in the module-loader owners listed in the test. Keep allowed lists narrow when adding
 modules; avoid new cross-module contracts unless a consumer needs them. Type-only
 imports may share contracts without loading implementations.
 
