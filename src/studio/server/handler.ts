@@ -2,6 +2,7 @@ import { errorResponse, unexpectedStudioErrorResponse } from "./http.js";
 import { jsonResponse } from "../../utilities/http-response.js";
 import { studioRoute } from "./hosting.js";
 import type { StudioPage } from "./page.js";
+import type { LaunchActor } from "../shared/launch-metadata.js";
 
 /** Response for a request whose Host is not trusted. */
 export function untrustedHostResponse(): Response {
@@ -14,6 +15,8 @@ export function untrustedHostResponse(): Response {
 }
 
 export interface StudioRequestContext {
+  /** Identity supplied by the trusted host, after authentication. */
+  readonly actor?: LaunchActor;
   /** Raw request target (path and query) exactly as received. */
   readonly rawTarget: string;
   /** Request authority (Host) as received, before normalization. */
@@ -21,7 +24,7 @@ export interface StudioRequestContext {
 }
 
 export interface StudioRequestHandlerOptions {
-  readonly api: (request: Request, url: URL) => Promise<Response>;
+  readonly api: (request: Request, url: URL, actor?: LaunchActor) => Promise<Response>;
   readonly page: StudioPage;
   /** Validated mount path; empty for root mounts. */
   readonly mount: string;
@@ -90,7 +93,7 @@ export function createStudioRequestHandler(
           },
         });
       }
-      return await options.api(request, url);
+      return await options.api(request, url, context.actor);
     } catch (error) {
       return unexpectedStudioErrorResponse(error);
     }

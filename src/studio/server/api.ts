@@ -1,4 +1,5 @@
 import type { PipelineRunEventReader } from "../../run-store/run-store.js";
+import type { LaunchActor, StudioLaunchMetadata } from "../shared/launch-metadata.js";
 import { jsonResponse } from "../../utilities/http-response.js";
 import {
   agentTranscriptPageSchema,
@@ -27,6 +28,7 @@ import {
 export interface PipelineRunStudioApiOptions {
   /** Optional all-history maintenance capability. Omit it to keep history immutable. */
   history?: PipelineRunStudioHistoryMaintenance;
+  launchMetadata?: { forRun(runId: string): Promise<StudioLaunchMetadata | undefined> };
   /** Optional execution capability. Omit it to keep the studio read-only. */
   launcher?: PipelineRunStudioLauncher;
   store: Pick<PipelineRunEventReader, "listEvents" | "transcripts">;
@@ -37,7 +39,7 @@ export interface PipelineRunStudioApiOptions {
 /** Own API routes and their state without opening a listener or concrete storage. */
 export function createStudioApiHandler(
   options: PipelineRunStudioApiOptions
-): (request: Request, url: URL) => Promise<Response> {
+): (request: Request, url: URL, actor?: LaunchActor) => Promise<Response> {
   // An attached artifact is read-only; never advertise deletion that would leave its content behind.
   const history = options.transcripts ? undefined : options.history;
   const transcripts = options.transcripts ?? options.store.transcripts;
@@ -61,7 +63,7 @@ export function createStudioApiHandler(
   }
   const eventState = new PipelineRunStudioEventState(options.store);
   const instanceId = crypto.randomUUID();
-  return async (request, url) => {
+  return async (request, url, actor) => {
     try {
       if (request.method === "GET" && url.pathname === "/api/snapshot") {
         const query = url.searchParams.get("query") ?? "";
@@ -140,6 +142,9 @@ export function createStudioApiHandler(
         return detail
           ? jsonResponse({
               ...detail,
+              ...(options.launchMetadata
+                ? { launch: (await options.launchMetadata.forRun(runId)) ?? null }
+                : {}),
               ...(transcripts
                 ? {
                     transcriptAvailable:
@@ -312,7 +317,10 @@ export function createStudioApiHandler(
             "Refresh /api/commands and choose an available commandId."
           );
         }
-        const result = await launcher.launch(commandId, launch.values);
+        const result = await launcher.launch(commandId, launch.values, {
+          actor,
+          idempotencyKey: launch.idempotencyKey,
+        });
         if (result.accepted) return jsonResponse(result, 202);
         return jsonResponse(
           {

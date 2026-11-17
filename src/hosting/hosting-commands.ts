@@ -140,6 +140,7 @@ export function studioDescriptor(command: HostedPipelineCommand): PipelineRunStu
     id: command.id,
     name: command.descriptor.name,
     parameters: command.descriptor.parameters,
+    definitionId: command.plan().definition?.identity.definitionId,
   };
   if (command.descriptor.description !== undefined) {
     descriptor.description = command.descriptor.description;

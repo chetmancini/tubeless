@@ -18,6 +18,12 @@ it("atomically binds a key to its launch and returns the original record after a
     launchId: "launch",
     commandId: "demo",
     createdAtMs: 100,
+    metadata: {
+      launchId: "launch",
+      commandId: "demo",
+      trigger: "code" as const,
+      inputs: { recorded: [], omitted: ["secret"] },
+    },
   };
   const admission = {
     launchId: "launch",
@@ -42,7 +48,26 @@ it("atomically binds a key to its launch and returns the original record after a
     "CREATE TRIGGER reject_admission BEFORE INSERT ON tubeless_launch_admissions BEGIN SELECT RAISE(ABORT, 'admission failed'); END"
   );
   await expect(
-    store.admissions.reserve({ ...request, idempotencyKey: "new", launchId: "rolled-back" })
+    store.admissions.reserve({
+      ...request,
+      idempotencyKey: "new",
+      launchId: "rolled-back",
+      metadata: { ...request.metadata, launchId: "rolled-back" },
+    })
   ).rejects.toThrow("admission failed");
   expect(readLaunch("rolled-back")).toBeUndefined();
+  expect(storage.sql.exec("SELECT launch_id FROM tubeless_launch_metadata").toArray()).toEqual([
+    { launch_id: "launch" },
+  ]);
+  storage.sql.exec("DROP TRIGGER reject_admission");
+  await expect(
+    store.admissions.reserve({
+      ...request,
+      idempotencyKey: "invalid",
+      launchId: "bad",
+      metadata: { ...request.metadata, launchId: "bad", trigger: "invalid" as never },
+    })
+  ).rejects.toThrow();
+  expect(readLaunch("bad")).toBeUndefined();
+  expect(await store.admissions.get("invalid")).toBeUndefined();
 });

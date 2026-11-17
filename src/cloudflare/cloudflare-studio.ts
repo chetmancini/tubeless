@@ -3,6 +3,8 @@ import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js
 import { createStudioHost, type StudioHost } from "../hosting/hosting-studio.js";
 import { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
 import type { HostedRunCoordinator } from "../hosting/run-coordinator.js";
+import { admittedStudioLauncher } from "../hosting/admitted-studio-launcher.js";
+import type { LaunchActor } from "../studio/shared/launch-metadata.js";
 import { createTrustedHostedRun } from "../hosting/trusted-run-coordinator.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { openDurableRunStore, type DurableRunStore } from "./cloudflare-run-store.js";
@@ -38,6 +40,7 @@ export interface StudioObjectDependencies {
   readonly startTimeoutMs?: number;
   readonly projectId: string;
   readonly deploymentId?: string;
+  readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 export class StudioObjectCore implements StudioIngest {
@@ -46,7 +49,7 @@ export class StudioObjectCore implements StudioIngest {
   readonly #coordinator: HostedRunCoordinator;
   readonly #ingest: StudioIngest;
   readonly #now: () => number;
-  readonly launch: (request: HostedLaunchRequest) => Promise<HostedLaunchResult>;
+  readonly #admission: ReturnType<typeof createHostedLaunchAdmission>;
   #host: Promise<StudioHost> | undefined;
 
   constructor(private readonly deps: StudioObjectDependencies) {
@@ -70,7 +73,7 @@ export class StudioObjectCore implements StudioIngest {
     );
     this.#coordinator = launcher;
     this.#ingest = ingest;
-    this.launch = createHostedLaunchAdmission({
+    this.#admission = createHostedLaunchAdmission({
       projectId: deps.projectId,
       deploymentId: deps.deploymentId,
       commands: deps.commands,
@@ -78,8 +81,8 @@ export class StudioObjectCore implements StudioIngest {
       store: this.#store.admissions,
       maxRunDurationMs: deps.maxRunDurationMs,
       now: this.#now,
+      inputPolicy: deps.inputPolicy,
       scheduleReconcile: (atMs) => this.#scheduleReconcile(atMs),
-      start: (job) => launcher.startPrepared(job, job),
     });
   }
 
@@ -106,20 +109,35 @@ export class StudioObjectCore implements StudioIngest {
     return this.#store.launchStatus(launchId);
   }
 
-  async fetch(request: Request): Promise<Response> {
+  async launch(request: HostedLaunchRequest): Promise<HostedLaunchResult> {
+    const decision = await this.#admission(request);
+    if (!decision.accepted) return decision;
+    if (decision.job) await this.#coordinator.startPrepared(decision.job, decision.job);
+    return { accepted: true, launchId: decision.launchId };
+  }
+
+  async fetch(request: Request, actor?: LaunchActor): Promise<Response> {
     this.#host ??= createStudioHost({
       store: this.#events,
-      launcher: this.#coordinator,
+      launcher: admittedStudioLauncher({
+        coordinator: this.#coordinator,
+        projectId: this.deps.projectId,
+        deploymentId: this.deps.deploymentId,
+        admit: this.#admission,
+        getLaunch: (id) => this.#store.launchStatus(id),
+      }),
+      launchMetadata: this.#store.metadata,
       clientScript: this.deps.clientScript,
       history: {
         clear: () =>
           this.deps.storage.transactionSync(() => {
             if (this.#store.hasActiveLaunches()) throw new PipelineRunStudioHistoryBusyError();
             this.#events.clearHistory();
+            this.#store.metadata.clear();
           }),
       },
     });
-    return (await this.#host).fetch(request);
+    return (await this.#host).fetch(request, actor);
   }
 
   async appendTranscript(record: AgentTranscriptRecord): Promise<{ accepted: boolean }> {

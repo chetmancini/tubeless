@@ -21,6 +21,16 @@ export type {
   HostedLaunchValues as CloudflareLaunchValues,
 } from "../hosting/launch-admission.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
+import type {
+  LaunchActor,
+  LaunchTrigger,
+  LaunchInputPolicy,
+} from "../studio/shared/launch-metadata.js";
+import { launchInputPolicy } from "../hosting/launch-metadata.js";
+export type {
+  LaunchActor as CloudflareLaunchActor,
+  LaunchTrigger as CloudflareLaunchTrigger,
+} from "../studio/shared/launch-metadata.js";
 import { PIPELINE_RUN_STUDIO_CLIENT } from "./cloudflare-studio-client.js";
 import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
 import type { CloudflareTranscriptIngest } from "./cloudflare-transcript.js";
@@ -50,12 +60,18 @@ export interface CloudflareTraceContext<TEnv = unknown> extends CloudflareRunTra
 /** Reuse the same key for every delivery of one logical submission. */
 export interface CloudflareLaunchOptions {
   readonly idempotencyKey: string;
+  /** Attribution supplied by trusted application code, never read from browser input. */
+  readonly actor?: LaunchActor;
+  /** Defaults to code. */
+  readonly trigger?: LaunchTrigger;
 }
 
 /** Configure deployment identity, application tracing and the cooperative run deadline. */
 export interface CloudflareAppOptions<TEnv = unknown> {
   /** Immutable code/configuration revision. Required for programmatic launches; change it on redeploy. */
   readonly deploymentId?: string;
+  /** Input values saved in Studio history, by command id and parameter key. Defaults to none. */
+  readonly recordInputs?: LaunchInputPolicy;
   /** Extra destinations composed with project exporters and Studio ingestion. */
   readonly tracing?: PipelineTraceExporterOptions<CloudflareTraceContext<TEnv>>;
   readonly limits?: {
@@ -98,7 +114,7 @@ interface NamespaceLike<T> {
 }
 
 interface StudioStub extends StudioIngest {
-  fetch(request: Request): Promise<Response>;
+  serve(request: Request, actor?: LaunchActor): Promise<Response>;
   launch(request: HostedLaunchRequest): Promise<CloudflareLaunchResult>;
   getLaunch(launchId: string): Promise<CloudflareLaunchStatus | undefined>;
 }
@@ -155,14 +171,16 @@ export function createCloudflareApp<TEnv = unknown>(
   const commands = new Map(
     hostedProjectCommands(project).map((entry) => [entry.descriptor.id, entry])
   );
+  const inputPolicy = launchInputPolicy(commands, options.recordInputs);
   let authenticator:
-    | { key: string; authenticate: (request: Request) => Promise<Response | undefined> }
+    | { key: string; authenticate: ReturnType<typeof createAccessAuthenticator> }
     | undefined;
 
   const worker: CloudflareWorker = {
     async fetch(request, rawEnv) {
       // SAFETY: the scaffolded configuration binds these names; missing bindings fail at the call below.
       const env = rawEnv as TubelessEnv;
+      let actor: LaunchActor | undefined;
       let config: ReturnType<typeof parseAccessConfig>;
       try {
         config = parseAccessConfig(env.ACCESS_TEAM_DOMAIN, env.ACCESS_AUD);
@@ -179,8 +197,9 @@ export function createCloudflareApp<TEnv = unknown>(
         if (authenticator?.key !== key) {
           authenticator = { key, authenticate: createAccessAuthenticator(config) };
         }
-        const denial = await authenticator.authenticate(request);
-        if (denial) return denial;
+        const identity = await authenticator.authenticate(request);
+        if (identity instanceof Response) return identity;
+        actor = identity;
       } else if (!LOOPBACK_HOSTS.has(new URL(request.url).hostname)) {
         return errorResponse(
           503,
@@ -191,7 +210,7 @@ export function createCloudflareApp<TEnv = unknown>(
       }
       try {
         // Forward the original request: the Studio host checks mutation Origin against its URL.
-        return await env.TUBELESS_STUDIO.getByName("default").fetch(request);
+        return await env.TUBELESS_STUDIO.getByName("default").serve(request, actor);
       } catch (error) {
         console.error(error);
         return studioUnavailable(request);
@@ -213,12 +232,14 @@ export function createCloudflareApp<TEnv = unknown>(
         maxRunDurationMs,
         projectId: project.id,
         deploymentId,
+        inputPolicy,
         runStub: (launchId) => env.TUBELESS_RUN.getByName(launchId),
       });
     }
 
-    fetch(request: Request): Promise<Response> {
-      return this.#core.fetch(request);
+    /** Private Worker-to-Studio RPC; identity is never accepted from HTTP headers or JSON. */
+    serve(request: Request, actor?: LaunchActor): Promise<Response> {
+      return this.#core.fetch(request, actor);
     }
 
     launch(request: HostedLaunchRequest) {
@@ -311,6 +332,7 @@ export function createCloudflareApp<TEnv = unknown>(
         idempotencyKey: launchOptions?.idempotencyKey,
         projectId: project.id,
         deploymentId,
+        context: { actor: launchOptions?.actor, trigger: launchOptions?.trigger },
       });
     },
     async getLaunch(rawEnv, launchId) {

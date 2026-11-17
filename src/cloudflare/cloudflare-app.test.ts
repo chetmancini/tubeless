@@ -372,6 +372,13 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
       await (await call(`/api/runs/${encodeURIComponent(runId)}`)).json()
     );
     expect(detail).toContain("hello ada");
+    expect(JSON.parse(detail)).toMatchObject({
+      launch: {
+        actor: { id: "ops@example.com", label: "ops@example.com", kind: "user" },
+        trigger: "manual",
+        inputs: { recorded: [] },
+      },
+    });
   });
 
   it("passes bindings to fresh per-launch exporters and awaits delivery beside project exporters", async () => {

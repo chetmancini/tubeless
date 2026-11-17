@@ -366,7 +366,11 @@ describe("authenticated Studio listener", () => {
           )
         ).status
       ).toBe(202);
-      expect(f.launch).toHaveBeenCalledWith("fixture/id", {});
+      expect(f.launch).toHaveBeenCalledWith(
+        "fixture/id",
+        {},
+        { actor: undefined, idempotencyKey: undefined }
+      );
       expect(
         (
           await raw(

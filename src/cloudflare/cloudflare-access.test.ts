@@ -68,7 +68,7 @@ interface Harness {
   readonly refreshIntervalMs?: number;
 }
 
-function authenticator(harness: Harness = {}) {
+function identityAuthenticator(harness: Harness = {}) {
   const count = harness.count ?? { value: 0 };
   const clock = harness.clock ?? { now: NOW };
   const jwks = harness.jwks ?? [jwk];
@@ -85,7 +85,43 @@ function authenticator(harness: Harness = {}) {
   });
 }
 
+function responseOnly(
+  result: Awaited<ReturnType<ReturnType<typeof createAccessAuthenticator>>>
+): Response | undefined {
+  if (result === undefined || result instanceof Response) return result;
+  throw new Error("This authorization test did not expect an identity");
+}
+function authenticator(harness: Harness = {}) {
+  const authenticate = identityAuthenticator(harness);
+  return async (request: Request) => responseOnly(await authenticate(request));
+}
+
 describe("Access configuration", () => {
+  it("returns only verified user and service-token claims as attribution", async () => {
+    const auth = identityAuthenticator();
+    expect(await auth(request(await token({ sub: "user-123", email: "ada@example.com" })))).toEqual(
+      { id: "user-123", kind: "user", label: "ada@example.com" }
+    );
+    expect(await auth(request(await token({ sub: "", common_name: "client-456.access" })))).toEqual(
+      { id: "client-456.access", kind: "service" }
+    );
+    expect(await auth(request(await token({ email: "legacy@example.com" })))).toEqual({
+      id: "legacy@example.com",
+      kind: "user",
+      label: "legacy@example.com",
+    });
+    expect(
+      await auth(
+        new Request("https://studio.example/api/snapshot", {
+          headers: { "cf-access-authenticated-user-email": "forged@example.com" },
+        })
+      )
+    ).toBeInstanceOf(Response);
+    expect(await auth(request(await token({ sub: "user-123", aud: ["foreign"] })))).toBeInstanceOf(
+      Response
+    );
+    expect(await auth(request(await token({ sub: "x".repeat(1025) })))).toBeUndefined();
+  });
   it("normalizes the team domain and rejects partial or foreign config", () => {
     expect(config).toEqual({
       issuer: "https://team.cloudflareaccess.com",
@@ -227,9 +263,11 @@ describe("Access authenticator", () => {
     try {
       const auth = createAccessAuthenticator(config, { now: () => NOW });
       let settled = false;
-      const outcome = auth(request(await token({}))).finally(() => {
-        settled = true;
-      });
+      const outcome = auth(request(await token({})))
+        .then(responseOnly)
+        .finally(() => {
+          settled = true;
+        });
       await vi.advanceTimersByTimeAsync(4_999);
       expect(hungFetch).toHaveBeenCalledOnce();
       expect(settled).toBe(false);

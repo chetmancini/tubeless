@@ -12,6 +12,9 @@ import type { StudioApi } from "../transport.js";
 import type { StudioRunSelection } from "../data-controller.js";
 import { EmptyView, preferredScrollBehavior } from "./common.js";
 import { TranscriptView } from "./transcript.js";
+import { LaunchHistory } from "./launch-history.js";
+import type { StudioLaunchMetadata } from "../../shared/launch-metadata.js";
+import type { PipelineRunStudioCommand } from "../../shared/protocol.js";
 
 function dateTime(ms: number): string {
   if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return "";
@@ -482,6 +485,8 @@ export function RunDetails({ run }: { run: StoredPipelineRun }) {
 }
 
 interface RunDetailProps {
+  commands?: readonly PipelineRunStudioCommand[];
+  onRunAgain?(launch: StudioLaunchMetadata): void;
   api?: StudioApi;
   canCancel: boolean;
   cancelling: boolean;
@@ -501,6 +506,8 @@ interface RunDetailProps {
 }
 
 function RunDetail({
+  commands,
+  onRunAgain,
   api,
   canCancel,
   cancelling,
@@ -746,7 +753,14 @@ function RunDetail({
         {activeTab === "nested" && (
           <NestedRuns key={run.runId} api={api} detail={detail} onSelect={onSelect} />
         )}
-        {activeTab === "details" && <RunDetails run={run} />}
+        {activeTab === "details" && (
+          <>
+            <RunDetails run={run} />
+            {detail.launch !== undefined && (
+              <LaunchHistory launch={detail.launch} commands={commands} onRunAgain={onRunAgain} />
+            )}
+          </>
+        )}
       </div>
     </article>
   );

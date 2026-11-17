@@ -2,7 +2,11 @@ import { createCloudflareApp } from "tubeless/cloudflare";
 import project from "./tubeless.project.ts";
 
 // Replace this with an immutable release/commit id; change it with execution code or configuration.
-const app = createCloudflareApp(project, { deploymentId: "example-v1" });
+const app = createCloudflareApp(project, {
+  deploymentId: "example-v2",
+  // Only this input is suitable for this application's Studio history. Omitted fields stay private.
+  recordInputs: { "validated-import": ["source"] },
+});
 
 export default {
   ...app.worker,
@@ -12,7 +16,11 @@ export default {
       env,
       "validated-import",
       { source: "daily.csv" },
-      { idempotencyKey: `validated-import.daily.${event.scheduledTime}` }
+      {
+        idempotencyKey: `validated-import.daily.${event.scheduledTime}`,
+        actor: { id: "daily-import", kind: "service", label: "Daily import" },
+        trigger: "schedule",
+      }
     );
     if (!admission.accepted) throw new Error(`${admission.code}: ${admission.errors.join("; ")}`);
     console.log(`Admitted launch ${admission.launchId}`);

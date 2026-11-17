@@ -41,8 +41,10 @@ Keys have no automatic expiration. Event-history clearing preserves both launch
 rows and admission records. This deliberately favors safe redelivery over bounded
 key retention; a future explicit retention policy must preserve active keys and
 document when replay guarantees end. Deleting the Studio object's storage loses
-the namespace. Raw values remain only in the existing transient execution job,
-not a new input-history record or trace field.
+the namespace. Full raw values remain in the existing transient execution job;
+only explicitly allowlisted normalized inputs enter the separate launch-history
+record. Attribution and saved inputs commit with first admission and are never
+overwritten on replay. History deletion removes them with events, preserving keys.
 
 ## Dispatch and recovery
 
@@ -53,11 +55,11 @@ between that commit and dispatch leaves an unstarted launch for reconciliation t
 fail; admission does not promise successful execution.
 
 `hosting/launch-admission.ts` owns submission policy; the Cloudflare Studio object
-supplies its alarm and dispatch capabilities. The shared command adapter owns
+supplies its alarm capability. Admission returns a job only to the reservation creator; the Studio object owns dispatch and returns a receipt without that internal job. The shared command adapter owns
 parameter parsing, while the coordinator owns dispatch/failure fencing.
 `startPrepared` dispatches an already-persisted launch after target-owned recovery
-has been arranged. The original browser path still prepares a launch through its
-existing driver and uses the same dispatch method. Both paths register dispatch
+has been arranged. The browser path shares durable admission, registers its start
+waiter before dispatch, and uses a fresh key for each deliberate submission. Both paths register dispatch
 work for draining and shutdown. A lost start RPC reply can fail
 an unadmitted launch, preventing its pending job from executing; admitted work
 retains authority to record its eventual outcome. Neither case authorizes automatic

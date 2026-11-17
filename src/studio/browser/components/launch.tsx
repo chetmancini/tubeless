@@ -1,86 +1,20 @@
 import type { TargetedEvent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { CliParameterDescriptor } from "../../../cli/cli.js";
-import type { PipelinePlan, PipelineRunControls } from "../../../core/pipeline.js";
+import type { PipelinePlan } from "../../../core/pipeline.js";
 import type { StudioApi } from "../transport.js";
-import type {
-  PipelineRunStudioCommand,
-  PipelineRunStudioLaunchRequest,
-} from "../../shared/protocol.js";
+import type { PipelineRunStudioCommand } from "../../shared/protocol.js";
 import { commandDescription, errorMessage } from "./common.js";
 import { PlanView } from "./pipelines.js";
 import { useEscapeDismiss } from "../escape-dismiss.js";
-
-export type StudioParameterValue = boolean | number | string;
-
-export type ReadStudioParameterValues = (
-  parameter: CliParameterDescriptor,
-  index: number
-) => readonly StudioParameterValue[];
-
-/** Initial form values that match the rendered controls. */
-export function initialStudioParameterValues(
-  command: PipelineRunStudioCommand
-): StudioParameterValue[][] {
-  return command.parameters.map((parameter) => {
-    if (parameter.type === "boolean") return [Boolean(parameter.default)];
-    if (parameter.multiple) return parameter.choices ? [] : [""];
-    return parameter.default === undefined ? [""] : [parameter.default];
-  });
-}
-
-/** Convert launch-form values into the bounded wire shape expected by the Studio API. */
-export function serializeLaunchValues(
-  command: PipelineRunStudioCommand,
-  readValues: ReadStudioParameterValues
-): PipelineRunStudioLaunchRequest["values"] {
-  const values: PipelineRunStudioLaunchRequest["values"] = {};
-  command.parameters.forEach((parameter, index) => {
-    const parameterValue = readValues(parameter, index);
-    let value: PipelineRunStudioLaunchRequest["values"][string];
-    if (parameter.type === "boolean") {
-      const checked = parameterValue[0];
-      if (checked === Boolean(parameter.default)) return;
-      value = checked;
-    } else if (parameter.multiple) {
-      value =
-        parameter.type === "number"
-          ? parameterValue.filter((value): value is number => typeof value === "number")
-          : parameterValue.filter((value): value is string => typeof value === "string");
-    } else {
-      const single = parameterValue[0];
-      if (single === "" || single === undefined) return;
-      value = single;
-    }
-    Object.defineProperty(values, parameter.key, {
-      value,
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
-  });
-  return values;
-}
-
-/** Select only execution controls for plan requests. */
-export function serializePlanInput(
-  command: PipelineRunStudioCommand,
-  readValues: ReadStudioParameterValues
-): PipelineRunControls {
-  const input: Record<string, boolean | readonly string[]> = {};
-  command.parameters.forEach((parameter, index) => {
-    if (parameter.group !== "execution") return;
-    const values = readValues(parameter, index);
-    if (parameter.type === "boolean") {
-      if (values[0] === true) input[parameter.key] = true;
-      return;
-    }
-    if (parameter.multiple && values.length) {
-      input[parameter.key] = values.filter((value): value is string => typeof value === "string");
-    }
-  });
-  return input as PipelineRunControls;
-}
+import {
+  createStudioLaunchForm,
+  serializeLaunchValues,
+  serializePlanInput,
+  type StudioLaunchForm,
+  type StudioParameterValue,
+} from "../launch-form.js";
+import type { StudioLaunchMetadata } from "../../shared/launch-metadata.js";
 
 function parameterLabel(parameter: CliParameterDescriptor): string {
   return parameter.key
@@ -89,10 +23,13 @@ function parameterLabel(parameter: CliParameterDescriptor): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function parameterHint(parameter: CliParameterDescriptor): string {
+function parameterHint(parameter: CliParameterDescriptor, savedEmpty: boolean): string {
   const details = [];
   if (parameter.description) details.push(parameter.description);
   if (parameter.environment) details.push("Environment fallback: " + parameter.environment);
+  if (parameter.default !== undefined)
+    details.push("Current default: " + JSON.stringify(parameter.default) + ".");
+  if (savedEmpty) details.push("Saved value: empty string. Leave blank to reuse it.");
   if (parameter.multiple)
     details.push(parameter.choices ? "Choose one or more values." : "Enter one value per line.");
   if (parameter.mustExist)
@@ -104,12 +41,20 @@ interface ParameterControlProps {
   index: number;
   onChange(index: number, values: StudioParameterValue[]): void;
   parameter: CliParameterDescriptor;
+  savedEmpty: boolean;
   values: readonly StudioParameterValue[];
 }
 
-function ParameterControl({ index, onChange, parameter, values }: ParameterControlProps) {
+function ParameterControl({
+  index,
+  onChange,
+  parameter,
+  savedEmpty,
+  values,
+}: ParameterControlProps) {
   const id = "run-param-" + index;
-  const hint = parameterHint(parameter);
+  const hint = parameterHint(parameter, savedEmpty);
+  const required = parameter.required && !savedEmpty;
   const label = parameterLabel(parameter);
   if (parameter.type === "boolean") {
     return (
@@ -130,7 +75,7 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
   const fieldLabel = (
     <label for={id}>
       {label}
-      {parameter.required && <span class="required-mark">required</span>}
+      {required && <span class="required-mark">required</span>}
     </label>
   );
   let control;
@@ -140,7 +85,7 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
       <select
         id={id}
         multiple={parameter.multiple}
-        required={parameter.required}
+        required={required}
         value={parameter.multiple ? undefined : (selectedValues[0] ?? "")}
         onChange={(event: TargetedEvent<HTMLSelectElement>) =>
           onChange(
@@ -151,8 +96,14 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
           )
         }
       >
-        {!parameter.multiple && !parameter.required && (
-          <option value="">Use default or leave unset</option>
+        {!parameter.multiple && (
+          <option value="" disabled={required}>
+            {required
+              ? "Choose a value"
+              : savedEmpty
+                ? "Use saved empty string"
+                : "Use default or leave unset"}
+          </option>
         )}
         {parameter.choices.map((choice) => (
           <option
@@ -185,7 +136,7 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
         step={parameter.integer ? "1" : "any"}
         min={parameter.min}
         max={parameter.max}
-        required={parameter.required}
+        required={required}
         onInput={(event) =>
           onChange(
             index,
@@ -210,7 +161,7 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
               : "./file"
             : ""
         }
-        required={parameter.required}
+        required={required}
         onInput={(event) => onChange(index, [event.currentTarget.value])}
       />
     );
@@ -227,10 +178,10 @@ function ParameterControl({ index, onChange, parameter, values }: ParameterContr
 interface CommandFieldsProps {
   command: PipelineRunStudioCommand;
   onChange(index: number, values: StudioParameterValue[]): void;
-  values: readonly (readonly StudioParameterValue[])[];
+  form: StudioLaunchForm;
 }
 
-export function CommandFields({ command, onChange, values }: CommandFieldsProps) {
+export function CommandFields({ command, onChange, form }: CommandFieldsProps) {
   const renderSection = (execution: boolean, title: string, note: string) => {
     const parameters = command.parameters
       .map((parameter, index) => ({ index, parameter }))
@@ -244,7 +195,8 @@ export function CommandFields({ command, onChange, values }: CommandFieldsProps)
             index={index}
             onChange={onChange}
             parameter={parameter}
-            values={values[index] ?? []}
+            savedEmpty={form.preservedKeys.has(parameter.key) && form.values[index]?.[0] === ""}
+            values={form.values[index] ?? []}
           />
         ))}
       </div>
@@ -290,16 +242,28 @@ export function CommandFields({ command, onChange, values }: CommandFieldsProps)
 interface LaunchModalProps {
   api: StudioApi;
   commands: readonly PipelineRunStudioCommand[];
-  commandId: string | null;
+  commandId: string;
+  previousLaunch?: StudioLaunchMetadata;
   onClose(): void;
   /** Receives the new run and the command (pipeline) that started it. */
   onLaunched(runId: string, commandId: string): void;
 }
 
-export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: LaunchModalProps) {
-  const [selectedId, setSelectedId] = useState(commandId ?? commands[0]?.id ?? "");
+export function LaunchModal({
+  api,
+  commands,
+  commandId,
+  previousLaunch,
+  onClose,
+  onLaunched,
+}: LaunchModalProps) {
+  const [selectedId, setSelectedId] = useState(commandId);
   const command = commands.find((candidate) => candidate.id === selectedId);
-  const [values, setValues] = useState<StudioParameterValue[][]>([]);
+  const [form, setForm] = useState<StudioLaunchForm>(() =>
+    command
+      ? createStudioLaunchForm(command, previousLaunch)
+      : { values: [], preservedKeys: new Set() }
+  );
   const [plan, setPlan] = useState<PipelinePlan | null>(null);
   const [error, setError] = useState("");
   const [launching, setLaunching] = useState(false);
@@ -308,26 +272,27 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
   const planVersion = useRef(0);
 
   useEffect(() => {
-    setSelectedId(commandId ?? commands[0]?.id ?? "");
+    setSelectedId(commandId);
   }, [commandId, commands]);
 
   useEffect(() => {
     planVersion.current += 1;
-    setValues(command ? initialStudioParameterValues(command) : []);
+    setForm(
+      command
+        ? createStudioLaunchForm(command, previousLaunch)
+        : { values: [], preservedKeys: new Set() }
+    );
     setPlan(null);
     setError("");
     requestAnimationFrame(() =>
       firstField.current?.querySelector<HTMLElement>("input, select, textarea")?.focus()
     );
-  }, [command]);
+  }, [command, previousLaunch]);
 
   useEscapeDismiss(onClose, {
-    active: commandId !== null,
     blocked: launching || planning,
     modal: true,
   });
-
-  if (commandId === null) return null;
 
   const close = () => {
     if (!launching && !planning) onClose();
@@ -335,8 +300,9 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
   const updateValue = (index: number, next: StudioParameterValue[]) => {
     if (!command) return;
     planVersion.current += 1;
-    setValues((current) =>
-      current.map((value, candidateIndex) => {
+    setForm((current) => ({
+      ...current,
+      values: current.values.map((value, candidateIndex) => {
         if (candidateIndex === index) return next;
         const parameter = command.parameters[candidateIndex];
         return command.parameters[index]?.exclusive &&
@@ -346,18 +312,9 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
           parameter.multiple
           ? []
           : value;
-      })
-    );
+      }),
+    }));
     setPlan(null);
-  };
-  const readValues = (parameter: CliParameterDescriptor, index: number) => {
-    const stored = values[index] ?? [];
-    if (!parameter.multiple || parameter.choices) return stored;
-    return String(stored[0] ?? "")
-      .split(/\r?\n/)
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .map((value) => (parameter.type === "number" ? Number(value) : value));
   };
   const preview = async () => {
     if (!command?.canPlan || planning) return;
@@ -365,7 +322,7 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
     setPlanning(true);
     setError("");
     try {
-      const nextPlan = await api.previewPlan(command.id, serializePlanInput(command, readValues));
+      const nextPlan = await api.previewPlan(command.id, serializePlanInput(command, form));
       if (planVersion.current === requestedVersion) setPlan(nextPlan);
     } catch (caught) {
       if (planVersion.current === requestedVersion) setError(errorMessage(caught));
@@ -379,10 +336,7 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
     setLaunching(true);
     setError("");
     try {
-      onLaunched(
-        await api.launch(command.id, serializeLaunchValues(command, readValues)),
-        command.id
-      );
+      onLaunched(await api.launch(command.id, serializeLaunchValues(command, form)), command.id);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -421,6 +375,25 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
             field?.closest("details")?.setAttribute("open", "");
           }}
         >
+          {form.review && (
+            <div class="field-hint" role="status">
+              Review the saved inputs and supply any missing required values. This creates a new
+              launch. Unrecorded inputs may use the current defaults or environment fallbacks shown
+              below.
+              {form.review.definitionChanged && (
+                <p>
+                  The pipeline definition changed or could not be compared. This run will use the
+                  current definition.
+                </p>
+              )}
+              {form.review.skipped.length > 0 && (
+                <p>
+                  Saved inputs no longer compatible with this command were left blank:{" "}
+                  {form.review.skipped.join(", ")}.
+                </p>
+              )}
+            </div>
+          )}
           <div class="field">
             <label for="launchCommand">Pipeline command</label>
             <select
@@ -441,7 +414,7 @@ export function LaunchModal({ api, commands, commandId, onClose, onLaunched }: L
             </select>
           </div>
           <div ref={firstField}>
-            {command && <CommandFields command={command} onChange={updateValue} values={values} />}
+            {command && <CommandFields command={command} onChange={updateValue} form={form} />}
           </div>
           {plan && (
             <div class="plan-result" aria-live="polite">

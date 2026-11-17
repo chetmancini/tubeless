@@ -392,6 +392,10 @@ Read the corresponding package recipe before using these features:
   confirms admission only; use `app.getLaunch(env, launchId)` and its linked run.
   Keys survive history clearing and never expire automatically. Keep this capability
   in trusted Worker code and follow the deploy guide's scheduled Worker example.
+  Add a service `actor` and `trigger` for launch attribution. Input history defaults
+  to no values; opt in only suitable parameter keys with the app's per-command
+  `recordInputs` allowlist. Run again reviews compatible saved inputs against the
+  current command and creates a fresh launch; it never replays the previous key.
 - Use `context.recordArtifact({ operation, artifact })` within ordinary steps to
   record successful reads, writes, or verified reuse without changing domain outputs.
   Multiple reports support batches; earlier reports survive later failure. Keep

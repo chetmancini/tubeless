@@ -244,6 +244,11 @@ their source files.
   persistence port. `launch-admission-sqlite.ts` composes key reservation with the
   launch adapter's synchronous creation operation in one transaction; storage
   returns the original record, leaving intent comparison to admission policy.
+  `hosting/launch-metadata.ts` owns opt-in input capture; `launch-metadata-sqlite.ts`
+  stores it in the admission transaction and joins it to the root run. Its records
+  are history and can be deleted without deleting admission keys. The pure schema
+  lives in `studio/shared/launch-metadata.ts`. `admitted-studio-launcher.ts` bridges
+  durable admission to browser start acknowledgements, registering before dispatch. Admission returns a dispatch job only to the reservation creator; the target owns dispatch and strips that job from public receipts.
   `hosting/process-executor.test-support.ts` exercises the shared contracts in a
   Node process; the CLI retains its existing execution lifecycle.
   See the [hosted execution and ingest design](../design/hosted-run-ingest.md) before
@@ -278,8 +283,10 @@ their source files.
   coordinator dispatch. Key records survive event-history clearing and never expire
   automatically. Prepared dispatches join the coordinator's ordinary drain/close
   lifecycle. Code launches pin an explicit deployment identity;
-  the run object checks it before executing. Browser launch acknowledgements retain
-  their existing start-event contract. See the [admission design](../design/cloudflare-launch-admission.md).
+  the run object checks it before executing. Browser launches share admission and retain
+  their existing start-event contract. Verified Access actors reach Studio through
+  the private `serve` RPC, never identity headers. Studio's `launch-history.tsx` and
+  `launch-form.ts` own metadata display and the canonical form model, including current-schema reuse and serialization. See the [admission design](../design/cloudflare-launch-admission.md).
   `tubeless/cloudflare/transcript` is also platform-neutral. Its explicit writer
   retries bounded trusted RPC delivery; the Studio object owns run-identity checks,
   content reads and atomic history/content deletion, refusing active launches.

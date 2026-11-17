@@ -27,6 +27,8 @@ import {
 import type { BatchAcknowledgement, HostedLaunchStore } from "./launch-store.js";
 import type { HostedLaunchAdmissionStore, HostedLaunchStatus } from "./launch-admission.js";
 import { createSqliteLaunchAdmissionStore } from "./launch-admission-sqlite.js";
+import { createSqliteLaunchMetadataStore } from "./launch-metadata-sqlite.js";
+import type { StudioLaunchMetadata } from "../studio/shared/launch-metadata.js";
 import type { PipelineRunEventQuery, PipelineRunEventReader } from "../run-store/run-store.js";
 import {
   openSubtreeStartsQuery,
@@ -125,6 +127,7 @@ export class SqliteHostedLaunchStore
   implements HostedLaunchStore, HostedAttemptStore, HostedCollectorStore
 {
   readonly admissions: HostedLaunchAdmissionStore;
+  readonly metadata: ReturnType<typeof createSqliteLaunchMetadataStore>;
   constructor(
     private readonly storage: SqliteLaunchStorage,
     private readonly events: LaunchEventStore & PipelineRunEventReader,
@@ -187,9 +190,11 @@ export class SqliteHostedLaunchStore
       )`,
     ])
       storage.sql.exec(statement);
+    this.metadata = createSqliteLaunchMetadataStore(storage);
     this.admissions = createSqliteLaunchAdmissionStore(
       storage,
-      (launchId, commandId, createdAtMs) => this.#create(launchId, commandId, createdAtMs)
+      (launchId, commandId, createdAtMs, metadata) =>
+        this.#create(launchId, commandId, createdAtMs, metadata)
     );
   }
 
@@ -217,13 +222,19 @@ export class SqliteHostedLaunchStore
     };
   }
 
-  #create(launchId: string, commandId: string, nowMs: number): void {
+  #create(
+    launchId: string,
+    commandId: string,
+    nowMs: number,
+    metadata?: StudioLaunchMetadata
+  ): void {
     this.storage.sql.exec(
       "INSERT INTO tubeless_launches (launch_id, command_id, state, created_at_ms) VALUES (?, ?, 'starting', ?)",
       launchId,
       commandId,
       nowMs
     );
+    if (metadata) this.metadata.record(metadata);
   }
 
   #get(launchId: string): LaunchRecord | undefined {

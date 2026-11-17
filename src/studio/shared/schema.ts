@@ -4,6 +4,7 @@ import {
   STUDIO_PIPELINE_RECENT_RUNS,
 } from "./limits.js";
 import type { CliParameterDescriptor } from "../../cli/cli.js";
+import { studioLaunchMetadataSchema } from "./launch-metadata.js";
 import type { PipelinePlan, PipelineError, PipelineRunControls } from "../../core/pipeline.js";
 import {
   storedDefinitionSummarySchema,
@@ -87,6 +88,7 @@ export const studioCommandsSchema = wireObject({
       id,
       name: id,
       description: wireOptional(text),
+      definitionId: wireOptional(id),
       parameters: wireArray(studioParameterSchema),
     })
   ),
@@ -185,6 +187,7 @@ export const studioChildStepSchema = wireObject({
   count,
 });
 export const studioRunDetailSchema = wireObject({
+  launch: wireOptional(wireUnion([studioLaunchMetadataSchema, wireLiteral(null)])),
   // Whether the transcript view is available, including live agents awaiting their first record.
   transcriptAvailable: wireOptional(wireBoolean()),
   run: storedPipelineRunSchema,

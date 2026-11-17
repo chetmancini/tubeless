@@ -28,14 +28,14 @@ const effect = step("effect", { run: async (_inputs, context) => {
   return count + 1;
 } });
 const project = defineProject("launch-test", [definePipeline({ id: "count", steps: [effect] })]);
-const app = createCloudflareApp(project, { deploymentId: env.DEPLOYMENT_ID });
+const app = createCloudflareApp(project, { deploymentId: env.DEPLOYMENT_ID, recordInputs: { count: ["name"] } });
 // Only this test harness exposes the trusted capability through HTTP. The library
 // handler below must continue to expose only its authenticated Studio routes.
 export default { async fetch(request, env) {
   const url = new URL(request.url);
   if (url.pathname === "/_test/launch") {
-    const { key, values } = await request.json();
-    return Response.json(await app.launch(env, "count", values, { idempotencyKey: key }));
+    const { key, values, actor, trigger } = await request.json();
+    return Response.json(await app.launch(env, "count", values, { idempotencyKey: key, actor, trigger }));
   }
   if (url.pathname === "/_test/status")
     return Response.json(await app.getLaunch(env, url.searchParams.get("id")) ?? null);
@@ -135,6 +135,41 @@ it("admits once over RPC, survives a full workerd restart, and conflicts after r
   runtime = createRuntime("release-1");
   expect(await launch("daily.1", { name: "daily" })).toEqual(receipt);
   expect(await status(receipt.launchId)).toMatchObject({ state: "finished" });
+  const original = await status(receipt.launchId);
+  const metadata = await (
+    await runtime.dispatchFetch(`http://localhost/api/runs/${encodeURIComponent(original.runId!)}`)
+  ).json();
+  expect(metadata).toMatchObject({
+    launch: {
+      commandId: "count",
+      trigger: "code",
+      inputs: { recorded: [{ key: "name", value: "daily" }] },
+    },
+  });
+  const attributed = (await (
+    await runtime.dispatchFetch("http://localhost/_test/launch", {
+      method: "POST",
+      body: JSON.stringify({
+        key: "queue.1",
+        values: { name: "queue" },
+        actor: { id: "worker", kind: "service" },
+        trigger: "queue",
+      }),
+    })
+  ).json()) as CloudflareLaunchResult;
+  if (!attributed.accepted) throw new Error("Expected admission");
+  await vi.waitFor(
+    async () => expect(await status(attributed.launchId)).toMatchObject({ state: "finished" }),
+    { timeout: 10_000 }
+  );
+  const attributedStatus = await status(attributed.launchId);
+  expect(
+    await (
+      await runtime.dispatchFetch(
+        `http://localhost/api/runs/${encodeURIComponent(attributedStatus.runId!)}`
+      )
+    ).json()
+  ).toMatchObject({ launch: { actor: { id: "worker", kind: "service" }, trigger: "queue" } });
   await runtime.dispose();
   runtime = createRuntime("release-2");
   expect(await launch("daily.1", { name: "daily" })).toMatchObject({

@@ -120,6 +120,44 @@ function setup(
 }
 
 describe("Studio object", () => {
+  it("uses trusted browser identity, ignores forged attribution, and replays a key without redispatch", async () => {
+    const { studio, starts, settled } = setup();
+    const request = () =>
+      new Request("https://studio.example/api/commands/greeting/runs", {
+        method: "POST",
+        headers: {
+          origin: "https://studio.example",
+          "content-type": "application/json",
+          "x-tubeless-studio-launch": "1",
+          "cf-access-authenticated-user-email": "forged",
+        },
+        body: JSON.stringify({
+          idempotencyKey: "browser.1",
+          values: { name: "Ada" },
+          actor: { id: "forged", kind: "service" },
+          trigger: "queue",
+        }),
+      });
+    const actor = { id: "verified-user", kind: "user" as const, label: "Ada" };
+    const [response, duplicate] = await Promise.all([
+      studio.fetch(request(), actor),
+      studio.fetch(request(), actor),
+    ]);
+    expect(response.status).toBe(202);
+    const receipt = (await response.json()) as { runId: string };
+    expect(await duplicate.json()).toEqual(receipt);
+    await Promise.all(settled);
+    expect(await (await studio.fetch(request(), { id: "other", kind: "user" })).json()).toEqual(
+      receipt
+    );
+    const detail = await (
+      await studio.fetch(new Request(`https://studio.example/api/runs/${receipt.runId}`))
+    ).json();
+    expect(detail).toMatchObject({
+      launch: { actor, trigger: "manual", inputs: { recorded: [] } },
+    });
+    expect(starts).toHaveLength(1);
+  });
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});

@@ -1,6 +1,7 @@
 import { parseStudioPayload, studioParameterSchema } from "./schema.js";
 import type { CliParameterDescriptor } from "../../cli/cli.js";
 import type { PipelinePlan, PipelineRunControls } from "../../core/pipeline.js";
+import type { StudioLaunchContext } from "./launch-metadata.js";
 
 /** Untyped wire shape of a studio plan input; fields validated before use. */
 interface StudioPlanInputWire {
@@ -15,6 +16,7 @@ export interface PipelineRunStudioCommand {
   readonly id: string;
   readonly name: string;
   readonly parameters: readonly CliParameterDescriptor[];
+  readonly definitionId?: string;
 }
 
 export type PipelineRunStudioLaunchResult =
@@ -26,6 +28,7 @@ export type PipelineRunStudioCancelResult =
   | { cancelled: false };
 
 export interface PipelineRunStudioLaunchRequest {
+  readonly idempotencyKey?: string;
   readonly values: Record<
     string,
     boolean | number | string | readonly number[] | readonly string[]
@@ -36,7 +39,8 @@ export interface PipelineRunStudioLauncher {
   readonly commands: readonly PipelineRunStudioCommand[];
   launch(
     commandId: string,
-    values: PipelineRunStudioLaunchRequest["values"]
+    values: PipelineRunStudioLaunchRequest["values"],
+    context?: StudioLaunchContext
   ): Promise<PipelineRunStudioLaunchResult>;
   cancel?(runId: string): PipelineRunStudioCancelResult | Promise<PipelineRunStudioCancelResult>;
   /** Live run ids owned by this launcher. Required with `cancel` for studio to advertise Cancel run. */
@@ -51,6 +55,12 @@ export function parseStudioLaunchRequest(
     return undefined;
   }
   const values = value.values;
+  const idempotencyKey = "idempotencyKey" in value ? value.idempotencyKey : undefined;
+  if (
+    idempotencyKey !== undefined &&
+    (typeof idempotencyKey !== "string" || !/^[a-zA-Z0-9._:-]{1,200}$/.test(idempotencyKey))
+  )
+    return undefined;
   if (typeof values !== "object" || values === null || Array.isArray(values)) return undefined;
   const entries = Object.entries(values);
   if (entries.length > 128) return undefined;
@@ -69,7 +79,10 @@ export function parseStudioLaunchRequest(
     }
     return undefined;
   }
-  return { values: values as PipelineRunStudioLaunchRequest["values"] };
+  return {
+    values: values as PipelineRunStudioLaunchRequest["values"],
+    ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
+  };
 }
 
 export function parseStudioPlanInput(value: unknown): PipelineRunControls | undefined {

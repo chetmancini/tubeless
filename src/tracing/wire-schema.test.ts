@@ -1,5 +1,13 @@
 import { expect, it } from "vitest";
-import { wireObject, wireOptional, wireString } from "./wire-schema.js";
+import { wireLiteral, wireObject, wireOptional, wireString } from "./wire-schema.js";
+
+it("encodes and validates null literals", () => {
+  const schema = wireLiteral(null);
+  expect(schema.jsonSchema).toEqual({ const: null, type: "null" });
+  expect(schema.decode(null, "value")).toBeNull();
+  for (const value of [undefined, false, 0, "null", {}])
+    expect(() => schema.decode(value, "value")).toThrow("value must be null");
+});
 
 it("preserves tolerant history decoding while strict envelopes reject undeclared fields", () => {
   const shape = { id: wireString(), label: wireOptional(wireString()) };
