@@ -66,17 +66,15 @@ const rows = await ImportPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] })
 // ["alpha", "beta"]
 ```
 
-Omitted `targets` and `finalize` use the last step in execution order: `normalize`.
-Missing output returns `undefined`; use `requireOutputs` when absence should fail.
-
-`runOrThrow` returns the result or throws on failure. Use `run` for reports, `plan`
-for previews, and `toMermaid` for diagrams. See [getting started](./docs/getting-started.md).
+The result is the last step's output (`normalize`). `runOrThrow` returns it or
+throws; use `run` for reports, `plan` for previews, and `toMermaid` for diagrams.
+See [getting started](./docs/getting-started.md).
 
 ## Use the CLI
 
-Projects made with `defineProject(id, [pipeline, command])` register each pipeline once and are directly usable by the CLI;
-schema-backed pipelines get inferred flags automatically. See the [CLI guide](./docs/cli.md)
-for direct project usage and advanced custom command adapters. From this repository:
+A project made with `defineProject(id, [pipeline, command])` is directly usable by
+the CLI; schema-backed pipelines get inferred flags. See the [CLI guide](./docs/cli.md).
+From this repository:
 
 ```sh
 bunx tubeless list --project examples/tubeless.project.ts
@@ -88,8 +86,8 @@ In your app, add `tubeless.project.ts` and omit `--project`. Pass application
 flags after `--`. Record runs with `--store` or `--trace`, then inspect them with
 `tubeless history` or the [local studio](./docs/studio.md).
 
-Use `tubeless auth login` and `tubeless cloud list` to select a Cloud pipeline by name or slug; see [Cloud CLI usage](./docs/cli.md#tubeless-cloud).
-To host Studio in your own Cloudflare account, see [Deploy to Cloudflare](./docs/deploy-cloudflare.md).
+For Cloud pipelines see [Cloud CLI usage](./docs/cli.md#tubeless-cloud); to host Studio in
+your own Cloudflare account see [Deploy to Cloudflare](./docs/deploy-cloudflare.md).
 
 ## Find your route
 
@@ -97,11 +95,10 @@ To host Studio in your own Cloudflare account, see [Deploy to Cloudflare](./docs
   [dry runs and write gates](./examples/publish-with-gates.ts) to a publishing job.
 - Build workflows with [child pipelines](./examples/child-pipeline.ts) and [fan-out](./examples/fan-out-progress.ts).
 - Run `tubeless agent --model gpt-5.4-mini` for a [conversation loop with live pipeline reporting](./docs/cli.md#prompt-a-workspace-agent), or build [agents](./docs/agents.md) with custom tools, subagents, and durable checkpoints.
-- Optional: the [peloton example](./examples/peloton.ts) is a cycling-themed kitchen sink for the live TUI.
 
 The [recipe index](./docs/recipes.md) covers validation, retries, tracing, testing,
-and more. For help authoring pipelines with a coding agent, install the
-[agent skill pack](./docs/agent-skills.md) with `npx skills add chetmancini/tubeless`.
+and more. To author pipelines with a coding agent, install the
+[agent skill pack](./docs/agent-skills.md): `npx skills add chetmancini/tubeless`.
 
 ## Documentation
 

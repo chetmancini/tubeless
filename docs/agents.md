@@ -1,50 +1,35 @@
 # Agents and durable execution
 
-`tubeless/agent` builds an ordinary pipeline around a bounded decision loop.
-Each turn requests a decision, validates it, executes a batch of registered
-tools, and reduces their outcomes into the next state. A finish decision
-validates and returns the agent's result. Two factories share that loop:
+`tubeless/agent` builds an ordinary pipeline around a bounded decision loop: each
+turn requests a decision, validates it, runs a batch of registered tools, and
+reduces their outcomes into the next state. A finish decision validates and returns
+the result. Two factories share that loop:
 
-- `defineAgent({ id, model })` uses a model as the decision source. Its default
-  `{ task } → { answer }` shape serves prompts and the `tubeless agent` REPL; an
-  `inputSchema`, `task` mapper and `resultSchema` make it a typed step that works
-  autonomously on upstream pipeline data. See [model-backed agents](#default-model-backed-agent).
-- `defineAgentLoop({ id, decide, … })` takes your own `decide` callback and state for
-  scripted, rule-based or hand-integrated decisions.
+- `defineAgent({ id, model })` uses a model as the decision source. The default
+  `{ task } → { answer }` shape serves prompts and the `tubeless agent` REPL; add
+  `inputSchema`, `task` and `resultSchema` for a typed step over pipeline data.
+- `defineAgentLoop({ id, decide, … })` takes your own `decide` callback and state
+  for scripted, rule-based or hand-integrated decisions.
 
-The [scripted agent recipe](../examples/agent.ts) runs without model credentials:
+The [scripted agent recipe](../examples/agent.ts) needs no credentials:
 
 ```sh
 make run FILE=examples/agent.ts ARGS='--question "hello tubeless"'
-make run FILE=examples/agent.ts ARGS='--question "missing word"'
 make run FILE=examples/agent.ts ARGS='--dry-run --question "preview"'
-make plan FILE=examples/agent.ts
 ```
-
-It creates a variable number of calls, preserves their decision order, recovers
-from a deliberate domain error, and transforms the final answer. Its
-`defineAgentLoop` `decide` callback is scripted; most model-backed work uses
-`defineAgent` below instead.
 
 ## Default model-backed agent
 
-For a terminal prompt loop with model selection and the live pipeline reporter, use
-`tubeless agent --model gpt-5.4-mini`. Enter a task, read the answer, then prompt
-again; `/model <name>` changes the next task's model while retaining context.
-Completed prompts share conversation state through a [session](#chat-sessions); `/clear` starts fresh.
-`--prompt 'task'` runs once, `--model-module ./model.ts`
-loads a custom provider factory, and `--store` or `--trace` records each prompt's run
-for `tubeless history` and Studio. See the [agent CLI](./cli.md#prompt-a-workspace-agent)
-for setup, cancellation, budgets, and the plugin contract.
+For a terminal prompt loop, run `tubeless agent --model gpt-5.4-mini`. Prompts share
+a [session](#chat-sessions); `/model <name>` switches models and `/clear` starts
+fresh. `--prompt 'task'` runs once, `--model-module ./model.ts` loads a custom
+provider, and `--store` or `--trace` records runs for `tubeless history` and Studio.
+`tubeless agent <agent-id|file>` runs an existing agent that keeps the default
+`{ task }` / `{ answer }` schemas; use `tubeless run` for typed agents. See the
+[agent CLI](./cli.md#prompt-a-workspace-agent) and
+[agent selection](./cli.md#select-a-defined-agent).
 
-To use an existing agent with its own model, tools and environment, run
-`tubeless agent <agent-id|file>`. Use `--project` for an explicit project or
-`--export` for a named file export. The CLI accepts agents with the default
-`{ task }` and `{ answer }` schemas and preserves their configuration; use
-`tubeless run` for typed agents. See [agent selection](./cli.md#select-a-defined-agent)
-and the [credential-free chat recipe](../examples/agent-chat.ts).
-
-For general workspace tasks, supply a model and an ID:
+In code, supply a model and an ID:
 
 ```ts
 import { defineAgent } from "tubeless/agent";
@@ -58,116 +43,105 @@ const { answer } = await agent.runOrThrow(
 );
 ```
 
+The factory supplies the input/result schemas, the [default tools](#default-workspace-tools),
+a coding prompt, conversation state and reduction. Add `instructions`, `tools`
+(extend or override defaults) and `limits`. The result is an ordinary pipeline:
+`pipelineTool`, project registration, traces and cancellation all work.
+
+With project context (the default for `{ task }` agents), the prompt loads
+`AGENTS.md` files from the nearest repository root down to the run's cwd; more
+specific files win. Missing files are fine; unreadable, non-text or oversized
+ones fail before any model request. Discovery beyond startup is model-driven, not
+an access control. Set `projectContext: false` for a short task-neutral prompt
+(the default for typed agents). A live run resolves cwd to its physical directory
+once before any decision or tool call. Tasks are limited to 16 KiB.
+
 ### Choose a model provider
 
-`model` accepts any `AgentModel`. Tubeless ships two optional, dependency-free adapters
-with the same option names, so switching providers changes one import and one call:
+`model` accepts any `AgentModel`. Two optional, dependency-free adapters share option
+names, so switching providers changes one import:
 
 ```ts
-import { defineAgent } from "tubeless/agent";
-import { anthropicModel } from "tubeless/agent/anthropic";
-import { openaiModel } from "tubeless/agent/openai";
-
-// Claude through the Anthropic Messages API (ANTHROPIC_API_KEY).
-const claude = defineAgent({ id: "coding", model: anthropicModel() });
-
-// OpenAI through the Responses API (OPENAI_API_KEY).
-const gpt = defineAgent({ id: "coding", model: openaiModel() });
+import { anthropicModel } from "tubeless/agent/anthropic"; // ANTHROPIC_API_KEY
+import { openaiModel } from "tubeless/agent/openai"; // OPENAI_API_KEY
 ```
 
 | Option              | `anthropicModel()`                                                         | `openaiModel()`                                     |
 | ------------------- | -------------------------------------------------------------------------- | --------------------------------------------------- |
 | `model`             | `ANTHROPIC_MODEL`, else `claude-opus-5-5`                                  | `OPENAI_MODEL`, else `gpt-5.4-mini`                 |
 | `apiKey`            | `ANTHROPIC_API_KEY` (`x-api-key`); else `ANTHROPIC_AUTH_TOKEN` as a bearer | `OPENAI_API_KEY` (bearer)                           |
-| `authToken`         | Explicit bearer token, for compatible servers that expect one              | Not applicable (`apiKey` is already a bearer)       |
+| `authToken`         | Explicit bearer token, for compatible servers                              | Not applicable                                      |
 | `baseUrl`           | `ANTHROPIC_BASE_URL`, else `https://api.anthropic.com` (no `/v1`)          | `OPENAI_BASE_URL`, else `https://api.openai.com/v1` |
-| `reasoningEffort`   | Omitted; `low` through `max` sends `output_config.effort`                  | Omitted; `none` through `max` sends `reasoning`     |
-| `compactAfterBytes` | 768 KiB; `null` disables compaction                                        | 768 KiB; `null` disables compaction                 |
+| `reasoningEffort`   | Omitted; `low` through `max`                                               | Omitted; `none` through `max`                       |
+| `compactAfterBytes` | 768 KiB; `null` disables compaction                                        | Same                                                |
 | `timeoutMs`         | 600000 per decision                                                        | 60000 per decision                                  |
-| `maxRetries`        | 2 extra attempts per HTTP request; `0` disables                            | Same                                                |
+| `maxRetries`        | 2 retries per HTTP request (408, 429, 5xx, dropped connection); `0` off    | Same                                                |
 | `maxTokens`         | 32000 output tokens per request, thinking included                         | Not applicable                                      |
 | `strict`            | `true`; `false` sends tools without strict mode                            | Always strict                                       |
-| `promptCaching`     | `true` (5 minutes), `"5m"`, `"1h"`, or `false` to disable caching          | Not applicable                                      |
+| `promptCaching`     | `true` (5 minutes), `"5m"`, `"1h"`, or `false`                             | Not applicable                                      |
 
-Every environment value is read when a decision executes, so imports, plans and dry
-runs need no credentials. Options always take precedence over the environment.
+- Environment values are read when a decision executes, so imports, plans and dry
+  runs need no credentials. Options override the environment.
+- Live runs make paid API requests and execute workspace tools with the host's
+  permissions. Dry runs skip the model and have no final answer.
+- `timeoutMs` covers one decision, including compaction. A timeout fails the run
+  (`failed`, not `cancelled`); only the run's abort signal cancels it.
+- Reasoning settings are omitted by default so models that reject them stay
+  compatible. Support depends on the model.
+- Provider requests do not follow redirects; configure the final base URL.
+- Tool and result schemas must fit the provider's strict subset. Both adapters wrap
+  tool arguments in `{ input }` and reject `$ref`-style references locally (supply an
+  inline `inputJsonSchema` instead). OpenAI additionally requires every object to set
+  `additionalProperties: false` and list all properties in `required`. Anthropic
+  strict mode allows optional properties, but at most 20 tools per request including
+  the finish tool; set `strict: false`, narrow `defaultTools`, or use
+  [code mode](#code-mode) for larger sets. Failures surface at definition as
+  `TUBELESS_AGENT_INVALID_DEFINITION` (via `AgentModel.checkDescriptors`, which both
+  adapters implement; wrapping an adapter in your own function drops that hook).
+- Large tool batches are shown to the model as marked previews (`truncated: true`)
+  while the harness keeps full outcomes. Compaction can lose exact history, so the
+  prompt tells the model to re-read sources when exact text matters.
 
-`timeoutMs` bounds one decision, including any compaction request. When it elapses,
-the decision fails with `OpenAI decision timed out after N ms` (or `Anthropic …`) and
-the run reports `failed`, not `cancelled`. Only the run's own abort signal cancels it.
-The executable [Claude recipe](../examples/agent-model-anthropic.ts) is registered as
-`claude-coding-agent` beside the OpenAI-backed `coding-agent`. To use another
-server that implements either API, see [compatible APIs](#compatible-apis).
+Executable recipes: [OpenAI](../examples/agent-model.ts) and
+[Claude](../examples/agent-model-anthropic.ts).
 
-The factory supplies the `{ task: string }` input and `{ answer: string }` result
-schemas, default tools, a short coding prompt, conversation state, and reduction.
-Add `instructions` to customize its behavior, `tools` to extend or override the
-defaults, and `limits` to bound execution. It remains an ordinary pipeline;
-`pipelineTool`, project registration, traces, and cancellation work as before.
-Use `defineAgentLoop` with `decide` when you need custom state or decisions.
+`AgentModel` is a provider-independent callback: given the task, instructions, its
+previous plain-data `conversation` (initially `null`) and the latest tool outcomes,
+it returns an untrusted `decision` plus the next `conversation`. Tubeless validates
+the decision and owns a frozen copy of the state.
 
 ### Prompt caching and usage traces
 
-Both adapters preserve native history and keep tool definitions stable during a run.
-OpenAI uses automatic prompt caching. Anthropic places an explicit cache breakpoint
-after the shared system instructions and a moving automatic breakpoint on the
-conversation. The system breakpoint lets separate tasks reuse the same tools and
-instructions, subject to the provider's minimum cacheable length. Set
-`anthropicModel({ promptCaching: "1h" })` for longer pauses; the one-hour lifetime has
-a higher write price. `promptCaching: false` omits all cache controls for compatible
-servers that reject them. See [OpenAI caching](https://developers.openai.com/api/docs/guides/prompt-caching)
+OpenAI uses automatic prompt caching. Anthropic caches the shared system
+instructions (so separate tasks reuse tools and instructions, subject to the
+provider's minimum length) and the growing conversation. Use `promptCaching: "1h"`
+for longer pauses at a higher write price, or `false` for servers that reject cache
+controls. See [OpenAI caching](https://developers.openai.com/api/docs/guides/prompt-caching)
 and [Anthropic caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
 
-Both adapters compact completed history at 768 KiB by default. Anthropic also
-compacts when the complete decision request, including tools and instructions,
-exceeds 768 KiB, leaving 256 KiB below the 1 MiB ceiling for the next assistant
-reply and compaction envelope. This full-request trigger applies even with a
-larger explicit history threshold. Newly added tool results can be shortened to
-fit the compaction request. OpenAI also compacts when a complete decision would
-exceed the request ceiling. These byte thresholds preserve longer reusable
-prefixes; they are not token counts or a guarantee that a model's context window
-will fit. For smaller-context models, set a lower `compactAfterBytes` using observed
-token usage, with room for tool results and model output. `null` disables all
-compaction triggers but still enforces the HTTP request limit.
+Compaction thresholds are byte counts, not tokens, and do not guarantee a model's
+context window fits. For smaller-context models set a lower `compactAfterBytes`
+from observed usage; `null` disables compaction but still enforces the 1 MiB
+request and 2 MiB response limits.
 
-With tracing enabled (`--trace`, `--store`, or a `tracing.exporter`), every provider
-request emits a `step.attempted` event with `agent.model.*` attributes:
+With tracing enabled (`--trace`, `--store` or a `tracing.exporter`), every provider
+request emits a `step.attempted` event with `agent.model.*` attributes: `provider`,
+`name`, `operation` (`decision` or `compaction`), `request`, `durationMs`,
+`httpStatus`, `inputTokens`, `outputTokens`, cache read/write counters
+(`cacheReadTokens`, `cacheWriteTokens`, plus per-lifetime variants),
+`uncachedInputTokens` and `reasoningTokens`. Only allowlisted numeric usage and
+request metadata are recorded, never prompts, responses or credentials. An absent
+counter was never reported; zero was reported as zero. Retries are separate events.
 
-| Attribute                                    | Meaning                                                                                             |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `provider`, `name`, `operation`              | Provider, selected model, and `decision` or `compaction`                                            |
-| `request`, `durationMs`, `responseReceived`  | One-based request within the decision callback, elapsed time, and whether a parsed response arrived |
-| `httpStatus`                                 | HTTP status of a failed exchange, when a response arrived                                           |
-| `inputTokens`, `outputTokens`                | Provider-reported usage; input includes cached reads and writes                                     |
-| `cacheReadTokens`, `cacheWriteTokens`        | Cached input reads and writes, when reported                                                        |
-| `cacheWrite5mTokens`, `cacheWrite1hTokens`   | Anthropic writes by lifetime, when reported                                                         |
-| `cacheWrite30mTokens`, `cacheWrite12hTokens` | OpenAI writes by lifetime, when reported                                                            |
-| `uncachedInputTokens`, `reasoningTokens`     | Anthropic uncached input or OpenAI reasoning output, when reported                                  |
-
-For example, `agent.model.cacheReadTokens` is the full attribute name. Missing or
-invalid counters stay absent; zero means the provider explicitly reported zero.
-Each retried attempt is its own event with the next `request` number, and
-`durationMs` excludes the backoff wait.
-Anthropic input totals require valid uncached input in every usage entry and valid
-cache counters wherever supplied; missing optional cache counters contribute zero.
-A missing or invalid required counter omits the total while other valid counters
-remain available. Anthropic compaction includes the billed counters from `usage.iterations`. Reminder
-requests and compaction calls have their own events, including usage reported on
-responses that later fail validation. Transport failures carry no token estimate.
-Only allowlisted numeric usage and request metadata are recorded, without prompt,
-response, or credential content. `tubeless history <run-id>` sums them per agent and
-per run: the text view prints a `Usage` line per agent and a `Usage total` line per
-provider and model, and `--json` adds `usage` on each turn, `usage` (this agent's own
-turns) and `subtreeUsage` (own turns plus every descendant agent) on each agent, and
-`agentHistory.usage` for the run. An absent counter was never reported, never zero;
-`requestsWithoutUsage` above zero makes the sums a lower bound; the printed percentage
-is cache-read tokens divided by input tokens. Tubeless reports tokens only, so apply
-the selected model's prices to the per-model sums yourself.
+`tubeless history <run-id>` sums usage per agent and run (`--json` adds `usage` per
+turn and agent, `subtreeUsage` including descendants, and `agentHistory.usage` for
+the run). `requestsWithoutUsage` above zero makes the sums a lower bound. Tubeless
+reports tokens only; apply your model's prices yourself.
 
 ### Chat sessions
 
-Each run of a `defineAgent` agent starts a fresh conversation. To continue one
-across prompts, as the `tubeless agent` REPL does, wrap the agent in a session:
+Each `defineAgent` run starts a fresh conversation. To continue one across prompts,
+wrap the agent in a session:
 
 ```ts
 import { createAgentSession, defineAgent } from "tubeless/agent";
@@ -180,34 +154,27 @@ await saveConversation(session.conversation); // plain provider-owned data
 const resumed = createAgentSession(agent, { conversation: await loadConversation() });
 ```
 
-The conversation advances only when a run completes and finalizes; failed, cancelled
-and dry runs keep the previous one. `clear()` starts fresh. Runs are sequential: a run
-started while another is active rejects with `TUBELESS_AGENT_SESSION_BUSY`. Each run
-still gets fresh limits, its own trace and isolated turn state; only the provider
-conversation carries over. A persisted conversation must come from the same provider
-adapter. Sessions work with typed agents too. `defineAgentLoop` agents own their state
-and have no provider conversation, so they are rejected.
+- The conversation advances only when a run completes; failed, cancelled and dry
+  runs keep the previous one. `clear()` starts fresh.
+- Runs are sequential: a run during another rejects with `TUBELESS_AGENT_SESSION_BUSY`.
+  Each run still gets fresh limits and its own trace.
+- A persisted conversation must come from the same provider adapter. Typed agents
+  work; `defineAgentLoop` agents have no provider conversation and are rejected.
+- Sessions use the configuration captured at `defineAgent` time.
+- With a [durable agent](#durable-execution), replaying a completed task restores its
+  final conversation without repeating work. Use a distinct execution key per task.
+  Checkpoints written by older versions may lack it: replay returns the saved answer
+  outside a session but rejects inside one with
+  `TUBELESS_AGENT_SESSION_CHECKPOINT_INCOMPLETE`.
 
-With a [durable agent](#durable-execution), replaying a completed task restores its
-final conversation without repeating model requests, tools, or result validation.
-Use a distinct execution key for each new task. Completed checkpoints written by
-older versions may lack the final conversation: ordinary agent replay still returns
-the saved answer, but session replay rejects with
-`TUBELESS_AGENT_SESSION_CHECKPOINT_INCOMPLETE`. Read that answer outside a session,
-then seed a session from separately persisted conversation for new work; seeding
-alone does not make that older task replayable in a session.
-
-Sessions use the configuration captured by `defineAgent`, including its model,
-tool grants and limits. Changing the original configuration object or its collections
-later does not change the agent or sessions created from it.
+The [credential-free chat recipe](../examples/agent-chat.ts) shows the REPL flow.
 
 ### Typed inputs and results
 
-Supply `inputSchema` with a `task` mapper, and optionally `resultSchema`, to run the
-same model-backed agent over typed pipeline data. The mapper turns validated options
-into the model's task text (nonblank, up to 16 KiB); the model finishes against
-`resultSchema` through `context.resultJsonSchema`, and the harness validates the
-result. `durability.key` callbacks receive the typed options. The agent composes like
+`inputSchema` plus a `task` mapper (required together) runs the same model-backed
+agent over typed pipeline data. The mapper produces the task text; with
+`resultSchema` the model finishes against its JSON Schema and the harness validates
+the result. Without them the types stay `{ task }` and `{ answer }`. It composes like
 any child pipeline, as in the [extract recipe](../examples/agent-extract.ts):
 
 ```ts
@@ -226,238 +193,28 @@ const classify = fromPipeline("classify", {
 });
 ```
 
-With `openaiModel()` or `anthropicModel()`, a `resultSchema` outside the provider's
-strict-mode subset fails at definition; see
-[descriptor checks](#choose-a-model-provider). `task` is required exactly when `inputSchema` is set. Without both, the input stays
-`{ task: string }`; without `resultSchema`, the result stays `{ answer: string }`.
-
-Typed agents default to `projectContext: false`: a short task-neutral prompt that
-names no tools or repository conventions, followed by the working directory and your
-`instructions`, which become the agent's main guidance. Grant only the tools the task
-needs with `defaultTools`. Set `projectContext: true` for a typed agent that should
-behave as a coding agent in a repository.
-
-With project context (the default for `{ task }` agents), the prompt asks the agent to inspect before editing, preserve unrelated work,
-recover from tool errors, verify changes, and distinguish verified results from
-remaining limitations. At the first live decision, project context loads
-`AGENTS.md` from the nearest repository root through the run's cwd, in that order.
-A live model-agent run resolves cwd to its physical directory once, before any
-decision or tool call. The prompt, file tools, bash, custom tools, and child
-pipelines all use that directory, including when resolving `..`. This also applies
-with `projectContext: false`; planning and dry runs do not resolve cwd.
-Guidance comes from the project containing the files. A `.git` file also marks
-a worktree root. Outside a repository it loads only cwd's
-file. More specific directory instructions take precedence. Deeper directories
-and files referenced by those instructions are read by the agent when needed;
-there is no recursive startup scan or `@file` expansion. The prompt requires
-guidance reads and the file operations or task commands they govern to run in
-separate turns. Commands that only discover filenames may run before those reads.
-This also applies when a command selects a directory with bash's `cwd` option or
-shell `cd`. The prompt requires trying that directory's `AGENTS.md` even when
-filename discovery did not list it; a missing-file result permits proceeding.
-Beyond startup, discovery and ordering depend on the model; file tools do not
-enforce them as access controls. Required instruction discovery and reading
-precede a user's requested first task action; optional
-exploration waits until after that action. Already supplied guidance need not be
-reread. Set `projectContext: false`
-to disable discovery and use the task-neutral prompt instead of the workspace prompt. Context is loaded once per invocation; simultaneous and later
-runs have independent state. Missing instruction files are allowed; unreadable,
-non-text, or oversized files fail before a model request rather than silently
-discarding guidance. Each file uses the read tool's 16 KiB/2,000-line bounds;
-guidance paths must be nonblank and at most 4,096 characters. The complete prompt,
-including paths, headers and separators, is capped at 32 KiB of UTF-8 before each
-section is retained. Loading stops at the first section that exceeds the budget.
-Tasks are capped at 16 KiB of UTF-8.
-
-`AgentModel` is a provider-independent callback. It receives the task, instructions,
-its previous plain-data `conversation` (initially `null`), ordered outcomes from the
-latest completed batch, and the usual decision context. It returns an untrusted
-`decision` plus the next plain-data `conversation`. Tubeless validates the decision
-and owns a frozen copy of that state; model definitions do not hold mutable sessions.
-Conversation state is accepted before dispatch and reduced after the whole tool batch settles successfully.
-Expected tool failures are outcomes; fatal failure or cancellation stops the run.
-
-A model may also provide `checkDescriptors({ capabilities, resultJsonSchema })`, which
-throws when its provider cannot accept the agent's tool or result schemas. `defineAgent`
-calls it once those descriptors are compiled, so an incompatible `resultSchema` or tool
-fails at definition with `TUBELESS_AGENT_INVALID_DEFINITION` rather than at the first
-request in a pipeline. `openaiModel()` and `anthropicModel()` provide it, running the same
-checks their requests run. Wrapping an adapter in another function drops the hook; the
-request still checks before any HTTP call.
-
-The optional OpenAI subpath uses native fetch and adds no SDK dependency. It defaults
-to `OPENAI_MODEL` or `gpt-5.4-mini`; `openaiModel({ model, apiKey })` supplies explicit
-values. The adapter omits reasoning settings by default so models that do not accept
-them remain compatible. Opt in with `reasoningEffort` for a model that supports it;
-`null` also omits the setting. The coding-agent recipe and live evaluations explicitly
-request `"high"`. Supported effort values depend on the selected model; higher
-effort can increase latency and cost. Accepted settings are `"none"`, `"minimal"`,
-`"low"`, `"medium"`, `"high"`, `"xhigh"`, and `"max"`; check the selected model's
-[supported efforts](https://developers.openai.com/api/docs/guides/reasoning).
-Model names are trimmed; a blank
-`OPENAI_MODEL` uses the default, while an
-explicit blank model is rejected locally. API keys are trimmed before use.
-Environment credentials are read at execution, so imports, plans, and dry
-runs need no API key. Live runs make paid API requests and execute workspace tools
-with the host's existing permissions. Dry runs skip the model and have no final answer.
-HTTP 401 failures distinguish known `invalid_api_key` and `ip_not_authorized`
-codes and otherwise suggest checking credentials, project and organization access,
-and the IP allowlist. Error-body reads are limited to 16 KiB; raw messages and
-unknown codes are omitted, while validated request IDs support troubleshooting.
-See [OpenAI's error guide](https://developers.openai.com/api/docs/guides/error-codes).
-
-Custom tool descriptors must be inline and support OpenAI's strict JSON Schema
-subset. The adapter wraps each argument in `{ input }`; reference keywords
-(`$ref`, `$dynamicRef`, `$recursiveRef`) are rejected locally, at definition and
-before any HTTP request, because wrapping changes their reference root. Supply an inline
-`inputJsonSchema` override when the tool's schema generates references.
-Every object, including nested and nullable objects, must set
-`additionalProperties: false` and list every property in `required`. These
-[strict object requirements](https://developers.openai.com/api/docs/guides/function-calling#strict-mode)
-are checked locally with the tool name and schema path in the error. Other
-model-specific restrictions on the supported schema subset still apply.
-
-The adapter keeps the complete Responses output sequence, including encrypted
-reasoning, messages, and function calls, then appends matching tool outputs.
-New tool outputs share an encoded 256 KiB batch budget, reduced further when the
-request being sent leaves less room. Batches that fit remain exact. Otherwise,
-each result's fixed metadata is reserved first, and the remaining preview space
-is shared across large results. Small complete results are kept when they cost
-less than a preview marker. Large outputs carry `truncated: true`, the original
-JSON byte count, and a UTF-8-safe JSON-text `preview`. Every call still receives
-a matching output and retains its success/failure flag. The model is told to
-retrieve narrower results and avoid repeating successful mutations. Full tool
-outcomes remain available to the harness and evaluation reports. This provider
-boundary keeps large batches from preventing compaction; it does not change tool
-execution or the outcomes supplied to custom `decide` callbacks.
-It uses `store: false` with client-owned history. Once completed history exceeds
-`compactAfterBytes` (768 KiB by default), or a complete decision would exceed the
-request limit, it calls the native
-[`/responses/compact` endpoint](https://developers.openai.com/api/docs/guides/compaction)
-and carries the entire returned context window into the next decision. The
-compaction budget includes instructions and history; tool schemas are
-only included when checking the subsequent decision with the compacted window.
-This prevents large schemas from unnecessarily trimming results before compaction.
-Instructions are sent again on each request. Compaction can lose exact historical detail; the
-prompt tells the model to re-read sources when exact text matters. Select a model
-that supports both Responses function calling and compaction.
-
-One decision has a combined 60-second deadline (`timeoutMs`) and makes at most two
-successful HTTP requests: optional compaction and the decision itself. Each request
-is retried up to `maxRetries` times (default 2) after HTTP 408, 429, 5xx or a
-dropped connection; waits honor `Retry-After`, stay inside `timeoutMs`, and
-`maxRetries: 0` disables them. Harness decision budgets count callbacks, not these
-HTTP requests or tokens. Encoded requests are capped at 1 MiB and responses at
-2 MiB; these byte limits are not model token estimates.
-If prior history or schemas leave no room even for the output markers, the run
-fails explicitly rather than dropping a call's result.
-Compaction rejection, a still-oversized request, refusal, malformed output, and an
-incomplete response fail without silently dropping history and are never retried. Streaming
-and crash-safe resume are outside this helper's contract. `tubeless agent` owns an in-memory
-REPL session around it, retaining completed conversation across user prompts.
-The adapter appends each new task on the first decision of a prompt, closes its
-synthetic `_finish` function call, and can compact completed history before
-appending the next user message. Direct `defineAgent` runs remain isolated.
-
-The executable [model agent recipe](../examples/agent-model.ts) is registered as
-`coding-agent` in the example project. Run it from the workspace it should change:
-
-```sh
-export OPENAI_API_KEY=...
-bun /path/to/tubeless/dist/workbench/workbench-bin.js run \
-  /path/to/tubeless/examples/agent-model.ts -- --task 'Fix the failing test and verify it'
-```
-
-### Anthropic adapter
-
-`anthropicModel()` from `tubeless/agent/anthropic` calls the
-[Messages API](https://platform.claude.com/docs/en/api/messages) with native fetch and
-no SDK dependency. It follows the same harness contract as the OpenAI adapter: tool
-arguments are wrapped in `{ input }`, `_finish` carries `{ result }`, references are
-rejected locally, requests are capped at 1 MiB and responses at 2 MiB, and large tool
-batches receive the same marked previews.
-
-The adapter keeps every returned content block, including thinking blocks and their
-signatures, and appends one user message of `tool_result` blocks per batch. A later
-prompt on the same conversation closes `_finish` with a `tool_result` and adds the new
-task to that user message, because the Messages API cannot follow a user message with
-another user message. Compaction runs on that completed history before the new task is
-appended, and the task stays verbatim. Direct `defineAgent` runs remain isolated.
-Recoverable tool failures set `is_error: true`. History is never edited except by
-compaction, which keeps it valid for models that check replayed thinking. Current
-Claude models reject forced tool choice, so the adapter sends `tool_choice: "auto"` and
-instructs the model to respond only with tool calls. If a reply contains no tool call,
-the adapter appends that reply and one reminder, then asks once more. A second text-only
-reply fails the decision. Requests cache both the shared system prefix and the growing
-conversation, as described in [prompt caching and usage traces](#prompt-caching-and-usage-traces).
-
-With `strict: true` (the default), tools use
-[strict tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use).
-Every object must set `additionalProperties: false`; unlike OpenAI, optional properties
-are allowed. The schema the model sees keeps only what strict mode accepts: types,
-`properties`, `required`, `items`, `anyOf`, `allOf` (`oneOf` becomes `anyOf`), scalar
-`enum` and `const`, `default`, supported string formats, and `minItems` of 0 or 1.
-A schema with scalar `enum` or `const` and no type gets one: a shared type when every
-value agrees, `number` when the values are only integers and numbers, or `anyOf` of
-typed enums when the values mix types. A schema with neither a type nor `anyOf`/`allOf`
-is rejected locally. Every other keyword, such as length, numeric, and pattern
-constraints, is recorded in that schema's `description` instead. Tubeless still
-validates every argument against the full schema. Tool names longer than 64 characters
-are rejected locally; the harness itself allows 128.
-Strict mode allows at most 20 strict tools per request, including `_finish`, plus
-limits on optional and union-typed parameters. The adapter rejects more than 20 locally,
-at definition. Set `strict: false` for larger tool sets or servers without strict
-support, or advertise fewer tools with `defaultTools`, allowlists or code mode.
-
-Once completed history exceeds `compactAfterBytes`, or a complete decision exceeds
-768 KiB including tools and instructions, the adapter requests
-[on-demand compaction](https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand)
-with the same system prompt and tools. It replaces the history with the returned assistant
-message, holding the signed summary block unchanged, followed by a short user continuation message. The `compact-2026-09-04` beta header is
-sent only on that request and on later requests carrying the block. If no summary comes
-back, the decision continues with the uncompacted history and the request limit still
-applies. Set `compactAfterBytes: null` for servers or models without compaction.
-
-A decision makes at most three successful HTTP requests: optional compaction, the
-decision, and one tool-call reminder. Each request is retried up to `maxRetries`
-times (default 2) after HTTP 408, 429, 5xx or a dropped connection, honoring
-`Retry-After` and never past `timeoutMs`; `maxRetries: 0` disables them. `max_tokens`,
-refusal, and other unexpected stop reasons fail explicitly; raise `maxTokens` when
-long thinking reaches the cap. Run the Claude recipe
-the same way as the OpenAI one:
-
-```sh
-export ANTHROPIC_API_KEY=...
-bun /path/to/tubeless/dist/workbench/workbench-bin.js run \
-  /path/to/tubeless/examples/agent-model-anthropic.ts -- --task 'Fix the failing test and verify it'
-```
+Typed agents default to `projectContext: false`: your `instructions` become the
+main guidance. Grant only the tools the task needs with `defaultTools`.
 
 ### Compatible APIs
 
-Provider requests do not follow redirects. Configure the final API base URL,
-including any gateway path prefix. This keeps credential headers at the
-configured endpoint.
-
-Both adapters work with any server that implements the same protocol: hosted routers,
-inference platforms, self-hosted servers, and gateways. Set `baseUrl` (or
-`OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL`), the provider's credential, and the
-provider's model ID. Then turn off features the server does not support:
+Both adapters work with any server implementing the same protocol (routers,
+inference platforms, self-hosted servers, gateways). Set `baseUrl` (or
+`OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL`), the provider's credential and model ID,
+then disable what the server lacks:
 
 - `openaiModel()` needs the **Responses API** (`POST {baseUrl}/responses`), not only
-  Chat Completions. `baseUrl` includes the version path. Set `compactAfterBytes: null`
-  unless the server implements `/responses/compact`. The adapter sends `store: false`
-  and `include: ["reasoning.encrypted_content"]`.
-- `anthropicModel()` needs the **Messages API** (`POST {baseUrl}/v1/messages`).
-  `baseUrl` excludes `/v1`. Most compatible servers expect a bearer token, so pass
-  `authToken` (or set `ANTHROPIC_AUTH_TOKEN`) instead of `apiKey`. Set `strict: false`,
-  `promptCaching: false`, and `compactAfterBytes: null` unless the server documents
-  strict tool use, `cache_control`, and on-demand compaction.
+  Chat Completions; `baseUrl` includes the version path. Set `compactAfterBytes: null`
+  unless the server implements `/responses/compact`. The adapter always sends
+  `store: false` and `include: ["reasoning.encrypted_content"]`.
+- `anthropicModel()` needs the **Messages API** (`POST {baseUrl}/v1/messages`);
+  `baseUrl` excludes `/v1`. Most compatible servers want a bearer token: pass
+  `authToken` (or `ANTHROPIC_AUTH_TOKEN`) instead of `apiKey`, and leave
+  `ANTHROPIC_API_KEY` unset (it wins when both are set). Set `strict: false`,
+  `promptCaching: false` and `compactAfterBytes: null` unless the server documents
+  strict tool use, `cache_control` and on-demand compaction.
 
 ```ts
-import { defineAgent } from "tubeless/agent";
-import { anthropicModel } from "tubeless/agent/anthropic";
-import { openaiModel } from "tubeless/agent/openai";
-
 // OpenRouter through its Responses endpoint.
 export const RouterAgent = defineAgent({
   id: "router-coding",
@@ -483,15 +240,13 @@ export const BasetenAgent = defineAgent({
 });
 ```
 
-`process.env` in a module is read at import, unlike the adapters' own variables. To keep
-credentials out of imports and plans, set the conventional variables instead, such as
-`OPENAI_BASE_URL` and `OPENAI_API_KEY`, or `ANTHROPIC_BASE_URL` and
-`ANTHROPIC_AUTH_TOKEN`. Then call `openaiModel()` or `anthropicModel()` with only the
-remaining options. With `ANTHROPIC_AUTH_TOKEN`, leave `ANTHROPIC_API_KEY` unset; when
-both variables are set, the API key takes precedence.
+`process.env` in a module is read at import. To keep credentials out of imports and
+plans, set the conventional variables (`OPENAI_BASE_URL`, `OPENAI_API_KEY`,
+`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`) and pass only the remaining options.
+[`examples/agent-providers.ts`](../examples/agent-providers.ts) registers a named
+provider for the CLI.
 
-These base URLs come from each provider's documentation as of October 2026. Check the
-provider's current documentation for model IDs, tool support, and limits:
+Base URLs as of October 2026; check each provider for model IDs and limits:
 
 | Provider          | `openaiModel({ baseUrl })`                      | `anthropicModel({ baseUrl })`                        | Notes                                                                    |
 | ----------------- | ----------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -506,74 +261,24 @@ provider's current documentation for model IDs, tool support, and limits:
 | vLLM              | `http://{host}:8000/v1`                         | `http://{host}:8000`                                 | Self-hosted                                                              |
 | LiteLLM proxy     | `http://localhost:4000/v1`                      | `http://localhost:4000`                              | Supports `/responses/compact`; bridges providers without either API      |
 
-Groq's Responses endpoint rejects `store` and `include`, which the OpenAI adapter
-always sends. Google Vertex AI puts the model in the request path and uses OAuth
-instead of a base URL plus key. Reach either one through a gateway such as LiteLLM.
-Compatible servers vary in how closely they follow each protocol. Exercise a new
-provider with a small task before relying on it.
-
-Run the opt-in live evaluations from the package root with `bun run eval:agent`.
-They create disposable workspaces and check investigation, actual edits, successful
-verification, startup project instructions, nested guidance discovered before a
-requested file read, aggregation across many files, recovery from a missing file,
-forced compaction, a typed agent given its input as task text or JSON, and a
-49-tool inventory. Reports record each case's tool count and descriptor bytes.
-Add `--only=<id>,<id>` to rerun selected cases. They
-also require existing tests and unrelated work to remain intact.
-Use `--provider=anthropic` with `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`
-to run the same cases through Claude; OpenAI remains the default. The direct
-49-tool case disables Anthropic strict tool schemas to fit its inventory; the
-harness still validates every input and output. Code mode uses one advertised
-tool and retains strict schemas. Reports identify the provider and model.
-`bun run eval:agent -- --codemode` runs the same cases through one `codemode` tool,
-except the typed triage cases: they have no tools, so they run directly in both modes.
-Each result records its effective `codemode`.
-Its checks are objective: fixture checks pass, preserved files stay intact, answers
-follow guidance and compaction still completes. Call-order assertions apply only to
-direct calls, since script calls are child runs; the report keeps every script for
-review in `.context/model-agent-codemode-eval.json`.
-Results are written to `.context/model-agent-eval.json`; these paid evaluations
-are separate from credential-free CI. Reports retain full call arguments, observed
-tool outcomes, decision batches with the outcomes supplied to each decision, and
-any completed answer and verification output, including when a
-later assertion fails. The disposable workspaces are still removed after each task.
-These observations come from transcript events, including successful compaction
-markers, and each result also retains its raw `transcript`. The published replay's
-`calls`, `outcomes` and `turns` fields keep their existing shape. Proposal calls stay
-in `calls`; `toolLog` uses validated call inputs and matching outcomes, including
-nested code-mode calls. Incomplete transcript evidence fails the evaluation.
-The recovery task must request the missing-file read alone, then choose recovery
-in the next decision that receives its `ENOENT` outcome. That batch's results
-must contain the current configuration or reveal its location. Speculative
-recovery in the first batch and recovery deferred past the error-observing
-decision both fail the evaluation.
-The read-only nested-guidance task must load `src/AGENTS.md` in an earlier turn
-than `src/code.txt`, apply its answer convention, and preserve every fixture file.
-Passing them is evidence for these specific
-tasks, not a general reliability guarantee.
+Groq's Responses endpoint rejects the `store` and `include` fields the OpenAI
+adapter always sends, and Google Vertex AI uses OAuth with the model in the request
+path; reach either through a gateway such as LiteLLM. Servers vary in protocol
+fidelity, so try a new provider on a small task first.
 
 ## Evaluate your own agent
 
-Use `createAgentTranscriptCollector()` from `tubeless/testing` as an agent's
-`transcript` option. After the run settles, call `collector.assertComplete()`
-before asserting on `collector.records`. The records are immutable snapshots;
-the collector retains at most 16 MiB by default across all runs. Set `maxBytes`
-to a smaller positive byte limit when needed. A capture or collector error,
-omission, byte-limit marker, sequence gap, conflicting identity or absent end
-marker makes the completeness assertion fail. Pass a run ID to check one run;
-without it, every retained run must be complete. A complete recording may describe
-a failed or cancelled execution, so check the run result separately. Suppressed
-events leave no tombstone; avoid redaction that removes evidence required by an
-evaluation.
+Pass `createAgentTranscriptCollector()` from `tubeless/testing` as the agent's
+`transcript` option, then call `collector.assertComplete()` before asserting on
+`collector.records`. Completeness fails on capture errors, omissions, byte-limit
+markers, sequence gaps or a missing end marker; pass a run ID to check one run. A
+complete recording can still describe a failed or cancelled run, so check the result
+separately. `maxBytes` (default 16 MiB) bounds retention.
 
-`createAgentTestWorkspace(files, { name? })` writes caller-supplied text fixtures
-inside an owned temporary directory and returns its physical `cwd`.
-`workspace.assertUnchanged()` checks all files, directories and symlinks against
-their initial state. Pass relative file or directory paths to check a preserved
-subset while allowing intentional edits elsewhere. Symlink targets are compared
-without following them. Always await `workspace.close()` in `finally`; cleanup
-removes only that temporary workspace. This helper requires Node or Bun and
-loads filesystem modules only when called.
+`createAgentTestWorkspace(files)` writes text fixtures into an owned temporary
+directory and returns its `cwd`. `workspace.assertUnchanged()` verifies the files
+(optionally a relative-path subset) and always `await workspace.close()` in
+`finally`. Requires Node or Bun.
 
 ```ts
 import { createAgentTestWorkspace, createAgentTranscriptCollector } from "tubeless/testing";
@@ -595,91 +300,42 @@ try {
 }
 ```
 
-The [scripted evaluation recipe](../examples/agent-evaluation.ts) exercises a real
-read tool without provider credentials. Use scripted models in CI and make live
-provider runs an explicit choice. These helpers impose no scoring framework or
-model selection policy.
+The [scripted evaluation recipe](../examples/agent-evaluation.ts) runs without
+credentials. Use scripted models in CI and make live provider runs an explicit choice.
 
 ## Connect a model
 
-The [OpenAI agent recipe](../examples/agent-openai.ts) connects the same tools to
-the Responses API using built-in `fetch`. Its
-[decision adapter](../examples/agent-openai-decision.ts) is application code,
-with no provider SDK or new Tubeless API. Replace `decide: openaiDecision` with
-another provider's callback to keep the same tools, state, limits, and execution.
-
-Set `OPENAI_API_KEY` in your environment, then run:
+To integrate any other provider, write a `decide` callback for `defineAgentLoop`
+and keep the same tools, state, limits and execution. The
+[OpenAI recipe](../examples/agent-openai.ts) does this with built-in `fetch` and a
+[decision adapter](../examples/agent-openai-decision.ts) that is application code,
+not a Tubeless API:
 
 ```sh
+export OPENAI_API_KEY=...
 bun run tubeless -- run --trace logs/openai-agent.ndjson examples/agent-openai.ts -- \
-  --question "Uppercase red, blue, and green in separate calls. Then count the characters in the uppercase results joined by single spaces."
+  --question "Uppercase red, blue, and green in separate calls. Then count the characters."
 ```
 
-The example defaults to `gpt-4.1-mini`; set `OPENAI_MODEL` to choose another
-Responses model with function calling. This command makes paid API requests.
-Its custom tools transform and count text. Like every agent, it also advertises
-the default workspace tools, including `bash`, to the model. Those tools execute
-with the host process's permissions and environment; there is no per-call approval
-or sandbox built into the harness.
+An adapter maps `context.capabilities` to provider tool descriptors, wraps
+`context.resultJsonSchema` in a finish function, and converts the response to a
+decision. Tubeless owns state and validates tools, call IDs, budgets, arguments and
+results, so a model can select registered names but cannot add tools or change
+limits. Bound request size and deadlines in the adapter, and forward the run's
+cancellation signal.
 
-The model chooses which tools to call, their arguments, and how many calls to
-request. A run can uppercase three words in one turn, consume those results in
-a count call on the next turn, then finish with `RED BLUE GREEN` and a count of 14. The call sequence is model-selected; the recipe does not script those turns.
-The command prints the validated final answer.
-
-The adapter follows OpenAI's [function calling protocol](https://developers.openai.com/api/docs/guides/function-calling):
-
-- Tool descriptors come from `context.capabilities`. Each function wraps the
-  raw tool argument in `{ input }`, so even a string-valued tool has an object
-  parameter schema. This recipe's schemas support OpenAI strict mode. When
-  adapting other tools, check the provider's supported JSON Schema subset.
-- An adapter-only `_finish` function wraps `context.resultJsonSchema` in
-  `{ result }`. Calling it alone returns a Tubeless finish decision. Combining
-  it with other calls fails before any tools start.
-- Each request sends the current question and accumulated, validated outcomes.
-  Tubeless owns the state; this example makes independent model requests with
-  `store: false`, without a provider conversation or replayed reasoning items.
-- Provider call IDs become turn-local Tubeless call IDs. The adapter checks the
-  response envelope and parses arguments; Tubeless checks registered tools,
-  call IDs, budgets, argument schemas, tool results, and the final answer.
-
-The example allows six decisions and twelve tool calls, with up to three tools
-running concurrently. Each HTTP request has a 30-second deadline and receives
-the run's cancellation signal. HTTP errors, incomplete responses, refusals,
-invalid JSON, and invalid decisions fail the run. There are no automatic
-provider retries. Error messages omit HTTP response bodies.
-
-The recipe also bounds model input in UTF-8 bytes. Questions may use up to
-4 KiB; accumulated observations may use up to 16 KiB of serialized JSON. An
-oversized question fails before the first model request. Oversized history fails
-before committing the next state or requesting another decision. Accepted
-observations remain complete, so later tools can use their exact text. The
-adapter checks the complete encoded HTTP body against a 32 KiB limit before
-every request, including instructions, schemas, and JSON escaping. These are
-application byte budgets; they do not measure a selected model's token usage.
-
-`plan`, `inspect`, and `graph` need no credentials and make no API requests. The
-live example has no preview decision source: `--dry-run` skips the agent and
-fails required finalization because there is no answer. Use the scripted recipe
-for a credential-free executable preview. Importing the project also makes no
-requests; `openai-agent` is registered in the
-[example project](../examples/project/tubeless.project.ts).
-
-CI replaces `fetch` with provider response fixtures while running real Tubeless
-tools, reduction, and finalization. Run the command above separately for a live
-provider check. Traces record turn/call lifecycles and summaries; prompts, state,
-tool output, and credentials are not added to traces by this adapter.
-
-The compiled turn graph stays `decide -> calls -> reduce`. Its execution history
-expands with each chosen batch and turn; a model cannot rewrite dependency edges
-or add tool-registry entries. The registered `bash` tool executes model-supplied commands.
+Like every agent, this recipe also advertises the default workspace tools,
+including `bash`, which execute with the host's permissions. There is no per-call
+approval or sandbox. `plan`, `inspect` and `graph` make no requests; `--dry-run`
+skips the agent and fails required finalization because no answer exists. Use the
+scripted recipe for a credential-free preview.
 
 ## Connect MCP servers
 
 The optional `tubeless/agent/mcp` entrypoint connects
-[Model Context Protocol](https://modelcontextprotocol.io) servers and exposes
-their tools to any agent. It is dependency-free and speaks Streamable HTTP
-(`url`) and local stdio (`command`); the generic agent entrypoint never imports it.
+[Model Context Protocol](https://modelcontextprotocol.io) servers over Streamable
+HTTP (`url`) or local stdio (`command`) and exposes their tools to any agent. It is
+dependency-free.
 
 ```ts
 import { defineAgent } from "tubeless/agent";
@@ -693,94 +349,54 @@ await using mcp = await connectMcpServers({
 const agent = defineAgent({ id: "mcp-agent", model: openaiModel(), tools: mcp.tools });
 ```
 
-Tools are named `<server>__<tool>`, with characters outside `[A-Za-z0-9_-]`
-replaced by `_`; server names use letters, digits and hyphens. `tools` is an
-ordinary registry: spread it beside custom tools or pass `tools: ["name"]` per
-server to expose only an allowlist. Each server accepts `timeoutMs` (default 60000) per request.
-Discovery rejects repeated cursors and is bounded to 1024 pages and 4096 tools per server.
-
-Inventories are discovered once at connection, so the agent definition, its
-capability fingerprints and durable checkpoints see a fixed set. A server that
-changes its tools changes the agent's definition identity. Connect inside the
-function that runs the agent rather than at module scope, so importing a project
-starts no processes, and close the connection after the last run, as in the
-[MCP recipe](../examples/agent-mcp.ts). Calls after `close()` fail. When an HTTP server
-answers 404 for the session, the client starts a new session and retries that
-request once; the tool inventory is not rediscovered. Closing aborts
-active HTTP requests and bounds stdio shutdown, terminating the owned process
-group on POSIX. Descendants that escape that group may outlive the connection.
-
-MCP input schemas are rewritten to the strict form model providers require:
-optional properties become required and nullable, every object is closed, and
-local `$defs` references are inlined. Nulls supplied for optional properties are
-removed before the call, including inside `anyOf` branches and array items.
-The adapter supports fixed-property objects, homogeneous arrays and `anyOf`.
-It rejects free-form objects, recursive references, tuple schemas, `oneOf`,
-`allOf`, conditionals and other unsupported structural constructs at connection
-time. Required names must be declared in `properties`. Optional properties that
-already accept `null` are rejected because strict descriptors cannot distinguish
-an omitted value from an explicit null; required nullable properties retain nulls.
-Arguments are structurally validated before dispatch, including structural equality
-for JSON-valued `enum` and `const`; the server validates the remaining constraints,
-including formats and ranges.
-Conversion bounds source data and expanded references with shared node, depth and
-text budgets. References permit descriptive annotations but reject validation
-siblings, whose constraints would need composition. Structurally matching `anyOf`
-branches must all decode identically, including branches with server-validated
-constraints such as patterns and ranges. Conflicting branch or sibling
-interpretations fail validation before a tool call is dispatched.
-
-Results are `{ content, structuredContent? }` from the server. When a tool lists an
-object `outputSchema`, [code-mode declarations](#code-mode) type `structuredContent`
-with it, required as the MCP specification requires. Local `$defs` and `definitions`
-references still resolve, including JSON Pointer escapes. Schemas that are missing,
-not object schemas, unserializable, or over 16 KiB of UTF-8 either serialized or as a
-rendered declaration (where references expand) keep the generic
-`Record<string, unknown>`. The schema
-describes results for the model; Tubeless does not validate `structuredContent`
-against it. A result with
-`isError` becomes a recoverable `MCP_TOOL_ERROR` observation, and JSON-RPC errors
-such as unknown arguments become `MCP_PROTOCOL_ERROR`. Timeouts, transport
-failures and exited servers are fatal. Cancellation sends
-`notifications/cancelled` to the server. MCP tools keep the default
-`replay: "unsafe"` and are skipped in dry runs; server annotations are not
-trusted to change either. The client declares no sampling, roots or elicitation
-capabilities and answers only `ping`. Stdio servers inherit the host environment
-plus `env`, and HTTP headers are sent as given: each server is a separate
-authority outside `AgentEnvironment`. HTTP requests, including session termination,
-do not follow redirects; configure the server's final endpoint URL.
+- Tools are named `<server>__<tool>` (characters outside `[A-Za-z0-9_-]` become
+  `_`); server names use letters, digits and hyphens. `mcp.tools` is an ordinary
+  registry: spread it beside custom tools, or pass `tools: ["name"]` per server to
+  expose an allowlist. `timeoutMs` (default 60000) applies per request.
+- Inventories are discovered once at connection. A server that changes its tools
+  changes the agent's definition identity, which matters for durable checkpoints.
+- Connect inside the function that runs the agent, not at module scope, so importing
+  a project starts no processes, and close after the last run, as in the
+  [MCP recipe](../examples/agent-mcp.ts). Calls after `close()` fail.
+- Input schemas are rewritten to strict form (optional properties become required
+  and nullable; nulls are stripped before the call). Free-form objects, recursive
+  references, tuples, `oneOf`/`allOf`, conditionals and optional properties that
+  already accept `null` are rejected at connection time.
+- Results are `{ content, structuredContent? }`. An object `outputSchema` types
+  `structuredContent` in [code-mode declarations](#code-mode); Tubeless does not
+  validate it. An `isError` result becomes a recoverable `MCP_TOOL_ERROR`;
+  JSON-RPC errors become `MCP_PROTOCOL_ERROR`; timeouts, transport failures and
+  exited servers are fatal. Cancellation sends `notifications/cancelled`.
+- MCP tools keep `replay: "unsafe"` and are skipped in dry runs; server annotations
+  are not trusted to change either. The client supports no sampling, roots or
+  elicitation.
+- Each server is a separate authority outside `AgentEnvironment`: stdio servers
+  inherit the host environment plus `env`, and HTTP headers are sent as given.
+  HTTP does not follow redirects; configure the final endpoint.
 
 ## Code mode
 
 Code mode is off by default. Set `codemode: true` on `defineAgent` or
 `defineAgentLoop`, or pass `tubeless agent --codemode`, to advertise one `codemode`
 tool instead of the registry. Each call runs a JavaScript async function body that
-calls the registered tools as typed async functions and returns a JSON value.
-Registered tools include the defaults, custom tools, pipeline tools and MCP tools.
-An agent needs at least one of them; code mode without tools fails at definition.
+calls the registered tools (defaults, custom, pipeline and MCP) as typed async
+functions and returns a JSON value. The agent needs at least one tool.
 
 ### When to use code mode
 
-Measure before enabling it. In the live evaluations (`bun run eval:agent`, with
-and without `--codemode`), code mode matched direct tool calls on reliability. It did not reduce turns or time
-for small coding tasks, typed agents with no tools, or a two-call lookup across 49
-tools. Most turns exist because the model has to see a result before deciding the
-next step, and a script can't remove that. Code mode helps when a script can do
-work the model doesn't need to see:
+Measure first. In live evaluations code mode matched direct calls on reliability
+but did not cut turns or time for small coding tasks or short lookups, because most
+turns exist for the model to see a result. It helps when a script can do work the
+model need not see:
 
-- **Loops and aggregation.** Read every file in a listing, filter records or sum
-  fields, and return only the total.
-- **Chains through typed outputs.** An output schema helps the model write reliable
-  chains by showing what each tool returns. This includes MCP tools with an
-  `outputSchema`. Scripts can also chain generic outputs when the model knows their
-  shape; otherwise, it may need a separate turn to inspect the result.
-- **Large inventories.** One `codemode` tool replaces many function descriptors.
-  Declarations take about 10 KB per 50 tools, so the 48 KiB budget fits roughly
-  200 or more.
+- **Loops and aggregation:** read every file in a listing, filter or sum, return one total.
+- **Chains through typed outputs:** an output schema (including an MCP
+  `outputSchema`) shows the model what each tool returns so it can chain calls.
+- **Large inventories:** one tool replaces many descriptors (about 10 KB of
+  declarations per 50 tools, within a 48 KiB budget).
 
-Leave it off for interactive coding, agents with a handful of tools, and tasks whose
-steps each depend on reading the previous result. Code mode also runs each script in
-a sandbox and needs an executor on platforms without Node worker threads.
+Leave it off for interactive coding, small tool sets, and steps that each depend on
+the previous result.
 
 ```ts
 await using mcp = await connectMcpServers({ docs: { url: "https://mcp.example.com/mcp" } });
@@ -792,244 +408,152 @@ const agent = defineAgent({
 });
 ```
 
-For `defineAgentLoop`, `codemode: true` makes `AgentCall<Registry, true>`, `AgentDecision<Registry, Result, true>`
-and `AgentOutcome<Registry, true>` name only `codemode`, as in the
-[code-mode recipe](../examples/agent-codemode.ts): the call input is `{ code }`
-and a successful outcome's value is a `CodemodeResult`. `reduce` receives those
-outcomes. Decisions that name a registered tool directly fail as unknown tools,
-and `context.capabilities` lists only `codemode`.
+For `defineAgentLoop`, `codemode: true` makes `AgentCall<Registry, true>`,
+`AgentDecision<Registry, Result, true>` and `AgentOutcome<Registry, true>` name only
+`codemode`: call input is `{ code }` and a successful outcome's value is a
+`CodemodeResult`. Decisions naming a registered tool directly fail as unknown. See
+the [code-mode recipe](../examples/agent-codemode.ts), which runs a scripted survey
+without credentials.
 
-The tool's description contains generated declarations, in registry order:
+The tool description contains generated declarations in registry order, for example
+`tools.read({ path, startLine, maxLines })`. Inputs come from each tool's JSON
+Schema; outputs come from the output schema when it has a Standard JSON Schema
+converter, else `unknown`. Names that are not identifiers need bracket access, such
+as `tools["docs__search-pages"]`. Declarations are bounded to 48 KiB; expose fewer
+tools (for example with MCP allowlists) if the inventory exceeds it.
 
-```ts
-declare const tools: {
-  /** Read a UTF-8 file up to 1 MiB. … */
-  read(input: { path: string; startLine: number | null; maxLines: number | null }): Promise<{
-    path: string;
-    content: string;
-    // …
-  }>;
-  "docs__search-pages"(input: { query: string }): Promise<{
-    content: { type: string; text?: string }[];
-    structuredContent?: Record<string, unknown>;
-  }>;
-};
-```
-
-Inputs come from each tool's JSON Schema descriptor. Outputs come from the output
-schema's Standard JSON Schema converter when it has one; otherwise they are
-`unknown`; MCP tools declare `structuredContent` from their `outputSchema`. Names that are not identifiers are quoted; reach them with bracket
-access, such as `tools["docs__search-pages"]`. Declarations are bounded to 48 KiB; expose
-fewer tools, for example with MCP `tools` allowlists, if the inventory exceeds it.
-The model-backed prompt adds code-mode guidance, including reading AGENTS.md in its
-own script before acting on it.
-
-The input is `{ code }`, up to 65,536 characters. A completed script returns
-`{ result, logs, logsTruncated }`: the JSON-serialized return value (`null` for
-`undefined`) up to 16 KiB, and up to 200 `console.*` lines and 4 KiB of logs.
-The following become recoverable observations:
+**Limits and results.** `{ code }` is up to 65,536 characters. A completed script
+returns `{ result, logs, logsTruncated }`: the JSON return value (up to 16 KiB;
+`undefined` becomes `null`) and up to 200 `console.*` lines or 4 KiB of logs. These
+become recoverable observations:
 
 - `CODEMODE_SCRIPT_ERROR`: syntax errors (including TypeScript syntax) and uncaught
-  exceptions, with the script line and logs appended.
-- `CODEMODE_TIMEOUT`: the script, including calls it started without awaiting, exceeded
-  60 seconds. Running calls are cancelled first.
-- `CODEMODE_RESULT_TOO_LARGE`: the return value exceeded 16 KiB. Its tool calls
-  already ran.
+  exceptions.
+- `CODEMODE_TIMEOUT`: the script, including un-awaited calls, exceeded 60 seconds;
+  running calls are cancelled.
+- `CODEMODE_RESULT_TOO_LARGE`: the return value exceeded 16 KiB (its tool calls
+  already ran).
 - `CODEMODE_SANDBOX_ERROR`: the worker stopped, for example on memory exhaustion.
 
-Inside a script, a tool call goes through the same preparation, admission and
-child execution as a direct call. A recoverable `ToolError` or invalid arguments
-(`CODEMODE_INVALID_CALL`) and results that cannot cross into the script as JSON
-(`CODEMODE_INVALID_RESULT`) reject the call's promise with an `Error` carrying
-`code` and `message`, which the script may catch. Handler exceptions, limit
-exhaustion and cancellation stop the script and fail the run, just as for a direct
-call. Each script call is charged against `maxCalls` and admitted through the
-shared leaf queue, so `maxConcurrency` bounds `Promise.all` fan-out. Calls the
-script started but did not await settle before its result is published, and
-cancellation and the deadline still apply to them.
+**Tool calls inside a script** use the same validation and admission as direct calls.
+A recoverable `ToolError`, invalid arguments (`CODEMODE_INVALID_CALL`) or a
+non-JSON result (`CODEMODE_INVALID_RESULT`) reject the call's promise with an
+`Error` carrying `code` and `message`, which the script may catch. Handler
+exceptions, limit exhaustion and cancellation stop the script and fail the run.
+Each call counts against `maxCalls`, and `maxConcurrency` bounds `Promise.all`
+fan-out. Each script call is a child run (item key `<call id>.<n>`), so `--trace`,
+`history` and Studio show what the script did.
 
-The script is logged on its call (up to 16 KiB). Each script call is a child run
-of that call, with item key `<call id>.<n>` and the usual activity log, so `--trace`,
-`history` and Studio show what the script did. Durable agents checkpoint the script
-as one call: it is replay-safe only when every reachable tool is replay-safe.
-Reachable tool identities, including child implementation versions, are part of
-the agent's definition identity, so changing one rejects resumption of old checkpoints.
-Otherwise an interrupted script becomes `TUBELESS_AGENT_CALL_INTERRUPTED`. Nested
-calls are not journaled individually.
+**Durability and dry runs.** Durable agents checkpoint a script as one call: it is
+replay-safe only when every reachable tool is. An interrupted script becomes
+`TUBELESS_AGENT_CALL_INTERRUPTED`, and nested calls are not journaled individually.
+Dry runs execute scripts, and each call follows its tool's own dry-run policy
+(`read`, `list` and `search` run; `write`, `edit`, `bash` and MCP tools are
+skipped, and a script that awaits a skipped result fails the preview).
 
-Dry runs execute scripts, and each script call follows its tool's own dry-run
-policy: `read`, `list` and `search` run, while tools without a preview handler,
-such as `write`, `edit`, `bash` and MCP tools, are skipped. A script that awaits a
-skipped result fails the preview, as a direct call would. A `dryRun` decision
-source can therefore preview read-only scripts.
-
-An executor decides where scripts run; pass one as `codemode: { executor }`. With
-`codemode: true`, the default `createNodeCodemodeExecutor()` (also exported from
-`tubeless/agent/node`) runs each script in a fresh Node or Bun worker thread with heap
-limits, inside a `node:vm` context. That context disables string code generation
-(`eval`, `Function`) and WebAssembly, and has no `process`, `require`, `fetch` or timers.
-Values cross into the script only as JSON text. The context is created without host-realm
-objects, and the worker starts with an empty environment.
-This is best-effort isolation, not a security boundary. Like `bash`, treat scripts as
-code running with the host's authority. On a runtime without file-based worker
-threads, such as Cloudflare Workers, a script run without an executor fails the run
-with `TUBELESS_AGENT_CODEMODE_UNAVAILABLE`. There, use
+**Executors.** `codemode: true` uses `createNodeCodemodeExecutor()` (also from
+`tubeless/agent/node`): a fresh Node or Bun worker thread with heap limits in a
+`node:vm` context without `eval`, `Function`, WebAssembly, `process`, `require`,
+`fetch` or timers, an empty environment, and JSON-only values crossing in. This is
+best-effort isolation, not a security boundary; treat scripts like `bash`, as code
+running with the host's authority. Without file-based worker threads (for example
+Cloudflare Workers), a run without an executor fails with
+`TUBELESS_AGENT_CODEMODE_UNAVAILABLE`; use
 [`createWorkerLoaderCodemodeExecutor`](./deploy-cloudflare.md#code-mode-agents-on-workers).
-
-A custom `CodemodeExecutor` implements `execute(execution, signal)`. It runs
-`execution.code` as an async function body with `tools` and `console`, forwards each
-tool call to `execution.call(name, inputJson)`, and turns the resolved `CodemodeReply`
-JSON into the call's value or a thrown `Error` with `code`. It resolves with the
-script's JSON result text and console lines, or `{ ok: false, message }` for a script
-error, and stops promptly when `signal` aborts. Tubeless keeps the deadline,
-cancellation, budgets, draining and failure classification for every executor. A
-rejection without an aborted signal becomes `CODEMODE_SANDBOX_ERROR`, and calls made
-after a stop receive `CODEMODE_STOPPED`.
-The [code-mode recipe](../examples/agent-codemode.ts) runs a scripted survey
-without credentials.
+Pass your own with `codemode: { executor }`: implement `CodemodeExecutor.execute(execution, signal)`
+to run `execution.code` with `tools` and `console`, forward calls to
+`execution.call(name, inputJson)`, return the JSON result text and console lines (or
+`{ ok: false, message }`), and stop when `signal` aborts. Tubeless keeps deadlines,
+budgets and failure classification for every executor.
 
 ## Define tools and an agent
 
-Every agent, including child agents, includes `read`, `write`, `edit`, `bash`, `list`,
-and `search` unless its setup narrows them. Pass `defaultTools` to either factory to
-grant only some, for example `defaultTools: ["read", "list", "search"]` for an
-autonomous agent that must not write or run commands; `[]` grants none. Unknown names
-fail at definition. The optional `tools` object adds custom capabilities; a custom
-entry with a built-in name replaces that tool for this agent. The decision context
-advertises the merged registry, code-mode declarations list only it, and other
-names fail as unknown tools. `AgentCall`, `AgentDecision`, and `AgentOutcome` take the
-selection as their last type parameter (`AgentCall<Registry, false, "read" | "list">`)
-and include each custom override's exact types.
-Narrow outcomes by both `ok` and `tool` before reading a tool-specific value.
+Every agent, including children, gets `read`, `write`, `edit`, `bash`, `list` and
+`search` unless narrowed. Pass `defaultTools` to grant a subset, for example
+`["read", "list", "search"]` for an agent that must not write or run commands; `[]`
+grants none, and unknown names fail at definition. `tools` adds custom capabilities,
+and an entry named like a built-in replaces it. Only the merged registry is
+advertised; other names fail as unknown. `AgentCall`, `AgentDecision` and
+`AgentOutcome` take the selection as the last type parameter
+(`AgentCall<Registry, false, "read" | "list">`); narrow outcomes by both `ok` and
+`tool` before reading a value.
 
-Use `defineTool` for a handler with a description, `inputSchema`, `outputSchema`,
-and `run(validatedInput, context)`. Both schemas follow Standard Schema V1.
-The input schema must expose Standard JSON Schema input conversion for
-`draft-2020-12`, or supply an explicit `inputJsonSchema` object. `defineAgentLoop`
-similarly requires a `resultSchema` with input conversion or `resultJsonSchema`.
-Descriptors are owned, frozen JSON data; explicit descriptors assert agreement
-with the validators, which remain authoritative. No schema or model SDK is a
-runtime dependency of Tubeless.
+`defineTool` takes a description, `inputSchema`, `outputSchema` and
+`run(validatedInput, context)`. Schemas follow Standard Schema V1; the input schema
+must expose Standard JSON Schema conversion for `draft-2020-12`, or you supply an
+`inputJsonSchema`. `defineAgentLoop` likewise needs a `resultSchema` with conversion
+or a `resultJsonSchema`. Validators stay authoritative over explicit descriptors.
+Tool names start with a letter, use letters, digits, `_` or `-`, and are at most 128
+characters.
 
-Tool names start with a letter and contain letters, digits, underscores, or
-hyphens, up to 128 characters. A call ID is a nonblank string of at most 256
-characters, unique within its turn. Model data can select registered names and
-supply arguments; it cannot add registry entries or change harness limits.
-
-`defineAgentLoop` takes `id`, `inputSchema`, `resultSchema`, `initialState`, and
-`decide`, with optional `tools`, `reduce`, `dryRun`, and `limits`. It returns a
-pipeline with the single step and target `agent`. Its exact raw input, schema
-transformed output, and literal ID work with ordinary `fromPipeline`,
-`defineProject`, and `definePipelineCommand`. Automatic CLI flags still require
-JSON Schema metadata on the agent's input schema.
+`defineAgentLoop` takes `id`, `inputSchema`, `resultSchema`, `initialState` and
+`decide`, plus optional `tools`, `reduce`, `dryRun` and `limits`. It returns a
+pipeline with a single step and target `agent` that works with `fromPipeline`,
+`defineProject` and `definePipelineCommand`. Automatic CLI flags need JSON Schema
+metadata on the input schema.
 
 ### Embed an agent in a pipeline
 
-Use `fromPipeline` when ordinary work needs an agent's answer, just as for any
-other child pipeline. The [composition recipe](../examples/agent-pipeline.ts)
-forwards validated parent options to a delegating agent and feeds its validated
-answer into a dependent report step. It uses scripted decisions so the entire
-example, including child agents, can run without credentials or in preview mode:
+Use `fromPipeline` as for any child pipeline. The
+[composition recipe](../examples/agent-pipeline.ts) feeds a delegating agent's
+validated answer into a dependent report step, with scripted decisions so it runs
+and previews without credentials:
 
 ```sh
 make run FILE=examples/agent-pipeline.ts ARGS='--question "red missing"'
 make run FILE=examples/agent-pipeline.ts ARGS='--dry-run --question "red missing"'
 ```
 
-Both return `Summary: 3 characters; RED | 7 characters; Observed NOT_FOUND: Word unavailable`.
 Recording the parent with `--trace` or `--store` exposes the same child-agent
 history as recording the agent directly. A child failure or cancellation prevents
-the required report step from running.
+dependent steps from running.
 
 ## Default workspace tools
 
-| Tool     | Arguments                                   | Result and bounds                                                                                                                                |
-| -------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `read`   | `path`, optional `startLine` and `maxLines` | UTF-8 content and line range; starts at line 1, returns up to 200 lines by default and 16 KiB. `maxLines` may be at most 2,000.                  |
-| `write`  | `path`, `content`                           | Creates parent directories and creates or replaces the file; returns its path and byte count.                                                    |
-| `edit`   | `path`, `oldText`, `newText`                | Replaces one exact match; missing or ambiguous matches return a recoverable error without writing.                                               |
-| `bash`   | `command`, optional `cwd` and `timeoutMs`   | stdout, stderr, exit code, signal, timeout and truncation flags. Defaults to 30 seconds; maximum 5 minutes. Combined output is capped at 16 KiB. |
-| `list`   | optional `path`                             | Up to 200 directory entries with file/directory/symlink kinds and a truncation flag.                                                             |
-| `search` | `query`, optional `path`                    | Case-sensitive literal search with paths and line numbers; up to 50 matches and 16 KiB of path/text content.                                     |
+| Tool     | Arguments                                   | Result and bounds                                                                                            |
+| -------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `read`   | `path`, optional `startLine` and `maxLines` | UTF-8 content; up to 200 lines by default (max 2,000) and 16 KiB; rejects binary files.                      |
+| `write`  | `path`, `content`                           | Creates parent directories; creates or replaces the file.                                                    |
+| `edit`   | `path`, `oldText`, `newText`                | Replaces one exact match; missing or ambiguous matches are a recoverable error and write nothing.            |
+| `bash`   | `command`, optional `cwd` and `timeoutMs`   | stdout, stderr, exit code, signal. Defaults to 30 seconds, maximum 5 minutes; output capped at 16 KiB.       |
+| `list`   | optional `path`                             | Up to 200 entries with kinds and a truncation flag.                                                          |
+| `search` | `query`, optional `path`                    | Case-sensitive literal search; up to 50 matches and 16 KiB. Skips binary, oversized, `.git`, `node_modules`. |
 
-Workspace tools publish their actions through step progress and scoped pipeline
-logs. Reads, writes, and edits show file paths; bash shows a command preview;
-list and search show their paths and query. Completion includes line ranges,
-bytes, exit codes, or result counts after output validation succeeds; failure and cancellation receive explicit
-log entries. Previews retain at most 160 input characters and escape control
-characters. File contents, edit replacements, and command output stay out of these
-activity summaries. This works with the standard pipeline reporter, including
-the agent REPL's live tree and redirected or `--no-graph` logs.
+- Model descriptors require every option, accepting `null` for the default;
+  application calls may omit them. Files up to 1 MiB; named pipes and devices are
+  rejected.
+- Paths resolve from `context.cwd` (absolute paths are accepted), and `bash.cwd`
+  from the same directory. These are host filesystem and shell operations with the
+  process's permissions; **`cwd` is not a sandbox**.
+- Filesystem and command-start failures are recoverable `ToolError` observations; a
+  nonzero exit or timeout is reported in the result. Cancellation is fatal and waits
+  for the command to close; on POSIX the process group gets a signal, escalating to
+  SIGKILL after 250 ms. Descendants that escape the group may survive.
+- Read, list and search run in dry runs; write, edit and bash are skipped, and a
+  turn requiring a skipped result fails.
+- Calls in a batch may run concurrently; put dependent filesystem changes in
+  successive turns. Writes and edits to one file are serialized in-process and
+  replaced atomically (staged in a sibling temp directory, so the destination
+  directory must be writable and searchable). Symlinks are followed; permissions
+  are preserved; other hard links keep the old contents. Operations are not
+  transactions across calls and not crash-durable.
+- Actions appear as step progress and scoped logs (paths, command previews, counts),
+  never file contents or command output. Custom handlers can add detail with
+  `context.reportProgress({ completed: 0, message })` and `context.log`.
 
-Turns display “Plan next action”, “Tool calls”, and “Update context”; individual
-calls display registered tool names. Custom handlers can add detail with
-`context.reportProgress({ completed: 0, message: "Your action" })` and
-`context.log`, using the same reporter.
-
-File reads, edits and writes support regular UTF-8 files up to 1 MiB; named pipes
-and devices are rejected. `read` rejects binary files. `search` skips binary and
-oversized files, `.git`, `node_modules`, and nested symlinks. During directory
-searches it also skips unavailable descendants, retaining other matches;
-`skippedFiles` counts unsupported files and unavailable entries, counting an
-unavailable directory once. Missing or inaccessible explicit roots still fail,
-as do cancellation and unexpected I/O errors.
-
-List and search sort each directory in case-sensitive filename order before
-applying result limits or descending. Each visited directory's entry list is read
-in full for sorting; search processes at most 2,000 entries and 32 directory levels.
-Search snippets are capped at 1,024 UTF-8 bytes per line and shift to the first
-match when the initial snippet omits it. A query longer than that bound can itself
-be clipped; `truncated` reports omitted text or results.
-Listing caps retained names at 16 KiB. Result metadata is additional to these content limits.
-Nullable options select defaults. Application calls may omit these options;
-model descriptors require them explicitly with `null` accepted for defaults.
-
-Paths resolve from the invocation's `context.cwd`; absolute paths are accepted.
-`bash.cwd` resolves from that same directory. These are host filesystem and shell
-operations using the process's permissions and environment; `cwd` is not a sandbox.
-Filesystem and command-start failures become recoverable `ToolError` observations.
-A command's nonzero exit or timeout is reported in its result. Cancellation remains
-fatal and waits for the owned command to close; on POSIX, timeout/cancellation
-signals the command's process group, escalating to SIGKILL after 250 milliseconds.
-At that deadline, remaining output pipes are closed and the output is marked
-truncated. Descendants that escape the process group may survive, but cannot keep
-the tool waiting on inherited output pipes; process groups are not a sandbox.
-
-All defaults use the ordinary validated tool execution path, shared budgets,
-concurrency limits, and tracing. Read, list, and search run in dry runs. Write,
-edit, and bash skip live work and produce no fabricated result; an agent turn
-requiring one of these skipped results fails. Put dependent filesystem changes in
-successive turns; calls in a batch may run concurrently. Writes and edits to the same
-file run one at a time within a process, so concurrent edits each apply to the
-latest contents. Each write or edit stages
-the complete contents in a sibling temporary directory, then atomically replaces
-the destination. Cancellation or failure before replacement preserves the original;
-cancellation racing with replacement can leave the complete new file. Existing
-symlinks are followed; `write` can create a missing target and its parent directories
-without replacing the link. Existing owner, group, and file permission bits are preserved.
-Atomic replacement requires write and search permissions on the destination directory,
-even when the file itself is writable. If staging or restoring ownership is not permitted,
-the tool fails without replacing the original; it does not fall back to an in-place write.
-Replacement creates a new inode: other hard links retain the old contents, and extended
-file attributes are not copied.
-Operations are not transactions across calls or a crash-safe durability guarantee.
-
-The [workspace recipe](../examples/agent-workspace.ts) uses all six defaults and
-one custom tool to create, inspect, edit, and verify `message.txt`. Its decisions
-are scripted; its filesystem and bash operations are real:
+The [workspace recipe](../examples/agent-workspace.ts) uses all six defaults and a
+custom tool with scripted decisions and real filesystem operations. It creates or
+replaces a demo file:
 
 ```sh
 make run FILE=examples/agent-workspace.ts ARGS='--directory .tubeless/agent-tools-demo'
 ```
 
-The recipe creates or replaces that demo file. It is registered as `workspace-agent`
-in the example project. The existing OpenAI recipe also advertises the defaults
-automatically, alongside its custom text tools.
-
 ## Delegate to pipelines and subagents
 
-Use `pipelineTool` to register an ordinary compiled pipeline or another agent in
-the same tools registry. A schema-backed child needs only a description:
+`pipelineTool` registers a compiled pipeline or another agent in the tools registry.
+A schema-backed child needs only a description; the child's options schema becomes
+the model's arguments and the tool returns its finalized result:
 
 ```ts
 const tools = {
@@ -1037,9 +561,8 @@ const tools = {
 };
 ```
 
-The tool uses the child's options schema for model arguments and returns its
-exact finalized result. For different argument shapes or a schema-less child,
-supply `inputSchema` and `mapOptions` together:
+For different argument shapes or a schema-less child, supply `inputSchema` and
+`mapOptions` together:
 
 ```ts
 const tools = {
@@ -1051,69 +574,53 @@ const tools = {
 };
 ```
 
-The harness validates arguments, maps options, validates child options, and checks
-child plans for the whole batch before starting any child. Each schema transform
-runs once. Keep mappers free of side effects. A child owns its state and registry;
-its finish returns a result to the parent, which can make further decisions.
-
-Run the [delegation recipe](../examples/agent-delegation.ts) without credentials:
+Arguments are validated and child plans checked for the whole batch before any child
+starts; keep mappers side-effect free. A child owns its state and registry and
+returns a result to the parent. The
+[delegation recipe](../examples/agent-delegation.ts) runs without credentials:
 
 ```sh
 make run FILE=examples/agent-delegation.ts ARGS='--question "red blue"'
 make run FILE=examples/agent-delegation.ts ARGS='--dry-run --question "red blue"'
 ```
 
-The parent creates two child-agent calls, consumes their results in a later
-ordinary summary-pipeline call, then finishes with
-`Summary: 3 characters; RED | 4 characters; BLUE`. Each decision source is
-scripted; it can be replaced with an application-owned model callback.
-
-A failed child is recoverable only when all its failures are actual handler
-`ToolError`s. Multiple expected failures become one bounded `TUBELESS_TOOL_ERRORS`
-observation in pipeline order. Mixed failures, validation, finalization, model
-callbacks, and cancellation remain fatal. Child pipelines inherit dry runs and
-retain their own step policies; mark side effects or supply preview handlers.
+A failed child is recoverable only when all its failures are handler `ToolError`s
+(several become one bounded `TUBELESS_TOOL_ERRORS` observation). Mixed failures,
+validation, finalization, model callbacks and cancellation are fatal. Children
+inherit dry runs and keep their own step policies; mark side effects or supply
+preview handlers.
 
 ## Decisions and state
 
-`decide(state, context)` may return either of these shapes:
+`decide(state, context)` returns one of:
 
 ```ts
 { kind: "continue", calls: [{ id: "lookup-1", tool: "lookup", input: { query: "example" } }] }
 { kind: "finish", result: "The raw result schema input" }
 ```
 
-The return type is intentionally `unknown`: every decision is checked, including
-typed provider responses. `AgentDecision<typeof tools, RawResult>` is useful for
-typed fixtures. Empty batches, duplicate call IDs, unknown names, extra envelope
-or call fields, and malformed arguments fail. A decision cannot both finish and
-schedule calls. A valid `undefined` final result is distinct from a missing
-`result` property.
+The return type is `unknown` because every decision is validated, including typed
+provider responses; `AgentDecision<typeof tools, RawResult>` helps typed fixtures.
+Empty batches, duplicate call IDs, unknown tools, extra fields and malformed
+arguments fail, and a decision cannot both finish and schedule calls.
 
-All arguments are validated before any handler in the batch starts. Input
-transformations run once; each tool output and final result is validated once.
-Independent calls may complete in any order, but `reduce(state, outcomes)` sees
-decision order and runs once after the entire successful batch settles.
-Dependencies between calls belong in a later turn.
+All arguments in a batch are validated before any handler starts. Calls may finish in
+any order, but `reduce(state, outcomes)` sees decision order and runs once after the
+whole batch succeeds. Put dependencies between calls in a later turn.
 
-State is owned by each invocation. Initialization and reducer commits copy and
-freeze finite primitives, arrays, and plain records; undefined fields are allowed.
-Cycles, class instances, functions, and resource handles are rejected. Keep
-clients and file handles in application closures. Reducers return the next state;
-omitting a reducer preserves state without accumulating observations.
-
-`context.turn` starts at one. `context.stateVersion` starts at zero and advances
-after each accepted batch, including when the reducer is omitted. The context
-contains ordinary step services, immutable capability descriptions/input JSON
-Schemas, and the raw final-result JSON Schema. It exposes no tool handlers.
+State is owned per invocation and must be finite primitives, arrays and plain
+records; cycles, class instances, functions and handles are rejected, so keep
+clients in application closures. Reducers return the next state; with no reducer,
+state is unchanged. `context.turn` starts at one and `context.stateVersion` at zero.
+The context carries step services, immutable capability descriptions and the final
+result JSON Schema, never tool handlers.
 
 ## Failure, cancellation, and limits
 
-A handler may throw `new ToolError(code, message)` for an expected domain failure.
-The reducer receives `{ id, tool, ok: false, error: { code, message } }`, while the
-tool's child run retains its failed lifecycle. An arbitrary error with the same
-string code is fatal. Tool errors thrown by validators or reducers are fatal too.
-Successful outcomes contain `{ id, tool, ok: true, value }` with validated outputs.
+A handler throws `new ToolError(code, message)` for an expected domain failure; the
+reducer receives `{ id, tool, ok: false, error: { code, message } }`. Any other error
+is fatal, as are `ToolError`s thrown by validators or reducers. Successes arrive as
+`{ id, tool, ok: true, value }`.
 
 | Limit            | Default | Scope                                                           |
 | ---------------- | ------- | --------------------------------------------------------------- |
@@ -1123,48 +630,31 @@ Successful outcomes contain `{ id, tool, ok: true, value }` with validated outpu
 | `maxDepth`       | 4       | Pipeline-tool delegation edges below this agent                 |
 | `maxConcurrency` | 1       | Active decision callbacks and leaf step handlers in the subtree |
 
-Limits are safe integers; `maxCalls` and `maxDepth` permit zero. A batch exceeding the
-remaining call budget fails before any handler starts. Admitted calls consume
-their allowance even if execution stops before dispatch. Finishing on the last
-turn succeeds; continuing on that turn fails before tools run. Exhaustion fails
-with `TUBELESS_AGENT_LIMIT_REACHED`, including bound, consumed count, requested
-count, and scope in the error. Invalid decisions and state use
-`TUBELESS_AGENT_INVALID_DECISION` and `TUBELESS_AGENT_INVALID_STATE`. Ordinary
-pipeline child-error wrapping retains these source codes in the cause chain.
-
-The root invocation owns shared counters and execution permits. Child limits can
-tighten the bounds; every ancestor limit still applies. Concurrent sibling
-admissions check and charge the entire batch atomically, with no refunds.
-`maxTurns` remains local to each agent. A `pipelineTool` call consumes one call
-and one delegation edge; calls and decisions inside that child also consume
-ancestor budgets. Ordinary pipeline steps consume leaf permits, not call counts.
-A depth of zero permits handler tools but rejects pipeline tools.
-
-Decision callbacks release their permits before child dispatch. Wrappers waiting
-on descendants hold no permit, so nested execution works with concurrency one.
-The scope survives ordinary `fromPipeline`, `forEachPipeline`, and iteration
-between agents. Use registered pipeline tools for delegation: manually calling
-`run` from a handler is outside this composition contract. Schema validation,
-mapping, reducers, and finalizers are not counted as leaf handlers. The outer
-pipeline's DAG `maxConcurrency` remains a separate control.
-
-Cancellation stops new calls and waits for active work to settle. Fatal failures
-also stop dispatch and drain active work, without cancelling sibling handlers.
-Neither case calls the reducer or starts another decision. Handlers must cooperate
-with `context.signal`; Tubeless cannot terminate an uncooperative promise.
-
-Planning never initializes state or calls models, argument validators, or tools.
-A dry run skips the agent unless `dryRun(state, context)` supplies a preview
-decision source. Tools skip by default and require their own preview handler.
-A skipped required tool or agent output fails finalization instead of inventing
-an observation or answer.
+- A batch exceeding the remaining call budget fails before any handler starts.
+  Finishing on the last turn succeeds; continuing on it fails. Exhaustion fails with
+  `TUBELESS_AGENT_LIMIT_REACHED`; invalid decisions and state use
+  `TUBELESS_AGENT_INVALID_DECISION` and `TUBELESS_AGENT_INVALID_STATE`.
+- Counters are shared across the subtree; child limits can tighten but never loosen
+  ancestors' (`maxTurns` stays per agent). A `pipelineTool` call costs one call and
+  one depth edge; depth `0` permits handler tools but rejects pipeline tools.
+  Nested execution works with `maxConcurrency: 1`. The outer pipeline's DAG
+  `maxConcurrency` is separate.
+- Delegate through registered pipeline tools; calling `run` from a handler is
+  outside this contract.
+- Cancellation and fatal failures stop new calls and drain active work without
+  calling the reducer or starting another decision. Handlers must honor
+  `context.signal`; an uncooperative promise cannot be terminated.
+- Planning never initializes state or calls models or tools. A dry run skips the
+  agent unless `dryRun(state, context)` supplies a preview decision source; tools
+  skip unless they have a preview handler. A skipped required output fails
+  finalization rather than inventing one.
 
 ## Stream public assistant text
 
-Both bundled adapters accept a `text(event, signal)` callback. Omit it to keep the
-ordinary JSON transport. With it, decision requests use SSE; compaction remains
-private and uses JSON. These observations are ephemeral and enable no transcript
-storage. Import `AgentTextEvent` and `AgentTextSink` from `tubeless/agent`.
+Both adapters accept a `text(event, signal)` callback (`AgentTextEvent` and
+`AgentTextSink` are exported from `tubeless/agent`). Without it, requests use JSON;
+with it, decision requests stream over SSE and compaction stays private. Streaming
+enables no transcript storage.
 
 ```ts
 const model = anthropicModel({
@@ -1175,63 +665,35 @@ const model = anthropicModel({
 });
 ```
 
-Each HTTP attempt has a fresh `streamId`, provider name and agent `turn`.
-Ordered `delta` events carry public assistant text only; `end` carries
-`completed` or `interrupted`. Thinking, reasoning, signatures, tool arguments,
-compaction summaries and native conversation state never enter these events.
-The model's structured `_finish` arguments stay private until the agent validates
-its final result. A provider that emits only tool calls has no incremental text.
+- Each HTTP attempt has a fresh `streamId`, provider name and agent `turn`. Ordered
+  `delta` events carry public assistant text only; `end` carries `completed` or
+  `interrupted`. Thinking, reasoning, tool arguments, finish results, compaction
+  summaries and native conversation state never enter these events.
+- Delivery awaits the sink within the decision deadline. Pass the supplied signal
+  into async I/O; interruption notices may arrive already aborted.
+- A successful `end` means the provider response completed, not that the result
+  passed validation. Failed streams commit no conversation. After a successful HTTP
+  response, streaming failures are not retried, so shown text is never silently
+  replayed; discard partial text or keep it labelled as interrupted.
+- The sink owns filtering. Filter live content before writing it, redact transcripts
+  separately with `transcript.redact`, and sanitize terminal control characters
+  yourself. Use `streamId` for state when sensitive values span deltas.
 
-Delivery awaits the sink before reading more events, within the existing decision
-deadline and caller cancellation. The callback receives that attempt's signal;
-pass it into asynchronous I/O and release resources on abort. Interruption
-notifications may receive an already-aborted signal and should clean up promptly.
-Each delta is at most 16 KiB of UTF-8 and keeps Unicode code points intact;
-observed text has a 1 MiB limit per attempt. SSE input has a 16 MiB total limit, a 2 MiB plus 4 KiB
-framing limit per event, and at most 65,536 events; assembled native responses
-retain the existing 2 MiB limit. A limit, protocol error or sink failure fails the
-decision with a sanitized diagnostic. HTTP failures retain ordinary retries;
-after a successful HTTP response, streaming failures are never retried, so
-already displayed text cannot be replayed silently.
-
-A successful end means the provider response completed, not that its proposed
-result passed agent validation. OpenAI deltas must match the completed response's
-text exactly. Anthropic deltas assemble the completed native content blocks.
-Neither adapter re-emits completed text to the live sink. When transcript capture
-is also enabled, it records each completed assistant block once using the
-existing version 1 `assistant` event; partial observations never enter artifacts,
-SQLite, evaluation fixtures or Studio. Failed streams commit no conversation or
-partial assistant record. End notification after interruption is best effort:
-a blocked sink cannot delay cancellation. Discard partial observations, or retain
-them explicitly as interrupted content rather than a completed answer.
-
-The text sink owns filtering and output. Filter live content before writing it,
-and configure `transcript.redact` separately before persistence. Use `streamId`
-for state when sensitive values span deltas. Applications own privacy and must
-sanitize terminal control characters when writing live text themselves.
-
-Use `tubeless agent --stream` with built-in providers, or forward the factory's
-optional `text` setting into a custom adapter. Live commentary goes to stderr with
-plain progress reporting; the validated final answer keeps its usual stdout
-routing. Interrupted commentary is labelled. The flag does not enable
-`--capture-transcript`, and selected application agents keep ownership of their
-model configuration. Run the [scripted model demo](../examples/agent-transcript-model.ts)
-without credentials:
+`tubeless agent --stream` streams commentary to stderr for built-in providers; the
+validated answer keeps its usual stdout routing, and the flag does not enable
+`--capture-transcript`. Forward the factory's `text` setting into a custom adapter.
+Try the credential-free [scripted model demo](../examples/agent-transcript-model.ts):
 
 ```sh
 bun run tubeless -- agent --model-module ./examples/agent-transcript-model.ts --stream --prompt "Demonstrate streaming"
 ```
 
-The transport follows the provider's documented event lifecycles:
-[OpenAI Responses](https://developers.openai.com/api/docs/guides/streaming-responses)
-and [Anthropic Messages](https://platform.claude.com/docs/en/build-with-claude/streaming).
-
 ## Opt-in transcripts
 
 Set `transcript` on `defineAgent` or `defineAgentLoop` to observe content in a
-provider-neutral format. Without it, no transcript content is copied or delivered.
-Capture is independent of structural tracing, `--trace`, `--store` and durable
-checkpoints. The application supplies the sink; Tubeless chooses no storage path.
+provider-neutral format. Without it nothing is copied or delivered. Capture is
+independent of tracing, `--trace`, `--store` and durable checkpoints, and the
+application supplies the sink.
 
 ```ts
 import { defineAgent, type AgentTranscriptRecord } from "tubeless/agent";
@@ -1252,83 +714,55 @@ const agent = defineAgent({
 await agent.runOrThrow({ task: "List the files in this workspace." });
 ```
 
-Each version-1 record has `agentId`, `runId`, optional `parentRunId`, `sequence`,
-`timestamp`, `turn` and `dryRun`. `runId` is the owning agent invocation's ID,
-which joins structural history. Reserve `turn: 0` for invocation-level end events;
-number decision and tool events from turn one. Sequences start at one for each invocation;
-concurrent runs can share a sink but have separate sequences and byte budgets.
-An ordinary record has an `event` from this union:
+Each version-1 record has `agentId`, `runId` (joins structural history),
+`parentRunId?`, `sequence`, `timestamp`, `turn` and `dryRun`, plus an `event`:
 
-| Kind         | Content                                                                                                           |
-| ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `prompt`     | Task and assembled instructions for a model decision; excludes native history.                                    |
-| `assistant`  | One public text block from a bundled provider's response.                                                         |
-| `decision`   | Raw proposed decision before harness validation; includes call arguments or finish data.                          |
-| `call`       | Call ID, tool name and validated tool input, including script-issued calls.                                       |
-| `outcome`    | Call ID, tool name, validated value or expected tool error; reused outcomes have `replayed: true`.                |
-| `compaction` | Provider name after successful compaction; excludes native summary state.                                         |
-| `end`        | Agent invocation status: `completed`, `failed` or `cancelled`. Completed checkpoint replay adds `replayed: true`. |
+| Kind         | Content                                                                                 |
+| ------------ | --------------------------------------------------------------------------------------- |
+| `prompt`     | Task and assembled instructions for a decision (model-backed agents).                   |
+| `assistant`  | One public text block from a bundled provider.                                          |
+| `decision`   | Raw proposed decision before validation, including call arguments or finish data.       |
+| `call`       | Call ID, tool name and validated input, including script-issued calls.                  |
+| `outcome`    | Call ID, tool name, validated value or expected tool error; `replayed: true` if reused. |
+| `compaction` | Provider name after successful compaction.                                              |
+| `end`        | `completed`, `failed` or `cancelled`; `replayed: true` for checkpoint replay.           |
 
-Custom loops emit decisions, calls, outcomes and completion. Model-backed agents
-also emit prompts; the bundled OpenAI and Anthropic adapters add public text and
-compaction markers. Capture excludes opaque conversation state, encrypted reasoning,
-thinking blocks, signatures and raw HTTP bodies. It describes observed actions and
-model output; it is not a replayable provider conversation. A recorded proposal can
-still fail validation. Successful tools in a subsequently failed batch remain recorded;
-fatal error details stay in structural history rather than transcript end events.
+Capture excludes opaque conversation state, encrypted reasoning, thinking blocks and
+raw HTTP bodies; it is not a replayable provider conversation. A recorded proposal
+can still fail validation, and fatal error details stay in structural history.
+Child agents need their own explicit `transcript`. Plans and skipped dry runs emit
+nothing.
 
-Content can include project guidance, file contents, scripts and tool errors. Supply
-`redact` to return a replacement event of the same kind or `null` to suppress it.
-The redactor sees an owned, frozen snapshot and cannot change runtime values or
-envelope identity. Tubeless checks JSON-compatible replacements for the same kind
-and required fields before delivery, and disables capture if those checks fail.
-Only finite plain JSON content is retained: cycles, accessors,
-class instances, undefined values and excessive depth produce
-`{ omitted: <event kind>, reason: "unsupported-content" }` instead of an event.
+**Privacy and bounds.** Content can include project guidance, file contents, scripts
+and tool errors. `redact` receives a frozen snapshot and returns a same-kind
+replacement or `null` to suppress; an invalid replacement disables capture. Content
+that is not finite plain JSON becomes an `{ omitted, reason }` marker.
+`maxRecordBytes` (default and maximum 64 KiB) and `maxBytes` per invocation (default
+1 MiB, maximum 16 MiB) bound output; oversized events become omission markers
+without reaching the redactor, and after `{ limit: "maxBytes" }` capture stops. A
+missing end event or omission does not establish an empty or failed conversation.
 
-`maxRecordBytes` bounds the full JSON record plus newline: default and maximum
-64 KiB, minimum 1 KiB. `maxBytes` bounds each invocation: default 1 MiB, maximum
-16 MiB, minimum twice `maxRecordBytes`. Content is bounded before redaction and
-rechecked afterwards. Oversized events produce a `record-limit` omission without
-passing the original content to the redactor. One record's budget is reserved for
-`{ limit: "maxBytes" }`; after it is written, capture stops, including the end event.
-An envelope that cannot fit disables capture. Omission markers contain no original
-content. Neither omitted content nor a missing end event establishes an empty or
-failed conversation.
+**Delivery** is awaited and serialized per invocation in observation order (tool
+outcomes in completion order; match by call ID). A sink or redactor failure disables
+that invocation's capture with a warning and does not change execution. You own sink
+deadlines, permissions and retention; slow writes delay the run. Capture is
+best-effort: process death can leave partial records.
 
-Delivery is awaited and serialized per invocation, in observation order. Providers
-and tools enqueue observations during execution; the harness drains delivery outside
-provider request and code-mode script deadlines, including after rejected responses. Tool
-outcomes follow completion order; use call IDs to match decisions. Sink or redactor
-failure disables that invocation's capture with a fixed warning and leaves the
-agent's execution unchanged. Applications own sink I/O deadlines, permissions,
-retention and access. Slow writes delay the run. This is best-effort inspection;
-process death can leave partial records. Recovery continues to use its acknowledged
-checkpoint store. Completed recovery emits only an end marker for the new run,
-without duplicating historical content.
-
-Child agents need their own explicit `transcript` option. A parent's transcript can
-still contain its calls to the child and returned values. Planning and skipped dry
-runs emit nothing; explicitly authored previews emit records marked `dryRun: true`.
-The [credential-free transcript recipe](../examples/agent-transcript.ts) shows a
-caller-selected NDJSON destination and decision suppression.
+The [credential-free recipe](../examples/agent-transcript.ts) shows an NDJSON
+destination and decision suppression.
 
 ### Save and inspect a transcript
 
-Use `openNdjsonAgentTranscriptWriter(path)` from `tubeless/agent/node` for a
-validated NDJSON sink. Pass `writer.write` to `transcript.write`, then await
-`writer.close()` after all agents using it have settled. Writes from simultaneous
-invocations are serialized. Newly created files use mode `0600`; existing file
-permissions and retention remain application-owned. The writer appends and never
-truncates an existing file. It records content only; configure structural tracing
-separately so history and Studio can join records by run ID.
+`openNdjsonAgentTranscriptWriter(path)` from `tubeless/agent/node` is a validated
+NDJSON sink: pass `writer.write` to `transcript.write`, then await `writer.close()`
+after every agent using it has settled. It appends (never truncates), creates files
+with mode `0600`, and serializes simultaneous runs.
 
 ```ts
 import { openNdjsonAgentTranscriptWriter } from "tubeless/agent/node";
 
 const writer = await openNdjsonAgentTranscriptWriter(".tubeless/transcript.ndjson");
 try {
-  // Supply this writer to your agent's transcript option.
   const agent = defineAgent({
     id: "recorded",
     model: openaiModel(),
@@ -1340,7 +774,8 @@ try {
 }
 ```
 
-Attach a finished transcript to its structural SQLite history or NDJSON trace:
+The writer records content only; enable tracing separately so history and Studio can
+join records by run ID. Attach a finished transcript to its history:
 
 ```sh
 tubeless history --store .tubeless/runs.sqlite --transcript .tubeless/transcript.ndjson <agent-run-id>
@@ -1348,123 +783,75 @@ tubeless history --trace run.ndjson --transcript .tubeless/transcript.ndjson --j
 tubeless ui --trace run.ndjson --transcript .tubeless/transcript.ndjson
 ```
 
-History adds the selected run's content; JSON includes a `transcript` with records
-and recording status. Studio adds a **Transcript** tab to runs with available
-content, with paginated records and **Open turn** links. Nested agents retain their
-own transcripts: open their run to inspect their conversation. History also reads content previously imported into its SQLite store. Runs without
-stored content keep their existing history response shape.
+History adds the run's content (`transcript` with records and recording status in
+`--json`); Studio adds a **Transcript** tab with paginated records. Nested agents
+keep their own transcripts: open the child run. The whole file is validated before
+display (at most 64 MiB, 100,000 lines, 64 KiB per record); identical
+`(runId, sequence)` records dedupe and conflicts are rejected. Recording status is
+`complete`, `partial` (gaps or no end marker), `limited` (byte-limit marker) or
+`unavailable` (no matching records, possibly fully suppressed), independent of the
+agent's execution status. The file is a read-only snapshot; reopen to see appends.
 
-The reader validates the entire file before displaying content. It accepts at most
-64 MiB, 100,000 lines and 64 KiB per record, checks version and event shapes,
-deduplicates identical `(runId, sequence)` records and rejects conflicting records.
-It sorts each run by sequence. Gaps or a missing end marker produce `partial`;
-a byte-limit marker produces `limited`; a terminal end without gaps produces
-`complete`. These labels describe the recording, independently of the agent's
-execution status. No matching records means `unavailable`, which may include fully
-suppressed capture. The file is a read-only snapshot; reopen history or restart
-Studio to see later appends. History clearing is disabled while Studio has an
-attached transcript artifact, so clearing structural events cannot leave its content
-behind unnoticed.
-
-To keep the content with SQLite history, import the finished artifact explicitly:
+To keep content with SQLite history, import the finished artifact:
 
 ```sh
 tubeless history --store .tubeless/runs.sqlite --import-transcript .tubeless/transcript.ndjson
 tubeless history --store .tubeless/runs.sqlite <agent-run-id>
-tubeless ui --store .tubeless/runs.sqlite
 ```
 
-Every transcript run must already exist in that store's structural history. The
-import validates all records, keeps identical `(runId, sequence)` records once, and
-rejects conflicting content or run identities. An import failure rolls back all
-of its content changes. `--json` returns the number of newly imported records.
-History and Studio then read the saved content without `--transcript`; the source
-file is no longer needed for inspection. Studio refreshes visible partial and
-unavailable SQLite transcripts as records arrive, keeping loaded pages. Complete
-and limited recordings stop refreshing; **Show more** still loads remaining pages.
-SQLite agent runs expose the tab before content arrives, without enabling capture.
-Hidden tabs pause requests, and leaving the view stops them. Failed requests retain
-loaded content for retry. Clearing SQLite history also deletes its stored transcripts in the
-same transaction. Import leaves the original artifact unchanged.
+Every transcript run must already exist in that store; import is all-or-nothing,
+dedupes identical records, rejects conflicts, and leaves the source file unchanged.
+History and Studio then read the saved content without `--transcript`. Content lives
+in a separate table that inherits the database's filesystem permissions, so protect
+the database and its sidecars. Clearing SQLite history deletes its transcripts in
+the same transaction; clearing is disabled while Studio has a transcript artifact
+attached.
 
-Content stays in a separate table and inherits the existing database's filesystem
-permissions. Protect the database and its sidecars accordingly. Recording a run
-with `--store` still does not capture content automatically. Existing event-store
-schema versions are unchanged; older writable stores still require the normal
-explicit upgrade.
-
-The built-in workspace CLI can capture directly with
-`agent --store <path> --capture-transcript`, avoiding the artifact/import step.
-It uses the default transcript bounds and records full application content; it
-does not install a custom redactor or override selected agents' own sinks. See
-[CLI recording](./cli.md#prompt-a-workspace-agent) for a credential-free example.
-On Cloudflare, use `createCloudflareAgentTranscriptWriter` from
-`tubeless/cloudflare/transcript` as the explicit sink for each agent. The Studio
-Durable Object owns content alongside history; reads share Cloudflare Access and
-clearing deletes events and content atomically while refusing active launches.
-See [Cloudflare capture](./deploy-cloudflare.md#opt-in-agent-transcripts) and its
-[credential-free recipe](../examples/agent-transcript-cloudflare.ts).
+`tubeless agent --store <path> --capture-transcript` captures directly with default
+bounds and no redaction (full application content), and does not override a selected
+agent's own sink. See [CLI recording](./cli.md#prompt-a-workspace-agent). On
+Cloudflare, use `createCloudflareAgentTranscriptWriter` from
+`tubeless/cloudflare/transcript` as each agent's sink; see
+[Cloudflare capture](./deploy-cloudflare.md#opt-in-agent-transcripts) and its
+[recipe](../examples/agent-transcript-cloudflare.ts).
 
 ## Inspection and recordings
 
-Plans show the bounded turn pipeline and the agent's capability inventory and
-limits. Runtime call IDs are not selectable `--step` targets. Definition identity
-includes capabilities, input/result descriptor fingerprints, limits, and tool
-pipeline identities. Set `implementationVersion` when changing prompts,
-validators, reducers, or handlers whose semantics cannot be inferred from the graph.
+Plans show the bounded turn pipeline, the agent's capability inventory and limits.
+Definition identity covers capabilities, schema fingerprints, limits and tool
+pipeline identities; set `implementationVersion` when changing prompts, validators,
+reducers or handlers whose semantics the graph cannot show.
 
-Execution uses ordinary `decide`, `calls`, and `reduce` steps, with a new child run
-per turn and per dispatched tool. Turn iteration relations identify the owning
-agent. A tool run's `parentRunId` identifies its turn, and `itemKey` retains the
-call ID. Handler-tool first-attempt trace attributes record `agent.runId`, `agent.turn`,
-`agent.callId`, `agent.tool`, and `agent.parentAttemptId`. Decision, admission,
-and reduction attempts record bounded decision/count/state-version summaries.
-Dispatch also records the selected tool name on the turn, so aliases for the same
-child pipeline remain distinguishable. These trace v3 records round-trip through NDJSON and SQLite. State,
-prompts, inputs, and outputs are not recorded automatically. Live progress keeps
-at most 32 visible call groups and 32 recent turn groups.
+Execution uses ordinary `decide`, `calls` and `reduce` steps with a child run per
+turn and per dispatched tool (`itemKey` is the call ID). Trace attributes record
+`agent.runId`, `agent.turn`, `agent.callId`, `agent.tool` and bounded
+decision/count/state-version summaries; state, prompts, inputs and outputs are not
+recorded automatically.
 
-Use `tubeless history <run-id>` to inspect a recorded agent or a parent pipeline
-containing agents. The detail view joins descendants by run identity and shows
-agent → turn → call → child agent, including decisions, state versions before and
-after reduction, observed/selected call counts, cumulative local call admissions,
-errors, and termination. Repeated call IDs remain separate across turns; a failed
-tool can appear inside a completed turn when the agent recovered. History retains
-every recorded call even when live progress rows were truncated.
+`tubeless history <run-id>` shows an agent or a parent pipeline containing agents
+as agent → turn → call → child agent, with decisions, state versions, call counts,
+errors and termination (validated finish, limit exhaustion, cancellation, failure,
+skipped execution, or completion without a recorded finish). A failed tool can
+appear in a completed turn when the agent recovered.
 
 ```sh
 bunx tubeless run --trace agent.ndjson ./examples/agent-delegation.ts -- --question "red missing"
-bunx tubeless history --trace agent.ndjson
 bunx tubeless history --trace agent.ndjson <agent-run-id>
 bunx tubeless history --trace agent.ndjson --json <agent-run-id>
 ```
 
-JSON details add `agentHistory.agents`: each agent has its run ID, declared
-capabilities and limits, termination, and ordered turns with calls. Calls link to
-child agents with `childAgentRunIds`; each child has a `parentCall` containing the
-owning agent, turn, call ID, and call run ID. This keeps nested histories linked
-without duplicating subtrees. Each turn carries `usage`, each agent its own `usage`
-and a `subtreeUsage` that adds every descendant agent, and `agentHistory.usage` holds
-the run total; all are per provider and model, and an absent counter was not reported.
-Existing run lists and `--events` output retain
-their scope. `--pipeline` selects the requested root run; its detail still includes
-children with different pipeline IDs.
-
-Older traces remain readable. Missing decisions or tool aliases are shown as
-unknown; history does not guess an alias from a pipeline name. A dispatch with no
-recorded child has unknown status. A run with no terminal event remains recorded
-as running, which does not establish that a process is still alive. Termination
-distinguishes validated finish, limit exhaustion, cancellation, failure, skipped
-execution, and completion without a recorded finish decision. Detailed Studio
-presentation remains a separate slice.
+`--json` adds `agentHistory.agents` with each agent's run ID, capabilities, limits,
+termination and ordered turns with calls. Calls link to children through
+`childAgentRunIds`, and each child's `parentCall` names its owner. A run with no
+terminal event stays recorded as running, which does not prove a process is alive.
+Older traces remain readable, with missing decisions or aliases shown as unknown.
 
 ## Durable execution
 
-Add `durability` and an explicit `implementationVersion` to either agent factory.
-The execution key identifies one task across process restarts. Invoke the same
-agent with the same key and inputs to resume it. Use a new key for new work or
-after changing its definition, prompt, validators, reducers, model configuration,
-or tool implementations.
+Add `durability` and an explicit `implementationVersion` to either factory. The
+execution key identifies one task across restarts: invoke the same agent with the
+same key and inputs to resume. Use a new key for new work or after changing the
+definition, prompt, validators, reducers, model configuration or tools.
 
 ```ts
 import { defineAgent } from "tubeless/agent";
@@ -1485,53 +872,34 @@ try {
 }
 ```
 
-The SQLite adapter uses Node 22.18+ built-ins (`node:sqlite`), WAL and full synchronous commits;
-it adds no runtime dependency. It creates database files with mode `0600` and
-rejects existing files with group or other access on POSIX. Database files must
-be regular files with one hard link; SQLite sidecars are checked as well. On
-Windows, protect the database directory with the application's filesystem ACLs.
-A private `<database>.leases` directory holds one SQLite lock file per execution
-key. Different keys run concurrently; a second owner of the same key is rejected.
-Closing the lease or exiting the process releases its native SQLite lock, so
-PID reuse cannot prevent recovery. Keep the lock directory and its files while
-any store is open; removing them can break exclusive ownership. This adapter is
-intended for one host with a local filesystem. It requires Node's `node:sqlite`;
-use another store for runtimes without that module or distributed ownership.
+The SQLite store uses Node 22.18+ `node:sqlite` with no dependency, creates files
+with mode `0600`, and rejects existing files with group or other access on POSIX
+(on Windows, protect the directory with ACLs). It keeps a private
+`<database>.leases` directory with one lock per execution key: different keys run
+concurrently, a second owner of the same key is rejected, and locks release when the
+process exits. Keep that directory while any store is open. It targets one host with
+a local filesystem; use another store for other runtimes or distributed ownership.
 
-The credential-free [durable workspace recipe](../examples/agent-durable.ts)
-writes and verifies a demonstration file. Run it with Node from the repository:
+The credential-free [durable workspace recipe](../examples/agent-durable.ts) derives
+a key from the task, so repeating a task returns its saved answer without repeating
+tools:
 
 ```sh
 bun run build
 node dist/workbench/workbench-bin.js run examples/agent-durable.ts -- --task "hello durable"
 ```
 
-It opens storage lazily, closes it after execution, and derives a key from the
-task. Repeating that task returns its saved answer without repeating tools.
-A completed answer describes the committed execution; it does not recheck
-external files that have since changed. Plans and dry runs open no storage.
-Durable resume is driven by the key, independently of the CLI's artifact
-`--resume` flag and trace/history storage.
+Resume is driven by the key, independently of the CLI's artifact `--resume` flag and
+trace storage. A saved answer describes the committed execution and does not recheck
+files that have since changed. Plans and dry runs open no storage. Root input
+validation runs on every invocation.
 
-Before external work, the harness acknowledges decision-budget reservations,
-validated decisions and prepared arguments, whole-batch call reservations, and
-individual call intent. It commits validated outcomes independently, then the
-reduced state or final result. Child agents share this journal and ancestor
-budgets, including through ordinary pipeline composition. Live children use
-their parent's journal rather than opening an independent store or execution
-key. Every live child joining recovery must also declare an explicit
-`implementationVersion`, even without its own `durability` configuration.
-Bump that version when changing its decisions, tools or other semantics; ancestor
-definitions include child versions, so changed children invalidate saved ancestor
-results too. Explicitly previewed children retain ephemeral state and do not
-require a version. Stable fan-out keys
-and deterministic mapping preserve child identities; ordinary pipelines are
-not themselves checkpointed step by step. Accepted call argument transforms,
-committed output transforms, and committed finish transforms are reused.
-Root input validation still runs on every invocation.
-Model usage recorded after a resume is attached to the resumed turn run, whose
-recorded turn metadata keeps the execution's logical turn number rather than the
-new invocation's iteration count.
+Child agents share their parent's journal and ancestor budgets, including through
+ordinary pipeline composition. Every live child joining recovery must declare its own
+`implementationVersion` (previewed children need none); ancestor identities include
+child versions, so changing a child invalidates saved ancestor results. Ordinary
+pipelines are not checkpointed step by step, so keep fan-out keys stable and mapping
+deterministic.
 
 | Call state at restart       | Behavior                                                           |
 | --------------------------- | ------------------------------------------------------------------ |
@@ -1540,36 +908,27 @@ new invocation's iteration count.
 | Running, `replay: "safe"`   | Rerun with the same durable call identity.                         |
 | Running, `replay: "unsafe"` | Return `TUBELESS_AGENT_CALL_INTERRUPTED` as a recoverable outcome. |
 
-Handler tools and ordinary pipeline tools default to `"unsafe"`. Read, list,
-search, and directly registered agent pipelines default to `"safe"`.
-Set `replay: "safe"` only for repeatable work or an operation protected by
-business idempotency. A safe ordinary pipeline may repeat its intermediate
-steps and option mapping; that entire invocation must be repeatable. Custom
-tools and decision callbacks receive `context.execution`, containing the stable
-execution ID, agent route, turn, and optional call ID. Use all applicable fields
-for external idempotency keys. Trace run IDs identify individual attempts and
-can change after a restart.
+Handler tools and ordinary pipeline tools default to `"unsafe"`; read, list, search
+and directly registered agent pipelines default to `"safe"`. Set `replay: "safe"`
+only for repeatable work or operations protected by business idempotency. Custom
+tools and decision callbacks receive `context.execution` (execution ID, agent
+route, turn, optional call ID); use all applicable fields for external idempotency
+keys, since trace run IDs change after restart.
 
-Checkpoints cannot make arbitrary external effects exactly once. An interrupted
-unsafe mutation may have run partially or completely; the agent must inspect
-its effects and choose its next action. Unacknowledged decisions may make a new
-model request and consume another decision reservation. Initialization,
-validators, mappers and reducers must be pure: a crash before their output is
-acknowledged can repeat them. Cancellation preserves resumable state; ordinary
-fatal failures are saved as terminal failures. A rejected storage write stops
-the invocation even when its commit is ambiguous. Reopening reads authoritative
-storage before choosing recovery behavior.
+**Checkpoints cannot make external effects exactly once.** An interrupted unsafe
+mutation may have run partially or fully, so the agent must inspect its effects.
+Unacknowledged decisions may trigger a new model request. Initialization,
+validators, mappers and reducers must be pure because a crash can repeat them.
+Cancellation preserves resumable state; ordinary fatal failures are saved as
+terminal. A rejected storage write stops the invocation.
 
-Implement `AgentCheckpointStore` for another backend. `acquire` must guarantee
-exclusive ownership, and `write` must atomically replace the bytes and resolve
-only after durable acknowledgement. Trace exporters are best-effort and do not
-satisfy this contract. `createMemoryAgentCheckpointStore()` is useful for tests
-and embedded hosts; its data is lost with the process. The default
-`plainAgentCheckpointCodec` preserves finite plain data, undefined fields,
-negative zero and sparse arrays. Other validated arguments or results require
-a deterministic lossless codec; agent state itself remains owned plain data.
-Checkpoints contain task inputs, prompts, conversation and outputs; protect
-them as application data.
+Implement `AgentCheckpointStore` for another backend: `acquire` must guarantee
+exclusive ownership, and `write` must atomically replace the bytes and resolve only
+after durable acknowledgement (trace exporters do not qualify).
+`createMemoryAgentCheckpointStore()` suits tests; its data dies with the process.
+The default `plainAgentCheckpointCodec` handles finite plain data; other validated
+arguments or results need a deterministic lossless codec. Checkpoints contain task
+inputs, prompts, conversation and outputs, so protect them as application data.
 
 ## Execution environments
 
@@ -1586,46 +945,31 @@ function agentForWorkspace(environment: AgentEnvironment) {
 }
 ```
 
-An `AgentEnvironment` owns `resolveCwd`, `projectInstructions`, `read`, `write`,
-`edit`, `bash`, `list`, and `search`. Implement them against your sandbox or
-remote service using the declared typed results and cancellation signal.
-Environment factories, workspace resolution, guidance loading and default tools
-recheck cancellation before and after their work. If an operation rejects while
-the signal is aborted, the run retains the signal's cancellation reason even when
-the adapter throws an SDK-specific error. Without an aborted signal, adapter errors
-keep their ordinary failure semantics. Active operations still settle before the
-run returns.
-All byte limits below count UTF-8 data and apply at the shared tool boundary:
+An `AgentEnvironment` implements `resolveCwd`, `projectInstructions`, `read`,
+`write`, `edit`, `bash`, `list` and `search` against your sandbox or remote service,
+honoring the cancellation signal. It may be a capability object or an async factory
+(resolved once per live invocation, never during planning or skipped dry runs).
 
-- Limit `write.content`, `edit.oldText`, and `edit.newText` to 1 MiB each. Oversized
-  arguments fail validation before any call in the batch starts.
-- Return at most 16 KiB of read content or combined bash stdout/stderr.
-- Return up to 200 listing entries with at most 16 KiB of retained names.
-- Return up to 50 search matches with at most 1,024 bytes per snippet and 16 KiB
-  of combined path/text content.
+- The backend enforces the [workspace tool limits](#default-workspace-tools): at most
+  1 MiB for `write.content`, `edit.oldText` and `edit.newText` (oversized arguments
+  fail validation before the batch starts), and results within the documented
+  read, bash, list and search bounds. Oversized results fail validation; truncate in
+  the backend and set `truncated`. File size and mutation semantics are also the
+  backend's job.
+- An explicit environment has no local filesystem or guidance fallback. Its stable
+  `id` names the workspace authority and cwd the workspace within it; durable resume
+  rejects changes to either.
+- Custom tools and decision callbacks receive `context.environment`, and composed
+  children inherit it unless they declare their own. Closures must use it rather than
+  touching the host directly.
+- If an operation rejects while the run's signal is aborted, the run keeps the
+  cancellation reason even when the adapter throws an SDK-specific error.
+- Environments supply capabilities, not a sandbox: isolation and remote-process
+  termination belong to the backend.
 
-Oversized results fail validation before state commits. Apply truncation in the
-backend and set `truncated` when omitting text or results. Enforce file size and
-mutation semantics in the backend as well, including the completed file after
-an edit. No local guidance or filesystem fallback is used for an explicit environment. Its stable `id`
-identifies the workspace authority, and cwd identifies the workspace within it;
-durable resume rejects changes to either. Custom tools and decision callbacks
-receive `context.environment`. Composed children inherit it unless they declare
-their own environment. Custom closures remain responsible for using that
-authority instead of accessing the host directly.
-
-An environment may be a capability object or an async factory. The factory is
-resolved once per live invocation and is never called by planning or skipped
-dry runs. Model agents and agents with an explicit environment resolve cwd once
-before decisions and tools. `createNodeAgentEnvironment()` from
-`tubeless/agent/node` exposes the local adapter explicitly; its default
-`node:local` id names the local filesystem authority rather than the host, so
-a recreated container or pod still resumes its checkpoints. Pass `{ id }` to
-name a distinct authority, for example one store shared by several hosts.
-Environments supply capabilities, not a sandbox guarantee: isolation and
-remote-process termination belong to the backend. The optional Node adapter and
-storage remain outside the provider-independent contracts.
-
-Run the credential-free [environment recipe](../examples/agent-environment.ts)
-to list a workspace through an explicit Node adapter, or supply your own
-environment to its factory.
+`createNodeAgentEnvironment()` from `tubeless/agent/node` exposes the local adapter
+explicitly. Its default `node:local` id names the local filesystem authority rather
+than the host, so a recreated container still resumes its checkpoints; pass `{ id }`
+to name a distinct authority. The credential-free
+[environment recipe](../examples/agent-environment.ts) lists a workspace through an
+explicit Node adapter.

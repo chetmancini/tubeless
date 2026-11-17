@@ -2,29 +2,25 @@
 
 ## Steps, dependencies, and results
 
-A pipeline describes a series of steps and the values passed between them.
-Each step has an ID, a function to run, and any dependencies. A finalizer
-combines step outputs into the value returned to the caller.
+A pipeline is a set of steps and the values passed between them. Each step has an
+ID, a function, and dependencies. A finalizer combines step outputs into the
+value returned to the caller.
 
-Create steps with one `createSteps<TOptions>()` factory per pipeline. Take its
-`step` constructor, then pass a step object to another step's
-`dependsOn` array to require its output;
-TypeScript then infers that input's type.
+Create steps with one `createSteps<TOptions>()` factory per pipeline. Pass a step
+object to another step's `dependsOn` array to require its output; TypeScript
+infers that input's type.
 
-`definePipeline` checks the graph immediately. Duplicate or reserved IDs,
-missing dependencies, contradictory dependencies, and cycles cause a
-`PipelineDefinitionError`. TypeScript also catches duplicate literal step IDs.
-The definition stores a copy of the dependency arrays, so later changes to
-those arrays do not alter the graph.
+`definePipeline` checks the graph immediately. Duplicate or reserved IDs, missing
+or contradictory dependencies, and cycles throw `PipelineDefinitionError`.
 
-Keep IDs stable: dependencies, output keys, selection, and traces use them.
-Set `name` when a step needs a different label in plans and progress reports.
-Changing the label does not change the ID.
+Keep IDs stable: dependencies, output keys, selection, traces, and CLI flags use
+them. Set `name` for a friendlier label in plans and progress; it never changes
+the ID.
 
 ## Wait for user or application input
 
-Use `waitForInput` from the same `createSteps` factory to pause one branch until
-an application-owned input adapter replies:
+`waitForInput` from the same `createSteps` factory pauses one branch until an
+application-owned adapter replies:
 
 ```ts
 const { step, waitForInput } = createSteps<{ draft: string }>();
@@ -35,22 +31,19 @@ const feedback = waitForInput("feedback", {
 });
 ```
 
-The `read(inputs, context)` callback can use a terminal, web form, or any asynchronous
-input source. Its typed result feeds dependents like an ordinary step. The pipeline
-stays active while input is pending, reports `Waiting for input`, then continues
-through its normal dependencies and finalizer. Add `outputSchema` to validate or
-transform untrusted input before dependent work starts.
+The typed result feeds dependents like any step output. Add `outputSchema` to
+validate untrusted input.
 
-Input steps skip dry runs by default; a `dryRun` callback can supply preview input.
-They cannot be cached or use policy `skip` predicates. Gate dependent work with
-an ordinary step when an input response should prevent an action.
-Cancellation stops waiting and ignores a late reply or
-rejection. Forward `context.signal` into the adapter to release its UI/I/O resources.
-The application owns the input source and any persistence across process restarts.
-See the [review pipeline recipe](../examples/user-input.ts). Declarative YAML and
-JSON pipelines use registered input handlers with output schemas; see
-[decisions, confirmations, and text](./declarative-pipelines.md#user-decisions-confirmations-and-text)
-and the [YAML input recipe](../examples/yaml-user-input.ts).
+- Input steps skip dry runs by default; a `dryRun` callback can supply preview
+  input. They cannot be cached or use `skip` predicates; gate dependent work with
+  an ordinary step instead.
+- Forward `context.signal` to the adapter. Cancellation stops waiting and ignores
+  a late reply.
+- The application owns persistence across process restarts.
+
+See the [review pipeline recipe](../examples/user-input.ts). YAML and JSON
+pipelines use registered handlers instead; see
+[decisions, confirmations, and text](./declarative-pipelines.md#user-decisions-confirmations-and-text).
 
 ## Dependency choices
 
@@ -60,19 +53,13 @@ and the [YAML input recipe](../examples/yaml-user-input.ts).
 | `optionalDependsOn`  | When present  | No                   | Fallback or partial rerun           |
 | `skipAfterFailureOf` | No            | Yes                  | Publish/write safety gate           |
 
-Prefer required dependencies unless partial execution is an intentional part of
-the workflow. A failure gate blocks after either `failed` or `cancelled`; both
-mean the guarded prerequisite did not safely complete.
-
-For example, a publish step that needs a validated artifact should require the
-validation step with `dependsOn`. If it needs only the build output but must
-stop when validation fails, use `skipAfterFailureOf` for validation. An
-`optionalDependsOn` entry alone does not block publication after a failure.
+Prefer required dependencies unless partial execution is intentional. A failure
+gate blocks after `failed` or `cancelled`. A publish step that needs a validated
+artifact should use `dependsOn` on validation; if it needs only the build output
+but must stop when validation fails, use `skipAfterFailureOf`. An
+`optionalDependsOn` alone never blocks publication.
 
 ## Skips and failures
-
-A step can be omitted before its handler starts, intentionally skip its work,
-or fail while running. These cases have different effects on dependent steps.
 
 | Outcome         | What happened                                                                             | What dependents receive                              |
 | --------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -80,21 +67,18 @@ or fail while running. These cases have different effects on dependent steps.
 | Policy skip     | A step's `skip` predicate decided that work was unnecessary                               | The supplied skip value, or `undefined`              |
 | Failure         | The step's work failed                                                                    | No successful output; required dependents cannot run |
 
-Fail-fast is the default: a failure stops new work. Set `continueOnError` to
-allow independent steps to proceed. The run still reports failure, and
-`runOrThrow` still throws. Use `run` to inspect any partial result.
+Fail-fast is the default: a failure stops new work. Set `continueOnError` to let
+independent steps proceed; the run still fails and `runOrThrow` still throws. Use
+`run` to inspect a partial result.
 
-Adding `skip` to a step definition makes it skippable. A string result or
-`{ reason }` publishes no value, so the output is typed as `T | undefined`.
-When every skip branch returns `{ reason, value }`, the output remains `T` and
-dependents do not need an absence guard. For a schema-backed step, the fallback
-must satisfy the schema input type and dependents receive the transformed output.
-Structural skips still publish no output and prevent required dependents from
-running, so they do not widen the input type seen by a dependent that does run.
+A `skip` string or `{ reason }` publishes no value, so the output is typed
+`T | undefined`. When every skip branch returns `{ reason, value }`, the output
+stays `T`. For a schema-backed step, the fallback must satisfy the schema input
+type. See [`conditional-step.ts`](../examples/conditional-step.ts).
 
 ## Execution controls
 
-Pass business inputs as the first argument and execution controls as the second:
+Pass business inputs first and execution controls second:
 
 ```ts
 await pipeline.run(options, { dryRun: true });
@@ -102,14 +86,9 @@ await pipeline.run(options, { maxConcurrency: 4 });
 await pipeline.runOrThrow(options, { targets: ["publish"] });
 ```
 
-When the input type has no required fields, use `pipeline.run()` or
-`pipeline.runOrThrow()`. Omitted or `undefined` input becomes a fresh `{}` on each
-run and still passes through the input schema, including validation and defaults.
-Required input fields remain required at compile time. To supply controls or
-context while omitting input, use `run(undefined, controls, context)`; the first
-argument always represents domain input. `PipelineInput<typeof pipeline>` remains
-the domain object type, without the call's optional `undefined`.
-See the [inherited inputs recipe](../examples/inherited-inputs.ts).
+When no input field is required, call `pipeline.run()`. To pass controls without
+input, use `run(undefined, controls, context)`. See the
+[inherited inputs recipe](../examples/inherited-inputs.ts).
 
 | Control           | Default   | Effect                                                                     |
 | ----------------- | --------- | -------------------------------------------------------------------------- |
@@ -119,94 +98,52 @@ See the [inherited inputs recipe](../examples/inherited-inputs.ts).
 | `targets`         | All steps | Selects declared goals and their required dependencies and failure gates   |
 | `stepIds`         | All steps | Selects exactly the listed steps, without adding dependencies              |
 
-`targets` and `stepIds` cannot be combined. `PipelineRunControls` enforces this
-with a union type, including child controls and command plans. Omitted fields or
-explicit `undefined` mean no selection. Dynamic inputs still receive a planning
-error if both fields are supplied with arrays. Use `pipeline.plan(controls)` to
-check selection before running. Planning requires no business inputs and does
-not call step handlers or schema validators.
+`targets` and `stepIds` cannot be combined. `pipeline.plan(controls)` validates
+selection without business inputs and without calling handlers or schemas.
 
-Concurrency overlaps asynchronous work; synchronous CPU-heavy handlers still block
-the event loop. For CPU parallelism in Node, explicitly use a
-[worker-thread adapter](./remote-step-composition.md#cpu-work-in-node-worker-threads)
-through `fromRemote`.
+**Concurrency.** It overlaps asynchronous work; CPU-heavy synchronous handlers
+still block the event loop (use a
+[worker-thread adapter](./remote-step-composition.md#cpu-work-in-node-worker-threads)).
+The default `1` preserves serial ordering of side effects. Raise it only when
+independent steps can safely overlap, and declare ordering as graph edges. Ready
+steps dispatch in topological order, declaration order breaking ties. See the
+[parallel DAG recipe](../examples/parallel-dag.ts).
 
-`maxConcurrency` must be a positive finite integer. `plan()` rejects invalid values
-with `TUBELESS_RUN_CONCURRENCY_INVALID`; runs reuse that plan validation before
-options validation or step execution.
-The default of `1` preserves existing serial execution, including the ordering
-of independent side effects. Opt in only when independent steps can safely overlap.
-Declare ordering constraints as graph edges when side effects must run in sequence.
+A child run keeps its own limit (default `1`; set it in child `controls`).
+Fan-out `concurrency` limits child runs separately, and these limits multiply.
+There is no shared semaphore, so parents holding slots while awaiting children
+that need those slots can deadlock.
 
-All three edge types are scheduling prerequisites: a step waits until each required
-input, optional input, and failure gate is terminal (completed, failed, skipped, or
-cancelled). Their existing output and failure policies then determine whether it
-runs. Ready steps dispatch in the compiled topological order, with declaration
-order breaking graph ties. A freed slot can start a dependent immediately, without
-waiting for unrelated steps. Skip predicates and output schemas, including schemas
-for policy-skip values, occupy the same slot as the step handler.
+**Failure and cancellation.**
 
-Failure and cancellation have separate dispatch policies:
+- Without `continueOnError`, the first failure stops new work. Active steps are
+  not aborted; they settle first, and unstarted steps report `fail-fast`.
+- With `continueOnError`, eligible branches continue. Required descendants skip,
+  failure gates skip after an unsuccessful prerequisite, and the finalizer
+  receives whatever outputs exist.
+- An external `context.signal` abort stops new work regardless of
+  `continueOnError`, cancels unstarted selected steps, and is forwarded to active
+  ones. Cancellation is cooperative: a handler that ignores the signal still
+  settles before the run returns, and its actual outcome is kept.
+- Any non-cancellation error makes the run `failed`; only cancellation errors
+  make it `cancelled`. Without `continueOnError`, any step error prevents
+  finalization.
 
-| Condition                          | New work                              | In-flight work                                             | Unstarted steps                                                                                                                        |
-| ---------------------------------- | ------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `continueOnError: false` (default) | Stop after the first observed failure | Let every active step settle; do not abort it              | Report `fail-fast`, retaining already planned structural skip reasons                                                                  |
-| `continueOnError: true`            | Continue eligible branches            | Let every active step settle                               | Required descendants skip for unmet dependencies; failure gates skip after an unsuccessful prerequisite; optional inputs may be absent |
-| External `context.signal` abort    | Stop regardless of `continueOnError`  | Forward the same signal and wait for active work to settle | Cancel unstarted selected steps; filtered steps remain skipped                                                                         |
-
-Fail-fast does not create an abort signal or cancel active work. Cancellation is
-cooperative: a handler that ignores the signal must still settle before the run
-returns, and its actual outcome is retained. An external abort while draining after
-a failure takes precedence for unstarted selected steps, including those with a
-planned dry-run or unmet-dependency skip. Already-terminal steps keep their outcomes.
-
-Every concurrent failure is recorded. Any non-cancellation error makes the run
-`failed`, even when other steps are cancelled. A run containing only cancellation
-errors is `cancelled`. With `continueOnError`, the finalizer receives all available
-outputs once active work has settled; an aborted signal prevents the finalizer's
-handler from running. Without `continueOnError`, any step error prevents finalization.
-
-Live hooks and trace events retain actual event order. Final `result.steps` is in
-stable plan order. Final `result.errors` places run-level errors first, then step
-errors in plan order, then finalization errors; errors with the same position retain
-their observation order. `runOrThrow` retains every error in its result and selects
-its message and original cause from that ordered list. The first reported step error
-therefore need not be the failure that triggered fail-fast; skipped steps retain
-that triggering step's ID in `dependencyId`.
-
-The default result still comes from the last step in the graph's stable topological
-order, regardless of which step finishes last.
-
-The limit applies to one pipeline run. A child wrapper occupies one parent slot;
-child runs retain their own limit, defaulting to `1`. Set `maxConcurrency` in child
-`controls` to opt them in separately. Fan-out `concurrency` independently limits
-simultaneous child runs, and must be a positive finite integer; an invalid static
-value is rejected when the step is created, and an invalid callback value fails
-the step before any child starts. These limits multiply: four parallel fan-out steps with
-`concurrency: 8` can create 32 active children. Child DAG parallelism can increase
-the number of active child steps further. There is no shared semaphore; having
-parents hold slots while awaiting children that need those same slots can deadlock.
-See the [parallel DAG recipe](../examples/parallel-dag.ts).
-
-Parallel execution exposes implicit ordering between side effects. Declare the
-appropriate dependency before increasing concurrency. An ordering-only `after` or
-`waitFor` edge, which supplies no data and allows work after a failed prerequisite,
-is a possible future extension; neither edge exists today.
+Live hooks see events in real order; `result.steps` is in stable plan order and
+`result.errors` lists run-level, then step, then finalization errors. The first
+listed step error need not be the one that triggered fail-fast; skipped steps
+carry that step's ID in `dependencyId`.
 
 ## Reusing deterministic step outputs
 
-An ordinary step can opt into caching with `cache: { version: "v1" }`, or
-`cache: true` to inherit the pipeline implementation version. Keys, local storage,
-and codecs have defaults; pipeline `cache.maxAge` accepts durations such as
-`"30 days"`. Only that step's raw handler result is reused;
-selection, dependencies, skip decisions, and output validation still apply.
-Cache hits carry `outputSource: "cache"` with an ordinary completion status.
-See [cache contracts and safety rules](./step-output-cache.md).
+A step opts into caching with `cache: { version: "v1" }`, or `cache: true` to
+inherit the pipeline implementation version. Only the handler's raw result is
+reused; selection, dependencies, skips, and output validation still apply. Hits
+report `outputSource: "cache"`. See [step output caching](./step-output-cache.md).
 
 ## Selection and finalization
 
-**Without selection controls, run the whole pipeline.** Tubeless does not
-automatically select a target.
+Without selection controls, the whole pipeline runs.
 
 | Run controls               | Selected work                                                    |
 | -------------------------- | ---------------------------------------------------------------- |
@@ -214,39 +151,13 @@ automatically select a target.
 | `{ targets: ["publish"] }` | `publish` and its required inputs and failure gates, recursively |
 | `{ stepIds: ["build"] }`   | Exactly `build`, without adding prerequisites                    |
 
-Selection determines eligible work; dry-run policies, skips, failures, and
-cancellation still govern whether each selected step executes.
+Selection decides eligibility; dry-run policy, skips, failures, and cancellation
+still govern whether a selected step executes.
 
-The `targets` field on **`definePipeline`** declares which goals callers may
-select. It does not select work for a run. When that field is omitted, the last
-step in execution order is exposed as a selectable public goal; `targets: []`
-exposes none. Neither declaration restricts an unfiltered run.
-
-A pipeline can be `definePipeline({ id, steps })`. Omitted `finalize` returns the
-last step's output, or `undefined` when the run did not publish it. The inferred
-public goal and default result use the complete graph's
-**topological execution order**, so a downstream step remains the goal even if
-listed before its prerequisites. Required dependencies, optional inputs, and
-failure gates all affect that order. When several steps are ready, the scheduler
-uses declaration order to break ties. An empty pipeline has no targets and its
-default result is `undefined`.
-
-Step types do not retain their dependency graph. Implicit target types therefore
-include all declared step IDs, and the default result type includes all step
-output types plus `undefined`. Runtime exposes only the final execution-order
-target and rejects other IDs. Use explicit `targets` or `finalize` when you need
-narrower types.
-
-An explicit finalizer retains its own result and can use `requireOutputs`.
-
-Use `finalize: count` to require and return one declared step's output with its
-exact type. For example, a string-producing `load` followed by a number-producing
-`count` returns `number` with `finalize: count`, rather than the default
-`string | number | undefined`. This is shorthand for
-`requireOutputs([count], ({ count }) => count)` and does not change targets or
-selection. See the [precise result recipe](../examples/precise-result.ts).
-
-Pipeline definitions can declare different downstream goals with step references:
+The `targets` field on `definePipeline` declares which goals callers may select;
+it does not select work. Omitted, the last step in execution order is the one
+public goal; `targets: []` exposes none. Neither restricts an unfiltered run.
+`pipeline.targetIds` and CLI `--target` expose the declared set.
 
 ```ts
 definePipeline({
@@ -257,60 +168,44 @@ definePipeline({
 });
 ```
 
-At call sites, `targets` accepts only those declared literal IDs. The planner
-recursively selects each target's required inputs and failure gates, while
-leaving optional-only inputs out. `pipeline.targetIds` and CLI `--target`
-discovery expose the same declared set. Internal steps are not public goals;
-`stepIds` remains an exact filter for partial reruns and other advanced
-workflows and does not add prerequisites. Empty selections, unknown,
-undeclared, or duplicate IDs, and a run that supplies both fields fail during
-planning.
+Required inputs and failure gates of a target are selected; optional-only inputs
+are not. Empty, unknown, undeclared, or duplicate IDs, and supplying both
+`targets` and `stepIds`, fail during planning.
 
-Each planned step includes `selectionReasons`, which explains why it was
-selected or omitted. A target plan can report a direct `target`, a
-`required-dependency`, a `failure-gate`, an excluded `optional-only` input, or
-an `outside-target-closure` omission. Exact filters use `exact` and
-`not-selected`; unfiltered plans use `all`.
+Omitted `finalize` returns the last step's output in topological execution order
+(declaration order breaks ties), or `undefined` when the run did not publish it.
+Because step types do not retain the graph, the implicit result type is the union
+of all step outputs plus `undefined`. Use `finalize: count` to require and return
+one step's output with its exact type; it is shorthand for
+`requireOutputs([count], ({ count }) => count)`. See the
+[precise result recipe](../examples/precise-result.ts).
+
+Each planned step carries `selectionReasons` explaining why it was selected or
+omitted, and `selected` / `skipReason` (such as `filtered`, `dry-run`, or
+`unmet-dependency`):
 
 ```ts
 const plan = pipeline.plan({ targets: ["publish"] });
-const load = plan.steps.find((step) => step.id === "load");
-
-// A shared prerequisite can explain every path that selected it.
-load?.selectionReasons;
+plan.steps.find((step) => step.id === "load")?.selectionReasons;
 // [{ kind: "required-dependency", dependentId: "build", targetId: "publish" }]
 ```
 
-`selected` tells you whether selection includes the step. `skipReason` explains
-why it will not run, such as `filtered`, `dry-run`, or `unmet-dependency`.
-
-Use the structured plan directly in applications. For terminal or JSON output,
-the workbench already renders the same data through `tubeless plan`.
+Use the plan directly in applications; `tubeless plan` renders the same data.
 
 ### Required final outputs
 
-A finalizer may receive only some step outputs: dry runs, exact step filters,
-and failures can leave others missing. Use `finalize: step` for one unchanged
-output, or use
-`requireOutputs([stepA, stepB], callback)` when a valid result needs those
-outputs. It checks their presence and makes them required properties in the
-callback. If an output is missing, finalization fails and reports its step ID.
-A step that successfully returns `undefined` still produced an output; that
-is different from a step that never supplied one.
+Dry runs, exact filters, and failures can leave outputs missing. Use
+`requireOutputs([stepA, stepB], callback)` when a valid result needs them: it
+makes them required in the callback and fails finalization, naming the step, if
+one is absent. A step that returns `undefined` still produced an output.
 
-Tubeless also checks declared targets, including the implicit last-step target,
-against these requirements. Each target
-must include the step selected by `finalize: step`, or all steps needed by
-`requireOutputs`, either directly or through
-its dependencies and failure gates. Use a plain finalizer when different
-selected goals are allowed to return partial results. The default finalizer
-reads only the last step in execution order; it never falls back to an earlier output.
-If independent finalizer inputs are outside the implicit target closure, declare
-a target that includes them or opt out of public targets with `targets: []`.
+Tubeless also checks each declared target, including the implicit one, includes
+the steps the finalizer requires (directly or through dependencies and gates).
+Use a plain finalizer when selected goals may return partial results. If
+independent finalizer inputs fall outside the implicit target closure, declare a
+target that includes them or use `targets: []`.
 
 ## Step statuses and structured errors
-
-A step moves through these states:
 
 ```text
 planned ──┬──> running ──┬──> complete
@@ -321,49 +216,20 @@ planned ──┬──> running ──┬──> complete
           └──> cancelled
 ```
 
-Hooks let your application respond to these changes. Use `onStepStart`,
-`onStepProgress`, `onStepComplete`, `onStepSkip`, `onStepCancel`, or `onStepFail`
-for a specific event; TypeScript narrows the callback data to that event.
-Use `onStepPlan` to observe planning. Use `onStepStatus` when one listener
-needs every status, for example to update a progress display. It runs in
-addition to any specific hooks you register.
+Every selected step ends in exactly one terminal report; cancellation is distinct
+from failure. Hooks respond to changes: `onStepPlan`, `onStepStart`,
+`onStepProgress`, `onStepComplete`, `onStepSkip`, `onStepCancel`, `onStepFail`,
+and `onStepStatus` (every status, in addition to specific hooks).
 
-Each hook receives its own copy of lifecycle metadata, including nested plan,
-progress, error, and report fields. Mutating that copy does not change execution,
-traces, returned reports, or other hooks. The domain `value` supplied to
-`onFinalizeComplete` and `onPipelineComplete` retains its original identity and
-is not cloned or frozen; treat that value as read-only. Hook exceptions are logged
-and do not stop subsequent hooks or fail the run.
+Each hook gets its own copy of lifecycle metadata, so mutating it does not affect
+execution. The domain `value` given to `onFinalizeComplete` and
+`onPipelineComplete` is the original object; treat it as read-only. Hook
+exceptions are logged and never fail the run.
 
-A `running` status may be published repeatedly as progress changes. Every
-selected step ends in exactly one terminal report; cancellation is distinct
-from failure, including selected steps that were cancelled before they started.
-
-```ts
-const hooks: PipelineHooks = {
-  onStepProgress({ progress, step }) {
-    renderProgress(step.id, progress);
-  },
-  onStepSkip({ reason, step }) {
-    explainSkip(step.id, reason);
-  },
-  onStepFail({ error, step }) {
-    reportError(step.id, error);
-  },
-  onStepCancel({ error, step }) {
-    reportCancellation(step.id, error);
-  },
-};
-```
-
-Every `PipelineError` has `code`, `phase`, and `kind` fields defined by
-Tubeless. Branch on those fields rather than message text. `phase` identifies
-where the error occurred (`definition`, `planning`, `execution`, or `finalization`); `kind`
-distinguishes definition, selection, step, dependency, cancellation, child, and
-finalization problems. If a thrown error supplied its own machine code, it is
-retained separately as `sourceCode`. Native `Error.cause` chains are copied into
-a bounded, cycle-safe `PipelineErrorCause` tree containing only message, name,
-source code, and nested cause fields, so reports and trace events stay JSON-safe.
+Every `PipelineError` has `code`, `phase` (`definition`, `planning`, `execution`,
+`finalization`), and `kind`. Branch on those, not message text. A thrown error's
+own machine code is kept as `sourceCode`, and `Error.cause` chains become a
+bounded, JSON-safe `PipelineErrorCause` tree.
 
 ```ts
 const result = await pipeline.run(options);
@@ -374,33 +240,21 @@ if (first?.code === "TUBELESS_STEP_FAILED" && first.sourceCode === "ENOENT") {
 }
 ```
 
-`runOrThrow` raises `PipelineExecutionError` with the full structured result on
-`result` and the original thrown value on native `cause`. Its default message
-identifies the pipeline, phase, package code, step, and deepest normalized cause.
-`PipelineDefinitionError` uses the same diagnostic summary for every rejected
-definition issue. Applications should branch on the structured fields and own
-any domain-specific presentation.
-
-`PipelineStepReport` describes a step's final status. Successful reports carry
-timing, skipped reports carry `reason` plus optional `message` and
-`dependencyId`, and failed/cancelled reports carry a structured `error`.
-Hooks and trace events use these same reports.
+`runOrThrow` raises `PipelineExecutionError` with the full result on `result` and
+the original thrown value on `cause`. `PipelineStepReport` describes a step's
+final status: timing when it completed, `reason` and optional `dependencyId` when
+skipped, a structured `error` when failed or cancelled.
 
 ## Versioned run records
 
-`run()` returns one versioned `PipelineRun<TResult>`. Every execution has a
-package-generated `runId`, terminal `status`, start and finish timestamps,
-structured errors, and one terminal report per planned step. Pass
-`context.correlationId` when an external orchestrator owns a reusable job or
-workflow identifier. Pass `context.parentRunId` only when linking to another
-Tubeless execution ID. The same identities are available in step contexts and
-optional trace exports.
+`run()` returns one versioned `PipelineRun<TResult>` with a generated `runId`,
+terminal `status`, timestamps, structured errors, and one report per planned
+step. Pass `context.correlationId` for an external job identifier and
+`context.parentRunId` only to link another Tubeless run ID.
 
-`finalized` is the result-presence discriminant. When it is `true`, TypeScript
-narrows `value` to `TResult`; when it is `false`, `value` is `undefined`.
-Finalization and terminal status are independent: a failed best-effort run may
-still have a finalized partial value. A finalized `TResult` may itself be
-`undefined`; `finalized` still distinguishes that result from no result.
+`finalized` discriminates result presence: when `true`, `value` is `TResult`;
+when `false`, it is `undefined`. Status and finalization are independent: a
+failed best-effort run may still have a finalized partial value.
 
 ```ts
 const run = await pipeline.run(options, { continueOnError: true });
@@ -410,74 +264,36 @@ if (run.finalized) {
 }
 ```
 
-An actual step execution receives one `attemptId`. It appears on the
-`PipelineStepContext`, its terminal `PipelineStepReport`, and trace lifecycle
-records. Executed reports also carry start and finish timestamps. Structural
-skips and steps cancelled before starting have neither an attempt ID nor a start
-timestamp because their handlers never ran. `context.reportAttempt()` records retry progress inside that step execution;
-it does not create a new `attemptId`.
+An executed step gets one `attemptId`, on its context, report, and trace records.
+Structural skips and steps cancelled before starting have none.
+`context.reportAttempt()` records retry progress without creating a new one.
 
-The run report includes errors and cancellation details, but not a stream of
-logs or progress updates. Use a logger and hooks for live updates, or a trace
-exporter to record events for later inspection. A failing `tracing.exporter` does not fail the
-run: the executor warns once on the first export or flush error for that emitter.
-If a single exporter fails, later events are dropped. `composeTraceExporters` instead retires
-a failed destination after reporting the first partial drop and keeps sending to
-healthy destinations. Nested child runs each construct their own emitter, so
-`tracing.onExporterError` fires once per nested run rather than once for the
-whole parent tree. The run currently has `version: 2`, also exported
-as `RUN_MODEL_VERSION`; persist that field and branch on it before decoding a
-stored run. Projected `StoredPipelineRun` snapshots stamp the same version.
-Durations are derived by subtracting the relevant timestamps.
-
-```ts
-const result = await pipeline.run(options, undefined, {
-  correlationId: externalJobId,
-});
-
-result.runId;
-result.correlationId;
-result.status;
-result.steps.find((step) => step.attemptId)?.attemptId;
-result.finishedAtMs - result.startedAtMs;
-```
-
-New trace events use the version 3 discriminated payload model. Every event carries
-a unique execution `runId` and keeps reusable external correlation separate.
-`tubeless/tracing` intentionally exposes only that typed event union, the exporter
-interface, and exporter composition. Concrete JSON and telemetry SDK adapters
-belong in the workbench or application integration; see the
-[tracing recipe](../examples/tracing.ts). This narrow API does not weaken the
-recording contract: existing version 2 NDJSON traces remain readable by
-`tubeless history` and `tubeless ui`. Version 3 adds iteration relationships for
-repeated child runs; their execution IDs remain unique.
+The run report carries no logs or progress stream; use a logger and hooks for
+live updates, or a trace exporter for later inspection. A failing
+`tracing.exporter` never fails the run (a warning is logged once and later events
+are dropped). `tubeless/tracing` exposes only the typed event union and exporter
+composition (`composeTraceExporters`); concrete JSON or telemetry adapters belong
+in your application. See the [tracing recipe](../examples/tracing.ts). The run
+carries `version` (also `RUN_MODEL_VERSION`); persist it and branch on it before
+decoding stored runs.
 
 ### Local event store and studio
 
-Record events when you need to inspect runs after the process exits. The CLI
-can write a SQLite database with `--store`, an NDJSON trace with `--trace`, or
-both. NDJSON stores one JSON event per line. Use `tubeless history` to inspect
-recordings in the terminal or `tubeless ui` to open them in a browser.
-
-Recording is optional. Importing `tubeless` does not load SQLite or the UI.
-Storage readers and projections belong to the workbench rather than the runtime
-API. See [the studio guide](./studio.md) for recording, storage limits, and
-browser controls.
-
-Cancellation is determined from an abort error or a cancelled child run. If an
-unrelated error occurs at the same time as an abort, it remains a failure.
+To inspect runs after the process exits, the CLI writes a SQLite database with
+`--store`, an NDJSON trace with `--trace`, or both. Use `tubeless history` in the
+terminal or `tubeless ui` in a browser; see [the studio guide](./studio.md).
+Importing `tubeless` never loads SQLite or the UI.
 
 ## Dry runs
 
-Every step has one normal `run` handler and an optional dry-run policy:
+Every step has one `run` handler and an optional dry-run policy:
 
-- Omit `dryRun` when the normal handler is safe and useful during a dry run.
-- Set `dryRun: "skip"` for filesystem writes, database mutation, publication,
-  email, and other external side effects. The step is reported as structurally
-  skipped and its required dependents do not run.
-- Provide a `dryRun(inputs, context)` handler to substitute a side-effect-free
-  preview. It must return the same output type as `run`, so dependents can use
-  the preview normally.
+- Omit `dryRun` when the normal handler is safe during a dry run.
+- Set `dryRun: "skip"` for writes, database mutation, publication, email, and
+  other side effects. The step is structurally skipped and its required
+  dependents do not run.
+- Provide `dryRun(inputs, context)` to substitute a side-effect-free preview. It
+  must return the same output type as `run`.
 
 ```ts
 const publish = step("publish", {
@@ -487,16 +303,14 @@ const publish = step("publish", {
 });
 ```
 
-Dry run is not a rollback mechanism. Read-only validation and resolution steps
-may run normally so the preview remains useful.
+Dry run is not a rollback mechanism: unmarked read-only steps run normally.
 
 ## Validated boundaries
 
-TypeScript checks types at build time. To check values from files, requests, or
-other external sources at runtime, use a validator that supports Standard
-Schema V1. Tubeless accepts these schemas without importing a validation library. Pass a domain-options schema to
-`createSteps(schema)`, an `outputSchema` to an ordinary step, or a
-`resultSchema` to `definePipeline`:
+To check runtime values from files or requests, pass any Standard Schema V1
+validator (no validation library is bundled): a domain-options schema to
+`createSteps(schema)`, an `outputSchema` to a step, or a `resultSchema` to
+`definePipeline`.
 
 ```ts
 const { step } = createSteps(optionsSchema);
@@ -514,8 +328,7 @@ const pipeline = definePipeline({
 });
 ```
 
-Schemas can validate and transform values. TypeScript infers the types on both
-sides of each validation step:
+Schemas may transform values; TypeScript infers both sides.
 
 | Schema         | Value it receives                                                        | Value available after validation |
 | -------------- | ------------------------------------------------------------------------ | -------------------------------- |
@@ -523,158 +336,106 @@ sides of each validation step:
 | `outputSchema` | The step's return value, including custom dry-run and policy-skip values | Input to dependent steps         |
 | `resultSchema` | The finalizer's return value                                             | The final pipeline result        |
 
-Built-in run controls are passed separately from domain options, so strict
-object schemas do not need fields for `dryRun` or `targets`. Child composition
-uses the same boundary: `mapOptions` returns domain input and `controls` supplies
-execution policy. Domain fields may therefore use names such as `targets` or
-`maxConcurrency` without being removed before validation. Steps receive the
-validated domain object without added control fields.
+- Run controls are separate from domain options, so strict schemas need no
+  `dryRun` field and domain fields may be named `targets` or `maxConcurrency`.
+- Options validate once after planning and before any step starts. Step values
+  validate before publication; final values before the run is marked successful.
+  `plan()` never invokes schemas.
+- With no `finalize`, `resultSchema` validates the last step's output (possibly
+  `undefined`), so a dry or filtered run may be rejected; supply a finalizer
+  when the inferred union cannot satisfy the schema.
+- Failures keep normalized `PipelineError.issues` and the codes
+  `TUBELESS_OPTIONS_VALIDATION_FAILED`,
+  `TUBELESS_STEP_OUTPUT_VALIDATION_FAILED`, and
+  `TUBELESS_FINAL_RESULT_VALIDATION_FAILED`. A final-result failure reports step
+  `__finalize__`.
 
-With no `finalize`, `resultSchema` validates the output of the last step in
-execution order, including `undefined` when that output is absent. A schema may
-therefore reject a dry run or filtered run. When the inferred union of possible
-outputs cannot satisfy the schema input, supply a compatible finalizer. The successful result type remains the
-schema's output type.
-
-Options are validated once after structural planning and before any step
-starts. Step values are validated before publication, including values from a
-custom dry-run handler or policy skip. Finalized values are validated before a
-run is marked successful. Sync and async Standard Schema validators are both
-supported during `run`; `plan()` stays synchronous and does not invoke schemas.
-
-Failures retain normalized issue messages and paths on `PipelineError.issues`.
-Use the stable codes `TUBELESS_OPTIONS_VALIDATION_FAILED`,
-`TUBELESS_STEP_OUTPUT_VALIDATION_FAILED`, and
-`TUBELESS_FINAL_RESULT_VALIDATION_FAILED` to distinguish boundaries. A step-output
-failure is reported on that step; final-result failure uses
-`__finalize__`. Pipeline definitions cannot mix steps from different
-options-schema factory scopes.
+See [`validated-boundaries.ts`](../examples/validated-boundaries.ts).
 
 ## Child pipelines
 
-Use `fromPipeline` to run one reusable child pipeline. Use `forEachPipeline` to
-run that child for each item in a list. The parent
-plan contains one wrapper step; child activity appears as progress beneath it.
-Read [child-pipeline composition](./child-pipeline-composition.md) for option
-mapping, selection, failures, and progress controls.
-
-Add `skip` to either child-step definition when the entire child step may be
-intentionally omitted. Its output can be `undefined`, which dependent code must handle.
+`fromPipeline` runs one reusable child pipeline; `forEachPipeline` runs it for
+each item in a list. The parent plan shows one wrapper step with child activity
+as nested progress. `skip` on either omits the whole child step (output may be
+`undefined`). See [child-pipeline composition](./child-pipeline-composition.md).
 
 ## Remote steps
 
-Use `fromRemote` to call a service or execution engine from one step.
-The parent pipeline still runs locally. The step's `remote.engine` and optional
-`remote.target` describe the destination for display and inspection.
-
-Omitting a dry-run policy still contacts the service during a dry run. Mark
-unsafe calls with `dryRun: "skip"`, provide a local preview, or ensure the
-remote service honors the dry-run flag. See
+`fromRemote` calls a service or execution engine from one step while the parent
+runs locally. Without a dry-run policy it still contacts the service during a
+dry run: mark unsafe calls `dryRun: "skip"`, provide a local preview, or make
+sure the service honors the flag. See
 [remote-step composition](./remote-step-composition.md).
 
 ## Mermaid diagrams
 
-Call `pipeline.toMermaid()` to generate a static flowchart without run options
-or execution. Nodes use `name ?? id`; generated internal node identifiers keep
-arbitrary user-facing text out of Mermaid syntax. Required dependencies render
-as solid arrows, while optional inputs and failure gates render as labeled
-dotted arrows. Use `direction` to change layout and `includeDescriptions` to add
-operational descriptions to node labels.
+`pipeline.toMermaid()` returns a static flowchart without running anything.
+Required dependencies are solid arrows; optional inputs and failure gates are
+labeled dotted arrows. Options include `direction` and `includeDescriptions`.
 
 ## CLI commands
 
-Put schema-backed pipelines in `defineProject(id, pipelines)`, or export one directly
-from a file, to give the CLI inferred arguments, validation, help, and progress
-reporting without wrappers. Use `definePipelineCommand` for an advanced adapter. See
-[`cli-job.ts`](../examples/cli-job.ts) for a complete example and
-[the CLI guide](./cli.md) for all commands and flags.
+Put schema-backed pipelines in `defineProject(id, pipelines)`, or export one from
+a file, and the CLI infers arguments, validation, help, and progress. Use
+`definePipelineCommand` for custom adapters. See [`cli-job.ts`](../examples/cli-job.ts)
+and [the CLI guide](./cli.md).
 
-Pipeline definitions may include an optional display `name` and `description`.
-Commands inherit both fields, while the pipeline ID remains the stable identity for
-project lookup, CLI selection, traces, and history. Command-level presentation wins
-when a particular adapter needs different help text.
+Pipeline `name` and `description` are inherited by commands; command-level
+values win. The pipeline ID remains the stable identity for lookup, selection,
+traces, and history.
 
-`tubeless inspect`, `plan`, and `graph` accept a pipeline or command export.
-They load the module without executing step handlers or requiring business
-inputs. If a module exports both a pipeline and a command, they prefer the
-command. Keep module imports free of side effects.
-
-For a direct file, `tubeless run` prefers an exported `definePipelineCommand` and
-otherwise wraps one uniquely selected schema-backed pipeline automatically. Pipelines
-in `tubeless.project.ts` use the same derivation rules and are addressable by pipeline
-ID. Schema-less or unsupported input shapes require an explicit command adapter. A
-pipeline can also be invoked from application code through `run` or `runOrThrow`. The [project example](../examples/project/tubeless.project.ts)
-shows the advanced custom-adapter layout; the [Studio guide](./studio.md) shows both paths.
-
-### Map command arguments to pipeline inputs
-
-Omit `mapOptions` when validated flags already have the same names and types
-as the pipeline's domain options. Supply it when inputs need to be renamed,
-loaded from files, calculated, or prompted for. TypeScript requires the mapper
-when the flag values alone cannot satisfy the pipeline's required options.
+`tubeless inspect`, `plan`, and `graph` load a module without running handlers
+or needing inputs, so keep module imports free of side effects. For a direct
+file, `tubeless run` prefers an exported command and otherwise wraps one uniquely
+selected schema-backed pipeline. Schema-less or unsupported input shapes need an
+explicit command adapter. The [project example](../examples/project/tubeless.project.ts)
+shows the custom-adapter layout.
 
 Command-only values such as `resume`, `stepIds`, and `targets` are removed from
-domain options before execution. Selection and failure controls are applied
-separately. The command-line flags are `--resume`, `--step`, and `--target`;
-option mappers and hooks use the parsed property names. `--resume` is present
-only when the command configures managed `checkpoint` support or declares
-application-owned handling with `resume: true`; other commands reject it and
-omit it from their descriptors.
+domain options before execution. The flags are `--resume`, `--step`, and
+`--target`; option mappers and hooks use the parsed property names. `--resume`
+exists only when the command configures managed `checkpoint` support or declares
+`resume: true`.
 
-A command's `descriptor` lists parameter names, descriptions, types, defaults,
-choices, numeric constraints, repeatability, paths, and positional support.
-Use it to build forms or other tools. Submit arguments through `parse` or `run`
-to validate them; the descriptor only describes the parameters.
-
-`command.plan()` accepts selection and dry-run controls without parsing domain
-arguments, mapping options, executing steps, or recording a run. Use
-`command.plan()` or `tubeless plan`; there is no command `--plan` flag.
-
-Place CLI file-selection flags before `--` and pipeline-command arguments after
-it:
+Put CLI file-selection flags before `--` and pipeline arguments after it:
 
 ```sh
 tubeless run --export PublishCommand ./scripts/publish.ts -- --source input.json --target publish
 ```
 
-The CLI forwards SIGINT and SIGTERM to the run's abort signal and uses distinct exit codes
-for validation, planning, execution, and cancellation errors. Pass `--store`
-to record SQLite history or `--trace` to write an NDJSON file.
+SIGINT and SIGTERM abort the run's signal, and distinct exit codes distinguish
+validation, planning, execution, and cancellation errors.
 
 ## Runtime context
 
-The step context supplies inputs and services controlled by the caller:
+The step context supplies:
 
-- `context.options` for validated domain options and `context.dryRun` for the active mode.
-- `context.log` to write messages through the active logger or reporter.
-- `context.signal` to pass cancellation to I/O and other asynchronous work.
-- `context.sleep` for cancellation-aware, testable delays.
-- `context.reportProgress` to update progress and `context.reportAttempt` to report retries.
-- `context.cwd` as the base directory for relative paths.
-- `context.checkpoint` for the command's managed checkpoint, when one is configured.
-  Child pipelines inherit it; a child previewed with `controls: { dryRun: true }`
-  reads and records against a copy, so its preview cannot mark work done.
+- `context.options` (validated domain options) and `context.dryRun`.
+- `context.log`, for the active logger or reporter.
+- `context.signal`, to pass cancellation to I/O.
+- `context.sleep`, a cancellation-aware, testable delay.
+- `context.reportProgress` and `context.reportAttempt` (retries).
+- `context.cwd`, the base for relative paths.
+- `context.checkpoint`, the command's managed checkpoint when configured. Child
+  pipelines inherit it; a child previewed with `controls: { dryRun: true }`
+  works on a copy, so a preview cannot mark work done.
 
-Callers may inject the logger, clock, sleep function, signal, hooks, and tracing.
-This makes a pipeline embeddable and deterministic under test.
+Callers may inject the logger, clock, sleep, signal, hooks, and tracing, which
+keeps pipelines embeddable and deterministic under test.
 
 ## Deterministic testing
 
 `createPipelineTestRuntime` from `tubeless/testing` supplies a test clock, a
-logger that captures messages, and hooks that record status changes and
-progress. Its default sleep advances the clock immediately. Its `run`,
-`runOrThrow`, and `plan` methods call the real pipeline with this context,
-so tests exercise the same execution logic as normal runs.
-
-Create one runtime per test. Customize `sleep` when a test needs to pause,
-interleave, or advance time differently; call `test.abort()` to exercise the
-normal cancellation path. Use your test framework to assert on the results. Replace external I/O yourself;
-the test runtime does not mock network or filesystem operations.
+capturing logger, and hooks that record statuses and progress. Its default sleep
+advances the clock immediately. Its `run`, `runOrThrow`, and `plan` call the real
+pipeline. Create one runtime per test, call `test.abort()` to exercise
+cancellation, and replace external I/O yourself; network and filesystem are not
+mocked. See [`cancellation-and-testing.ts`](../examples/cancellation-and-testing.ts).
 
 ### Supplying step outputs
 
-Use `overrideStep` from `tubeless/testing` to supply a typed intermediate value
-without modifying the pipeline definition:
+`overrideStep` from `tubeless/testing` supplies a typed intermediate value
+without changing the pipeline:
 
 ```ts
 const test = createPipelineTestRuntime();
@@ -684,67 +445,19 @@ const run = await test.run(pipeline, options, {
 });
 ```
 
-Each override pairs an actual step reference with a resolved handler output.
-For schema-backed steps, supply the **schema input** type: `outputSchema` still
-validates and transforms it, and dependents receive the transformed output.
-Invalid values fail with `TUBELESS_STEP_OUTPUT_VALIDATION_FAILED`. An explicit
-`undefined` is a published value when the step's type and schema allow it.
-Functions can be domain values; they are never called as lazy factories.
-Await asynchronous fixture setup before constructing overrides.
+- Pair an actual step reference with its handler output. For schema-backed steps,
+  supply the **schema input** type; `outputSchema` still validates and
+  transforms it. Functions are values, never lazy factories.
+- A selected overridden step never calls `run`, `skip`, or `dryRun`, and
+  bypasses required-input checks, failure gates, and `dryRun: "skip"`. Overriding
+  a child, fan-out, or remote wrapper also skips its adapters and child launches.
+- Overrides do not select steps or prune ancestors, and apply to that run only
+  (not its children). To isolate a downstream branch, select exact `stepIds`
+  that include the override and its dependents. Plans ignore overrides.
+- Duplicate overrides and foreign step references (even same-named) reject
+  before execution.
+- Reports, hooks, and traces mark overridden steps with
+  `outputSource: "override"`; the supplied value is not recorded.
 
-A selected overridden step never calls its `run`, `skip`, or custom `dryRun`
-handler. It bypasses required-input and failure-gate checks and `dryRun: "skip"`,
-since the supplied value replaces its entire computation. Overriding a child,
-fan-out, or remote wrapper also bypasses item enumeration, mappings, adapter
-calls, and child launches. Overrides belong to this run only and do not flow
-into children. Duplicate overrides and foreign references (including same-named
-steps from another graph) reject before execution. Custom pipeline wrappers
-are unsupported; use the object returned by `definePipeline`.
-
-Selection and scheduling remain explicit:
-
-- Overrides do not select steps, prune ancestors, or change target closure.
-  A filtered step stays filtered and does not validate or publish its override.
-  To isolate a downstream branch, use exact `stepIds` including the supplied
-  intermediate and its dependents, excluding upstream I/O. Plans describe the
-  ordinary graph and do not apply overrides.
-- Scheduling still waits for all prerequisite steps to reach terminal states.
-  Override validation occupies a concurrency slot. Fail-fast can prevent an
-  override from starting; `continueOnError` allows it to publish after upstream
-  failure, while the run retains that failure.
-- Cancellation prevents unstarted overrides and is checked again after async
-  output validation. Successfully overridden steps unlock required dependents
-  and failure gates and supply optional inputs normally.
-- Finalization and `resultSchema` use the supplied outputs through the usual
-  boundaries, including required finalizers and the default last-step result.
-
-An override uses the normal lifecycle: `running`, then `completed`, `failed`,
-or `cancelled`. From the start of its validation attempt, reports and hooks
-carry `outputSource: "override"`. The same metadata survives validation failure
-or cancellation. Successful overrides emit `onStepComplete`, so tests exercise
-the same completion callbacks and dependency rules as handler-produced outputs.
-There is no separate override status or hook.
-
-Traces use the existing `step.running`, `step.complete`, `step.failed`, and
-`step.cancelled` events with `payload.outputSource: "override"`; they do not
-record the supplied value. Both CLI reporters and Studio show the ordinary
-status with an override annotation, such as **completed (overridden)** or
-**failed (overridden)**. Existing recordings remain readable. Ordinary runs omit
-this metadata, as do filtered overrides and overrides cancelled before their
-validation attempt starts; absence does not prove a handler ran.
-
-Overrides are available only through the test runtime's `run` and `runOrThrow`.
-Ordinary pipeline controls, CLI flags, and Studio launch forms do not expose
-them, and trace recordings cannot automatically be replayed as override values.
-See the [executable override recipe](../examples/step-output-overrides.ts).
-
-## Implementation guidelines
-
-- Keep step IDs stable, use `name` only for a friendlier display label, and keep
-  descriptions operationally useful.
-- Generate documentation from `pipeline.toMermaid()` instead of hand-maintaining
-  a second copy of the graph.
-- Return small domain results; inspect `run()` reports for execution metadata.
-- Put remote API mechanics in retry/rate-limit helpers, not in the executor.
-- Put CLI parsing at the script edge with `definePipelineCommand`.
-- Keep application-owned telemetry SDKs outside the dependency-free core.
+Overrides exist only on the test runtime's `run` and `runOrThrow`, not in CLI
+flags or Studio. See [`step-output-overrides.ts`](../examples/step-output-overrides.ts).

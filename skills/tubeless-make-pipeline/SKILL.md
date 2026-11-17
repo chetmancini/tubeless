@@ -18,18 +18,16 @@ implicit, such as validation before publication or writes inside a transaction.
 Preserve transaction boundaries, cleanup, and resource ownership when splitting
 work. A transaction or critical section can remain inside one step.
 
-Identify the installed Tubeless version. Read `docs/agent-guide.md` and the
-smallest matching `docs/recipes.md` example from that installed package, or from
-the package root when working in Tubeless itself. These are package paths, not
-paths relative to this skill. If unavailable, use the
-[agent guide](https://tubeless.io/docs/agent-guide.md) and
-[recipe index](https://tubeless.io/docs/recipes.md), checking APIs against the
-installed declarations. If Tubeless is missing, add it using the project's
-package manager and dependency conventions. Avoid unrelated upgrades.
+Read `docs/agent-guide.md` and the smallest matching `docs/recipes.md` example
+from the installed Tubeless package (package paths, not relative to this skill).
+If unavailable, use the [agent guide](https://tubeless.io/docs/agent-guide.md)
+and [recipe index](https://tubeless.io/docs/recipes.md), checking APIs against
+the installed declarations. If Tubeless is missing, add it with the project's
+package manager; avoid unrelated upgrades.
 
-Before editing, briefly explain the proposed steps, their inputs and outputs,
-and which steps can write externally. Resolve uncertainties from code and tests;
-ask only when a missing domain decision affects correctness.
+Before editing, briefly state the proposed steps, their inputs and outputs, and
+which can write externally. Resolve uncertainties from code and tests; ask only
+when a missing domain decision affects correctness.
 
 ## Choose meaningful boundaries
 
@@ -38,8 +36,7 @@ validate a batch, enrich records, build an artifact, publish it. A useful step
 has a coherent output and a reason to appear in a plan or failure report.
 
 - Keep small parsing, formatting, and mapping functions as helpers inside a
-  step. Do not make every function call a step or hide the entire old script in
-  one step when it contains distinct stages.
+  step; do not make every call a step or hide distinct stages in one step.
 - Build dependencies from consumed values and required ordering. Do not rely
   on declaration order. Keep independent work independent, but preserve the
   original concurrency, rate limits, and ordering unless a change is intended.
@@ -57,10 +54,9 @@ has a coherent output and a reason to appear in a plan or failure report.
 
 ## Keep the graph typed
 
-Use one `createSteps<TDomainOptions>()` factory and one `definePipeline` per
-pipeline. Define ordinary steps with the returned `step` constructor. Import from `tubeless` and
-its public subpaths. Keep business inputs in domain options; built-in run
-controls belong in the separate controls argument.
+Use one `createSteps<TDomainOptions>()` and one `definePipeline` per pipeline,
+importing from `tubeless` and its public subpaths. Business inputs go in domain
+options; built-in run controls go in the separate controls argument.
 
 Give each step a stable literal kebab-case ID and an operational description.
 Let `dependsOn: [step]` infer input types from returned outputs. Preserve
@@ -84,9 +80,8 @@ a missing required output to an empty array, `false`, or a fake success value.
   handler. Unmarked steps still execute in a dry run. Read-only fetches may
   still contact real systems; use fake I/O during verification.
 - Follow skipped values through downstream steps and the finalizer. A skipped
-  write may prevent `requireOutputs` from producing a result. Either preserve
-  that contract or define an honest preview result; never fabricate a completed
-  write to make dry runs pass.
+  write may prevent `requireOutputs` from producing a result; preserve that
+  contract or define an honest preview result, never a fabricated write.
 - Keep validation required for publication. Test this even with
   `continueOnError` if the caller enables best-effort execution.
 - Add `skip` only for a successful policy decision. Preserve thrown
@@ -103,11 +98,10 @@ a missing required output to an empty array, `false`, or a fake success value.
   explicit report handling. `continueOnError` does not make `runOrThrow` succeed
   after failures. Keep cleanup in a reliable `finally` or resource scope.
 
-Respect the project's layout. If it has no convention, use
-`pipelines/<name>.ts` and export `<Name>Pipeline`. Add a
-`definePipelineCommand` wrapper only for a CLI workflow, following the CLI
-recipe; register it directly in an existing project's entry list when appropriate. Keep
-storage, Studio, telemetry exporters, and remote engines optional.
+Respect the project's layout; absent a convention use `pipelines/<name>.ts` and
+export `<Name>Pipeline`. Add a `definePipelineCommand` wrapper only for a CLI
+workflow, registered exactly once in the project's entry list. Keep storage,
+Studio, telemetry exporters, and remote engines optional.
 
 ## Prove the conversion
 
@@ -117,10 +111,9 @@ failure, dependency failure, intentional skip, cancellation, and dry-run paths.
 Use `createPipelineTestRuntime` from `tubeless/testing` with fake I/O, and assert
 that forbidden writes never happen. Avoid executing production work as a test.
 
-Inspect `pipeline.plan()` and, for declared goals, target selection. Planning
-does not execute steps or validate domain inputs; it cannot prove runtime
-correctness. Generate a graph with `pipeline.toMermaid()` when it helps explain
-the design. Within the Tubeless source repository, also run `make check`.
+Inspect `pipeline.plan()` (it executes nothing and validates no domain input, so
+it cannot prove runtime correctness) and `pipeline.toMermaid()` when a diagram
+helps. Within the Tubeless source repository, also run `make check`.
 
 Finish with the implemented step structure, preserved or intentionally changed
 behavior, validation results, and any unresolved contract decisions. Remove

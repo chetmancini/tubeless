@@ -1,195 +1,114 @@
 # Studio
 
-Studio is a browser interface for inspecting pipeline runs. It runs locally by default
-and can be hosted behind an authenticated application gateway. It shows
-step status, progress, logs, and errors from a SQLite run store or a saved NDJSON
-trace. You can also load a project or register pipeline commands to preview and launch them from
-the browser. Recording and Studio are optional; pipelines run without either.
+Studio is a browser interface for inspecting pipeline runs from a SQLite run store
+or a saved NDJSON trace. You can also load a project or register commands to preview
+and launch pipelines from the browser. It runs locally by default and can be hosted
+behind an authenticated application gateway. Recording and Studio are optional;
+pipelines run without either.
 
 ## Record and inspect a run
 
-Place `--store` before the command file to record its events in SQLite:
+Place `--store` before the command file to record events in SQLite, then open Studio:
 
 ```sh
 bunx tubeless run --store .tubeless/runs.sqlite ./scripts/import.ts -- --source rows.txt
 bunx tubeless ui --store .tubeless/runs.sqlite
 ```
 
-The default browser address is `http://127.0.0.1:4317`, and the default store
-is `.tubeless/runs.sqlite`. Use `--host`, `--port`, or `--store` to change them.
+The default address is `http://127.0.0.1:4317` and the default store is
+`.tubeless/runs.sqlite`; change them with `--host`, `--port`, and `--store`. The same
+records are available in the terminal through `tubeless history` (see the
+[CLI](./cli.md#history)).
 
-You can inspect the same records in the terminal:
-
-```sh
-bunx tubeless history --store .tubeless/runs.sqlite
-bunx tubeless history --json <run-id>
-```
-
-To inspect a finished NDJSON trace instead of a database:
+To inspect a finished NDJSON trace instead:
 
 ```sh
-bunx tubeless history --trace run.ndjson
 bunx tubeless ui --trace run.ndjson
 ```
 
-The NDJSON view is always read-only. It cannot launch commands or clear history,
-and does not accept a project file or `--command`.
+The NDJSON view is always read-only: no launching, no clearing history, and no
+project file or `--command`.
 
-Studio automatically reads transcripts imported with
-`history --store <path> --import-transcript <path>`, or captured directly by the
-built-in workspace agent with `agent --store <path> --capture-transcript`.
-Stored content is deleted atomically with its structural history when clearing
-is available. Agent runs in SQLite history expose a **Transcript** tab before
-content arrives. Opening it does not enable capture.
+### Agent transcripts
 
-Cloudflare uses the same view when an agent explicitly supplies its
+Agent runs in SQLite history get a **Transcript** tab showing prompts, public
+assistant text, decisions, tool calls and results, and explicit omissions, with
+**Open turn** links back to the structural run. Content appears when it was captured
+with `agent --store <path> --capture-transcript`, imported with
+`history --store <path> --import-transcript <path>`, or written by a
 [Cloudflare transcript writer](./deploy-cloudflare.md#opt-in-agent-transcripts).
-Content shares history's Cloudflare Access rules. Clearing events and content is
-atomic and refuses while launches are active.
+Opening the tab never enables capture. Partial transcripts refresh while visible.
+Clearing history deletes stored content atomically with it.
 
-While visible, unavailable and partial SQLite transcripts refresh every 1.2 seconds
-using bounded sequence cursors. Loaded records stay visible as later records arrive,
-including records imported into earlier gaps. Complete and limited recordings stop
-refreshing once the current gap scan finishes. **Show more** loads remaining pages.
-Hidden browser tabs pause requests, and leaving the transcript stops them. A failed
-request keeps loaded content and offers **Retry**. Recording status remains separate
-from the run's execution status.
-
-Add `--transcript <path>` to attach a finished agent transcript alongside either
-event source. Runs with content gain a **Transcript** tab: prompts, public assistant
-text, proposed decisions, tool calls/results, and explicit omissions. Content is
-paged, and **Open turn** links connect it to structural run history. Each nested
-agent has its own conversation. Partial and limited recordings remain inspectable;
-their labels do not replace the run's execution status.
-
-Transcript files are validated and opened as immutable snapshots. Restart Studio
-to load later appends. History clearing is disabled while a transcript artifact is
-attached; the external file remains application-owned. The API exposes neither
-its path nor a route to select other files. Transcript reads pass through Studio's
-existing authentication and Host checks. See [save and inspect a transcript](./agents.md#save-and-inspect-a-transcript).
+`--transcript <path>` attaches a finished transcript file to either event source as
+an immutable snapshot; restart Studio to see later appends. Clearing history is
+disabled while one is attached, and the API never exposes its path. See
+[save and inspect a transcript](./agents.md#save-and-inspect-a-transcript).
 
 ## Use the browser controls
 
-Studio reads top-down: pick a pipeline, open one of its runs, then select a step.
-Raw identifiers stay out of the way until you ask for them.
+Studio reads top-down: pick a pipeline, open a run, select a step.
 
-- **Activity** is the home page. It summarizes running work, recorded runs, and the
-  share that succeeded, then lists top-level runs across pipelines with active runs
-  first. Child runs stay with their parent. History is paged in groups of 50; search
-  matches run IDs, pipeline IDs, and caller-owned correlation IDs anywhere in a run's
-  subtree.
-- The **sidebar** lists every pipeline Studio knows: registered commands plus
-  pipelines with recorded top-level runs, sorted by name, with a filter once the list
-  grows. Each row shows the latest outcome and up to ten recent runs. Pipelines that
-  ran only as children of other pipelines are grouped under **Nested pipelines**.
-- A **pipeline page** has three tabs. **Runs** lists that pipeline's runs at any depth,
-  newest first, and its search matches run and correlation IDs. **Graph** draws the
-  declared steps from the latest recorded definition, or from the current plan when a
-  registered pipeline has never run. **Versions** lists recorded definitions and
-  compares them; it appears once a definition is recorded. **Run** opens the launch
-  form when a command is registered.
-- A **run page** keeps the run list beside the run. A breadcrumb above the title walks
-  from the top-level run through each starting step to nested runs. The run leads
-  with a one-line outcome, such as where it failed or how many steps it completed,
-  followed by error diagnostics and the **Steps**, **Logs**, **Nested runs**, and
-  **Details** tabs. Details holds the run and correlation IDs, event count, and the
-  definition identity that produced the run.
-- Selecting a step, by its name in the timeline or its node in the graph, opens the
-  **inspector** beside the steps: outcome, skip explanation, timing, retries, inputs
-  and consumers, artifacts, progress items, the step's own logs, the run error when
-  this step failed, and the nested runs it started. Escape or × closes it. On narrower
-  windows the inspector slides over the run.
+- **Activity** is the home page: running work, recorded runs and success rate, then
+  top-level runs across pipelines with active runs first, in pages of 50. Search
+  matches run IDs, pipeline IDs, and correlation IDs anywhere in a run's subtree.
+- The **sidebar** lists registered commands and pipelines with recorded top-level
+  runs, with each one's latest outcome and recent runs. Pipelines that only ran as
+  children are grouped under **Nested pipelines**.
+- A **pipeline page** has **Runs** (at any depth, newest first), **Graph** (declared
+  steps from the latest recorded definition, or the current plan if it never ran),
+  **Versions** (recorded definitions and comparison), and **Run** (the launch form,
+  when a command is registered).
+- A **run page** leads with a one-line outcome and error diagnostics, then **Steps**,
+  **Logs**, **Nested runs**, and **Details** (IDs, event count, definition identity).
+  A breadcrumb walks from the top-level run through nested runs.
+- Selecting a step opens the **inspector**: outcome, skip explanation, timing,
+  retries, inputs and consumers, artifacts, progress items, the step's logs, and the
+  nested runs it started.
 
-Structured errors name the failed steps; select one to open it in the inspector.
-They also show validation issue paths, expandable cause chains, failed fan-out
-items, and any omitted failure count. Skipped steps explain why they did not run,
-naming the failed gate or unavailable required input when the recording identifies
-it. Logs can be searched by message text and filtered by level and step; the count
-shows how many entries match. These diagnostics are limited to the selected run.
-Open a nested run to inspect its own errors and logs. Studio loads run details and
-complete definition snapshots separately from history summaries, and unchanged
-refreshes reuse the current page. Failed definition requests offer a retry beside
-the affected content.
+Errors name the failing steps and show validation issue paths, expandable cause
+chains, and failed fan-out items. Skipped steps say why they did not run. Logs can be
+searched and filtered by level and step. Diagnostics are limited to the selected run;
+open a nested run to see its own.
 
-The page URL records where you are: `?pipeline=<id>` for a pipeline page (with
-`&tab=graph` or `&tab=versions`), `?run=<run-id>` for a run, `&pipeline=<id>` to
-scope a run's list to that pipeline, and `&step=<step-id>` for the open inspector.
-Moving between pages adds a browser history entry, so Back and Forward restore
-earlier pages; switching tabs or inspector steps replaces the current entry. The
-copy icon on a run has a **Copy run link** tooltip and copies a link to that run
-alone. Links work only with the same Studio mount and run store. If a run or
-pipeline is not in this history, Studio says so and keeps the requested ID visible.
+The URL records where you are (`?pipeline=<id>`, `&tab=graph|versions`,
+`?run=<run-id>`, `&step=<step-id>`), and the copy icon on a run copies a link to it.
+Links work only with the same Studio mount and run store.
 
-Test-runtime recordings retain ordinary step statuses and annotate supplied
-outputs as `completed (overridden)`, `failed (overridden)`, or `cancelled (overridden)`. The supplied values are not recorded. Studio launch forms
-do not accept overrides; see [testing overrides](./concepts.md#supplying-step-outputs).
-The Cache execution control overrides policy with `use`, `recompute`, or `bypass`
-for opted-in steps, including children.
-Cache hits retain ordinary statuses with a `(cached)` annotation, including
-failed or cancelled cache validation. Keys and values are not recorded. See
-[step output caching](./step-output-cache.md).
-Nested steps show the child pipeline and its declared steps. Recorded progress
-includes the most recent per-item details; when details are truncated, Studio
-shows how many were omitted. Artifact steps show recorded reads, writes, verified reuse, and
-explicit dry-run previews. Completed I/O records remain visible when a later batch
-or step fails; their presence does not imply the whole run succeeded. Expand an artifact to see its identifier, location,
-version, and application metadata. These records belong to the displayed run,
-step, and execution attempt; see [artifact lineage](./artifacts.md).
+Some recordings carry annotations:
 
-When several steps in a run are active, the run list shows a count such as
-“3 steps running” and the first three names, with a remaining count for larger groups.
-A single active step keeps its progress message.
+- Test-runtime overrides appear as `completed (overridden)` and similar; supplied
+  values are not recorded, and launch forms accept no overrides
+  ([testing overrides](./concepts.md#supplying-step-outputs)).
+- Cache hits keep their ordinary status with `(cached)`; keys and values are not
+  recorded ([step output caching](./step-output-cache.md)).
+- Artifact steps show recorded reads, writes, verified reuse, and dry-run previews.
+  Completed I/O stays visible if a later step fails ([artifacts](./artifacts.md)).
 
-The **Graph** toggle beside the step timeline draws the selected run as a
-top-to-bottom graph and stays selected while you move between runs. Each circle is
-a step; arrows lead from a dependency to the step that consumes it. Running steps
-spin, and steps that finish while you watch pulse once: green with a check when
-completed, red with a cross when failed, and amber when cancelled. Skipped steps are
-gray and planned steps have a dashed outline. Solid arrows are required inputs and
-finer arrows are optional inputs. A dashed arrow is a candidate input whose consumer
-has not started; it turns solid while the consumer runs and once it has used the
-output. Dotted arrows are failure gates (`skipAfterFailureOf`) and turn red when
-the gate trips.
+The **Graph** toggle beside the step timeline draws the run top to bottom: circles are
+steps, arrows run from a dependency to its consumer. Solid arrows are required
+inputs, thinner arrows optional ones, dashed arrows candidate inputs not yet used,
+and dotted arrows failure gates (red when tripped). Steps with nested runs carry a
+count badge; select it to expand fan-out items, iterations, agent turns, and tool
+calls in place (up to six levels deep and sixteen items per step at a time).
+Recordings made before dependencies were recorded show steps without arrows.
 
-Steps that start nested runs carry a count badge. A running step with nested runs
-expands in place and stays open after it finishes; select the badge to expand or
-collapse any step. Fan-out items,
-iterations, agent turns, and agent tool calls appear inside the expansion, and tool
-calls are labeled by tool. Nested runs can expand again to show their own steps, up
-to six levels deep and sixteen items per step. The nested run list opens the rest
-sixteen per step at a time.
-Selected and expanded runs keep their last loaded details while refreshing and retry
-temporary loading failures, even after a run finishes.
-Select a step, arrow, or nested run to open it in the inspector beside the graph,
-or open a nested run from there. Recordings made before
-dependencies were recorded show steps without arrows. Animations respect the
-reduced-motion setting.
+| Control       | What it does                                                                  | When available                                                       |
+| ------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Preview plan  | Shows selected steps and dry-run behavior without starting or recording a run | A pipeline command is registered                                     |
+| Run           | Validates the form values, starts the command, and opens the new run          | A command is registered locally or in gateway mode                   |
+| Cancel run    | Aborts the selected live run without stopping Studio or sibling runs          | This Studio process owns the top-level launch                        |
+| Clear history | Deletes all recorded SQLite events after confirmation and attempts compaction | Local SQLite mode with no known active writer; never in gateway mode |
 
-| Control       | What it does                                                                                                                                   | When available                                                                       |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Preview plan  | Shows the selected steps and dry-run behavior without starting or recording a run                                                              | A pipeline command is registered                                                     |
-| Run           | Validates the form values, starts the command, and opens the new run                                                                           | A command is registered locally or in gateway mode                                   |
-| Cancel run    | Aborts the selected live run without stopping Studio or sibling runs                                                                           | This Studio process owns the top-level launch                                        |
-| Clear history | Deletes all recorded SQLite events and attempts database compaction after confirmation; the action sits in the sidebar footer beside the store | Local SQLite mode with the maintenance capability enabled and no known active writer |
-
-Preview uses the form's dry-run and step/target controls. It does not validate
-business inputs; those are checked when you run the command. A preview is
-optional. The preview identifies whether the selection runs all steps, exact
-steps, or targets with recursively included required inputs and failure gates.
-Each step lists why it was selected or omitted, its required and optional
-inputs, its failure gates, and any planned skip. Optional inputs alone do not
-bring a step into a target plan; exact step selection does not add prerequisites.
-Runtime skip policies and failures can still change what executes.
-
-Cancellation affects only a live launch owned by the current Studio
-process; it cannot resume or cancel work from an earlier crashed process.
-Studio renders `Resume` only when the command descriptor declares it through
-managed `checkpoint` support or explicit application-owned `resume: true`
-handling.
+Preview uses the form's dry-run and step/target controls and does not validate
+business inputs; those are checked at run time. Cancellation affects only launches
+owned by the current process and cannot resume or cancel work from a crashed one.
+**Resume** appears only when the command declares managed `checkpoint` support or
+application-owned `resume: true`.
 
 ## Launch project pipelines
 
-Pass a checked-in project file to expose its schema-backed pipelines in Studio:
+Pass a project file to expose its schema-backed pipelines in Studio:
 
 ```ts
 // tubeless.project.ts
@@ -203,17 +122,22 @@ export default defineProject("data-jobs", [ImportPipeline, PublishPipeline]);
 bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
 ```
 
-Studio derives the same form fields that the CLI derives as flags. No command
-wrapper is needed. Automatic registration requires Standard JSON Schema input
-metadata. Register explicit adapters in the project entry list for schema-less
-pipelines or custom CLI inputs.
+Studio derives the same form fields the CLI derives as flags, and project selection
+follows the CLI's [rules](./cli.md#selecting-a-project-pipeline-or-file). Automatic
+registration needs Standard JSON Schema input metadata; register explicit command
+adapters in the project entry list for schema-less pipelines or custom inputs. See
+the [complete project example](../examples/project/tubeless.project.ts).
 
-The project file's default export selects the project for Studio. Without a
-default, exactly one distinct project must be exported; multiple projects are ambiguous. An invalid default is a load error.
+Form controls come from the command's parameters: checkboxes for booleans, selects
+for constrained strings, bounded numeric fields, text for paths. Submitted values
+pass through the command's normal validation and option mapping; Studio never builds
+a shell command. Pipeline inputs come first, with execution controls (dry run, step
+and target selection, cache, failure handling, **Max Concurrency**) folded beneath
+them, defaulting to one run of every step.
 
-## Register custom commands for browser execution
+## Register command files
 
-Provide command files explicitly:
+Without a project, register command files explicitly:
 
 ```sh
 bunx tubeless ui \
@@ -222,224 +146,112 @@ bunx tubeless ui \
   --command ./scripts/publish.ts
 ```
 
-Each file may export a command created with `definePipelineCommand`, or one unique
-schema-backed pipeline from which Studio can infer a command. An explicit command
-wins when present. Use `--export` when registering one file with multiple matching
-exports; schema-less or unsupported inputs require an explicit command adapter.
-Studio does not infer executable files from recorded runs.
-
-The command's parameter definitions determine the form controls: checkboxes
-for booleans, selects for constrained strings, bounded numeric fields, and text
-fields for paths and other values. Submitted values go through the command's
-normal validation and option mapping. Studio does not construct a shell command.
-
-Pipeline inputs come first. Execution controls (dry run, step and target
-selection, cache, failure handling, and **Max Concurrency**) are folded beneath
-them because their defaults run every step once; expand the section to change
-them. Max Concurrency is a positive integer defaulting to `1` and has the same
-behavior as the CLI's `--max-concurrency` flag.
-
-## Custom adapters in a project
-
-Use the same project for typed lookup, CLI, and Studio. Add explicit command
-adapters when pipelines need custom parameters, option mapping, or display names:
-
-```ts
-// tubeless.project.ts
-import { defineProject } from "tubeless/project";
-import { ImportCommand } from "./scripts/import.ts";
-
-export default defineProject("data-jobs", [ImportCommand]);
-```
-
-```sh
-bunx tubeless list
-bunx tubeless inspect import
-bunx tubeless run import -- --source rows.txt
-bunx tubeless ui --store .tubeless/runs.sqlite ./tubeless.project.ts
-```
-
-CLI and Studio use the pipeline's ID. Set `name` on `definePipelineCommand` for
-a display label. The optional project `cwd` is relative to the project file and
-defaults to its directory. Each command registers its underlying pipeline;
-duplicate pipeline IDs fail regardless of entry form. See the
-[complete project example](../examples/project/tubeless.project.ts).
+Each file may export a `definePipelineCommand` command or one unique schema-backed
+pipeline. An explicit command wins; use `--export` when registering one file with
+several matching exports. Studio never infers executables from recorded runs.
 
 ## Storage behavior
 
-SQLite stores an append-only stream of events. Studio builds run summaries,
-step states, logs, and graphs from those events. Normal event updates and
-deletes are blocked by database triggers. `clearHistory()` is a separate
-maintenance operation that clears the complete history and restores the triggers
-in one transaction. Compaction follows as best-effort maintenance. Once deletion
-commits, clearing succeeds even if compaction fails, so Studio discards the deleted
-history. A deletion failure rolls back and retains the history.
+SQLite stores an append-only stream of events; Studio builds runs, step states, logs,
+and graphs from them. Database triggers block normal updates and deletes.
+`clearHistory()` is a separate maintenance operation that deletes everything and
+restores the triggers in one transaction; a failure rolls back, and compaction is
+best-effort afterwards.
 
-New SQLite stores use schema version 4. `tubeless run --store`, `tubeless ui`,
-and `tubeless history --clear` refuse an older file instead of rewriting it.
-Run `tubeless upgrade --yes --store <path>` first, before an unattended job
-opens that file. The command requires `--yes` because the rewrite cannot be
-undone; there is no interactive prompt. Versions 1 and 2 still store scalar
-attributes in `attributes_json`. The upgrade copies each event into the current
-payload column, keeps its id and the saved autoincrement counter, and rewrites
-a retired `PIPES_` error code to the `TUBELESS_` prefix. Version 3 adds the
-iteration column. The upgrade commits once, so a failure leaves the previous
-schema and its append-only triggers in place. Read-only opens of versions 1
-through 3 decode those rows without writing. Any other schema version is
-refused. The next schema version needs a new step in
-`src/run-store/run-store-migrate.ts` in the same change as
-`RUN_EVENT_STORE_VERSION`. Creating or upgrading a store fails until that step
-exists.
+- **Schema upgrades.** `tubeless run --store`, `tubeless ui`, and
+  `tubeless history --clear` refuse an older store. Run
+  `tubeless upgrade --yes --store <path>` first ([CLI](./cli.md#upgrade)). Read-only
+  opens of versions 1 through 3 work without writing.
+- **Buffering.** The writer batches 64 events. `export()` can return before an event
+  reaches disk; events become visible to other connections when a batch fills,
+  `flush()` runs, the writer lists or clears events, or the store closes.
+  `tubeless run --store` flushes at completion, but a crash can lose up to 63
+  buffered events.
+- **Read-only access.** History and Studio read committed events and refuse
+  databases with a pending `-wal` or `-journal` file or multiple hard links. Close the
+  writer before opening such a database.
+- **Clearing.** The local CLI disables clearing while it knows a browser-launched run
+  is active. Gateway mode always disables it.
+- **NDJSON.** Readers validate the finished file, assign event IDs in file order, and
+  never modify it. Size limits are in the [CLI guide](./cli.md#history). New traces
+  contain version 3 events with unique execution IDs; version 2 traces are still
+  readable.
 
-The SQLite writer buffers events in batches of 64. `export()` can return before
-an event reaches disk. Pending events become visible to other connections after
-a batch fills, `flush()` runs, the writer calls its own `listEvents` or
-`clearHistory`, or the store closes. A crash can lose up to 63 unflushed events.
-`tubeless run --store` flushes at completion.
-
-Read-only history and Studio inspect committed events. They refuse databases
-with a pending SQLite write-ahead log (`-wal`) or rollback journal (`-journal`),
-and files with multiple hard links. A single buffered `export()` does not
-create those sidecar files. Finish or close the writer before opening a database
-that cannot be read safely.
-
-The local CLI disables clearing while it knows a browser-launched run is active.
-Runs left active in history after a process interruption can be cleared after
-confirmation. Gateway mode always disables clearing, including on loopback.
-
-NDJSON readers validate a finished file, assign event IDs in file order, and
-close the file. They do not modify the artifact or copy it into SQLite. The
-[CLI guide](./cli.md#history) lists file-size, event-size, and event-count limits.
-New trace files contain version 3 events with unique execution IDs and separate
-reusable correlation IDs. Readers also accept version 2 recordings. Repeated
-children retain an `iteration` relation with the owning run, wrapper step and
-attempt, and one-based index. Live progress retains up to 32 iteration groups;
-the child-run history retains every recorded iteration. Children started by
-`fromPipeline`, `forEachPipeline`, or an agent pipeline tool record the parent
-step in `pipeline.started` `payload.parentStepId`, so Studio places them under
-the right step even when sibling steps share one child pipeline and one
-millisecond. Older recordings fall back to matching step execution windows.
+Studio's server and JSON payloads are internal and version-coupled. Use the CLI and
+the hosting contract below rather than building against its routes.
 
 ## Definition history and comparison
 
-Every compiled pipeline exposes `pipeline.definition`: an immutable snapshot
-with a structural fingerprint and a combined definition ID. Both use SHA-256.
-Ordinary definitions retain identity version 1 and their existing hashes.
-Iteration definitions and their ancestors use identity version 2. Stable pipeline
-and step IDs remain the human-facing identity.
+Every compiled pipeline exposes `pipeline.definition`: an immutable snapshot with a
+structural fingerprint and a combined definition ID (both SHA-256). Studio's
+**Versions** tab groups a pipeline's recordings by definition ID, shows each
+definition's runs, and **Compare from** diffs another observed version against the
+selected one: steps, order, edges, targets, policies, validation boundaries,
+child/remote metadata, and implementation versions. Run details show the identity
+that actually produced the run. Runs recorded without a definition are labeled
+legacy.
 
 Set `implementationVersion` on `definePipeline` to identify handlers, schemas,
-mappings, predicates, and the finalizer. Supply a release tag, source revision,
-or a digest generated by your build tooling; Tubeless does not inspect function
-source or infer code identity. See [the tracing example](../examples/tracing.ts).
-An omitted implementation version means **unknown**, even when fingerprints match.
+mappings, and predicates. Use a release tag, source revision, or build digest;
+Tubeless does not inspect function source. An omitted implementation version means
+**unknown**, even when fingerprints match. See [the tracing example](../examples/tracing.ts).
 
-The structural fingerprint includes compiled execution order, step IDs, required
-and optional edges, failure gates, targets, dry-run and skip policies, schema
-presence, cache opt-in/age/policy, required finalizer steps, child composition and concurrency, and remote
-engine/target metadata. Dependency, target, and required-finalizer sets are sorted. Names, descriptions,
-progress presentation, inputs, per-run controls, and handler code are excluded.
-Iteration bounds and declared static child controls are included in identity
-version 2; selector sets are sorted.
-Changing the implementation version changes the combined definition ID without
-changing the structural fingerprint. Effective step cache versions likewise bind
-the combined definition ID, including versions inherited from the pipeline. Child structural identities propagate into
-the parent's fingerprint; child implementation identities propagate only into its
-combined ID. The combined ID binds every recorded child identity field, including
-its implementation version; changing that metadata while keeping the child's ID
-unchanged invalidates the parent snapshot. Child internals still require the child's
-own snapshot to inspect. Dynamic policies are represented by their presence, not their code
-or runtime return values. Remote handler versions belong in the application-supplied
-implementation version. External pipeline implementations without definition metadata
-contribute only their declared child IDs and composition metadata.
+What the fingerprint covers:
 
-A pipeline page's **Versions** tab groups that pipeline's recordings by definition
-ID. Select a definition to see its runs. **Compare from** shows
-changes from another observed version of the same pipeline to the selected version:
-added/removed steps, execution order, edges, targets, policies, validation boundaries,
-child/remote metadata, and implementation versions. Child steps stay opaque wrappers;
-compare the child's own recorded definitions for its internal graph changes.
-Run details show the identity that actually produced that run.
+- Included: execution order, step IDs, required and optional edges, failure gates,
+  targets, dry-run and skip policies, schema presence, cache settings, finalizer
+  requirements, child composition and concurrency, remote metadata, and
+  [graph metadata](./graph-metadata.md).
+- Excluded: names, descriptions, progress presentation, inputs, per-run controls, and
+  handler code. Dynamic policies are represented by presence, not behavior.
+- Changing `implementationVersion` changes the combined ID but not the fingerprint.
+  Child structure propagates into the parent's fingerprint; child steps stay opaque
+  wrappers, so compare the child's own definitions for its internals.
 
-The `pipeline.started` payload includes optional `definitionIdentity` and
-`definitionSnapshot` fields. The identity is retained even when selection or input
-validation fails before step events. A snapshot is limited to 256 KiB of UTF-8 JSON,
-4,096 steps or entries per list, 4,096 code units per identifier, and the existing
-remote metadata limits. Implementation versions are nonblank strings of at most
-256 code units. Snapshots exceeding these limits are omitted in full; their identity
-still fingerprints the complete graph. Studio declines comparisons when either
-snapshot is unavailable. These limits affect recording, not pipeline execution.
-
-Existing version 2 recordings remain readable. Runs without these optional fields
-are labeled legacy, with no invented identity. Their latest planned-step graph is
-still retained per pipeline using the start timestamp and store-local event ID.
-Trace version 3 admits iteration metadata and both identity versions. Version 2
-recordings remain restricted to their original metadata and identity version 1.
-The definition identity's own version fixes fingerprint semantics. Unsupported
-trace or identity versions are rejected. Older readers and external strict schema
-validators must update before consuming new version 3 recordings.
-
-NDJSON and SQLite readers recompute both hashes from each complete definition
-snapshot and reject mismatches before projecting history. SQLite also checks writes.
-Hash checks establish consistency with the recorded snapshot, not authenticity of
-handler code or the recording's source. Identity-only records cannot be checked
-without their omitted snapshots.
-
-Definitions are projected from the same append-only events as runs, without loading
-application modules. They remain available for as long as their run events remain;
-there is no separate orphan-definition retention period. Clear history removes both
-runs and observed definitions. Nested metadata retains `stepCount`, and truncated
-progress retains its original `detailCount`.
+Snapshots ride on the `pipeline.started` event, limited to 256 KiB of JSON and
+4,096 steps. An oversized snapshot is omitted whole (its identity still covers the
+full graph) and Studio declines comparisons that need it. Readers recompute hashes
+and reject mismatches; this proves consistency with the recorded snapshot, not the
+authenticity of handler code. Definitions live as long as their run events, and
+clearing history removes both.
 
 ## Network access
 
 Studio binds to `127.0.0.1` by default. Without gateway mode, browser execution
-requires `127.0.0.1`, `::1`, or `localhost`. A non-loopback `--host` without
-commands is read-only; anyone who can reach that port can read its history.
-Logs, errors, and event payloads are displayed without redaction.
-
-Studio's server and JSON payloads remain internal, version-coupled workbench
-details. Use the CLI hosting contract below, rather than importing server
-internals or building a client against its routes.
+requires `127.0.0.1`, `::1`, or `localhost`. A non-loopback `--host` without commands
+is read-only, but anyone who can reach the port can read its history. Logs, errors,
+and payloads are displayed without redaction.
 
 ## Host Studio behind an application gateway
 
-Use one long-lived Studio process behind your application's authenticated admin
+Run one long-lived Studio process behind your application's authenticated admin
 route. Tubeless owns the mount, gateway authentication, recorded history, and
-registered command execution. Your application owns login, sessions, admin
-permission checks, TLS, private networking, and which commands are registered.
-Every admitted user can access the entire store and command catalog. This is one
-admin trust domain, with no per-user isolation or user audit trail.
-To host Studio on Cloudflare without running your own gateway, see
+command execution. Your application owns login, sessions, admin permission checks,
+TLS, private networking, and which commands are registered. Every admitted user sees
+the whole store and command catalog: this is one admin trust domain with no per-user
+isolation or audit trail. To host Studio on Cloudflare without your own gateway, see
 [Deploy to Cloudflare](./deploy-cloudflare.md).
 
-Provision `TUBELESS_STUDIO_GATEWAY_TOKEN` through your host's secret management:
-32 cryptographically random bytes encoded as 64 hexadecimal characters. Share it
-only with the application gateway and Studio process. Never pass it in argv,
-browser code, URLs, logs, or cookies. Studio reads the token once at startup and
-removes it from its environment, so launched commands and their child processes
-do not inherit it. Then start Studio:
+Provision `TUBELESS_STUDIO_GATEWAY_TOKEN` as 32 random bytes encoded as 64 hex
+characters, shared only between the gateway and Studio. Never put it in argv,
+browser code, URLs, logs, or cookies. Studio reads it once at startup and removes it
+from its environment so launched commands do not inherit it. Then start Studio:
 
 ```sh
 tubeless ui --host 0.0.0.0 --port 4317 \
-  --public-url https://script.bible/admin/pipelines \
-  --store /data/tubeless/runs.sqlite ./pipes.studio.ts
+  --public-url https://example.com/admin/pipelines \
+  --store /data/tubeless/runs.sqlite ./tubeless.project.ts
 ```
 
-`--public-url` enables gateway mode; the environment variable alone is an error.
-Missing or malformed configuration fails before user modules load or stores open.
-The URL must be absolute HTTPS. HTTP is allowed only for literal loopback
-`127.0.0.1`, `[::1]`, or `localhost` development URLs. Paths contain unreserved
-ASCII segments, without dot segments, encoded characters, or empty internal
-segments. Credentials, query strings, fragments, and backslashes are rejected.
-An optional trailing slash normalizes to the canonical page URL. Root mounts work.
+`--public-url` enables gateway mode; the environment variable alone is an error, and
+bad configuration fails before user modules load. The URL must be absolute HTTPS
+(HTTP only for literal loopback development), with plain path segments and no
+credentials, query, or fragment. Root mounts work.
 
 The gateway **preserves the complete mount prefix**: `/admin/pipelines/` serves the
-page, and `/admin/pipelines/api/...` serves browser requests. There is no
-prefix-stripping mode. Only GET/HEAD navigation to the mount without its trailing
-slash redirects; it preserves `?run=...`. Run links, reload, and Back/Forward retain
-the mount. Link to the complete Studio page from your admin navigation;
-`frame-ancestors 'none'` intentionally prevents iframe embedding.
+page and `/admin/pipelines/api/...` serves browser requests; there is no
+prefix-stripping mode. Link to the full Studio page from your admin navigation:
+`frame-ancestors 'none'` prevents iframe embedding.
 
 ### Gateway request contract
 
@@ -447,101 +259,80 @@ For every page and API request, before contacting Studio:
 
 1. Verify the application session and pipeline-admin permission in the request
    handler. Protecting an admin page or layout alone is insufficient.
-2. Forward only to a fixed configured private upstream, never a browser-selected
-   URL. Replace incoming `Authorization` with `Bearer <backend-token>`; never
-   forward browser credentials or cookies to Studio.
-3. Set `Host` explicitly to the configured public authority, including a
-   nondefault port. For a private upstream such as `http://studio.private:4317`,
-   the TCP destination stays private while `Host` is `script.bible`. Studio
-   accepts that authority plus its existing bind-derived host policy. Forwarded
-   host, identity, and protocol headers cannot grant access.
-4. For POST/DELETE, independently verify the original browser `Origin` equals
-   the configured public origin, and preserve it when forwarding. Do not
-   manufacture an allowed Origin for an untrusted request. Missing, null,
-   malformed, duplicate, or foreign Origin is rejected by Studio. Preserve the
-   UI's JSON content type and `x-tubeless-studio-*` guards. There is no cross-origin
-   CORS mode. GET/HEAD navigation may omit Origin.
-5. Preserve response status, content type, CSP, and `Cache-Control: no-store`.
-   Exclude the entire mount from service-worker/PWA and shared-cache handling.
-   Do not retry launches or other mutations: an uncertain response may already
-   have produced side effects, and there is no idempotency/replay contract.
+2. Forward only to a fixed private upstream, never a browser-selected URL. Replace
+   incoming `Authorization` with `Bearer <backend-token>`; never forward browser
+   credentials or cookies.
+3. Set `Host` to the configured public authority (including a nondefault port), even
+   when the TCP destination is private. Forwarded host, identity, and protocol
+   headers grant nothing.
+4. For POST/DELETE, verify the browser `Origin` equals the configured public origin
+   and preserve it when forwarding. Studio rejects a missing, null, duplicate, or
+   foreign Origin. Preserve the UI's JSON content type and `x-tubeless-studio-*`
+   headers. There is no CORS mode; GET/HEAD navigation may omit Origin.
+5. Preserve response status, content type, CSP, and `Cache-Control: no-store`, and
+   exclude the mount from service-worker and shared-cache handling. Do not retry
+   launches or other mutations: an uncertain response may already have had effects,
+   and there is no replay contract.
 
-For trusted self-hosted Cloudflare code, use the separate
+For trusted self-hosted Cloudflare code, use the
 [programmatic launch capability](./deploy-cloudflare.md#launch-from-application-code)
-with a stable idempotency key. Its durable admission contract does not change the
-retry rules for these browser routes.
+with an idempotency key instead. Self-hosted Cloudflare Studio also records launch
+attribution and allowlisted inputs, and **Run again** in a run's Details tab opens a
+prefilled form for a fresh launch; see
+[Cloudflare launch history](./deploy-cloudflare.md#attribution-input-history-and-run-again).
 
-Self-hosted Cloudflare Studio also records launch attribution and, with an explicit
-per-command allowlist, selected input values. In a run's Details tab, **Run again**
-opens the current command form for review and submits a fresh launch. Unsaved inputs
-must be supplied again. See [Cloudflare launch history](./deploy-cloudflare.md#attribution-input-history-and-run-again).
-
-Studio checks the backend credential on **all** routes, including pages, redirects,
-unknown paths, and readiness, before body parsing, store reads, or command effects.
-It uses a fixed-length timing-safe token comparison and rejects duplicate or
-malformed credentials. Host/Origin checks supplement authentication.
-
-Only the gateway should be publicly routed. In the same container, bind Studio to
-loopback. A separate private service may bind `0.0.0.0` with a private network rule
-allowing the gateway. Use appropriate authenticated/encrypted transport across
-that network; a bearer token does not encrypt HTTP. There is no disable-host-check
-option and private networking does not remove the token requirement.
+Studio checks the backend credential on **every** route, including pages, redirects,
+unknown paths, and readiness, before parsing bodies or touching the store. Only the
+gateway should be publicly routed. Bind Studio to loopback in the same container, or
+to a private network the gateway can reach; a bearer token does not encrypt HTTP, so
+use encrypted transport across that network. There is no option to disable host
+checks.
 
 ### Access expiry and failures
 
-The application gateway may redirect page navigation to its login flow. API
-requests must return JSON **401** when login is needed or **403** when permission
-is denied, never a 200 login HTML page. Studio clears displayed data and forms,
-suspends polling and retries, and disables actions after either status from any
-API call. **Open Studio again** performs a full navigation through the same gateway
-URL; your application handles login and return navigation. A full page reload
-starts a new access attempt.
+The gateway may redirect page navigation to its login flow, but API requests must
+return JSON **401** (login needed) or **403** (permission denied), never a login HTML
+page. After either, Studio clears displayed data, suspends polling, and disables
+actions until **Open Studio again** performs a full navigation through the gateway.
 
-A backend credential denial is an integration failure: the gateway should map it
-to a generic **502**, rather than logging the user out. Network errors and 5xx
-responses show a connection/error state. They do not grant access or automatically
-retry a mutation.
+A backend credential denial is an integration failure: map it to a generic **502**
+rather than logging the user out. Network errors and 5xx responses show an error
+state and never retry a mutation automatically.
 
 ### Process, persistence, and readiness
 
-Use a persistent volume for the SQLite store and one active Studio writer process
-per store. The application owns supervision, backups, resource limits, and rollout
-coordination. NDJSON remains read-only in gateway mode. Clear history is always
-disabled in gateway mode, even with a loopback bind.
+Use a persistent volume for the SQLite store and one active Studio writer per store.
+You own supervision, backups, resource limits, and rollouts. NDJSON stays read-only
+in gateway mode.
 
-Authenticated `GET <mount>/api/health` returns `200 {"ready":true}` after startup.
-Readiness turns false synchronously at the start of server close: requests still
-served during shutdown return `503 {"ready":false}`; a closed connection is also
-expected once the listener closes. The response exposes no store path or history.
-An exec probe must supply the backend credential, or the application can own a
-minimal health facade. There is no unauthenticated Studio health bypass.
+Authenticated `GET <mount>/api/health` returns `200 {"ready":true}` after startup and
+`503 {"ready":false}` once shutdown begins. There is no unauthenticated health
+bypass: an exec probe must supply the credential, or your application can expose a
+minimal health facade.
 
-Launch acknowledgement follows persistence of the start event. It is not a durable
-job queue or a promise of completion after a crash. Browser disconnect does not
+A launch acknowledgement means the start event was persisted. It is not a durable job
+queue or a completion guarantee across crashes, and a browser disconnect does not
 cancel the run. Cancellation is cooperative and process-local; a restarted process
-can inspect older runs but cannot cancel or resume their previous execution.
+can inspect older runs but cannot cancel or resume them.
 
-On shutdown, the CLI stops admission, settles pending launch responses, aborts
-active launches, closes the listener, drains executions, then flushes/closes storage.
-Handlers should observe the cancellation signal and finish cleanup. An
-uncooperative handler can prevent draining; the external supervisor owns the grace
-period and eventual forced termination. Forced termination can lose buffered events
-and leave incomplete history. Horizontal execution, shared multiwriter SQLite,
-scheduling, crash recovery, and per-user stores are outside this hosting contract.
+On shutdown the CLI stops admission, aborts active launches, closes the listener,
+drains executions, then flushes and closes storage. Handlers should observe the
+cancellation signal; an uncooperative handler can stall draining, so your supervisor
+owns the grace period, and forced termination can lose buffered events. Horizontal
+execution, multiwriter SQLite, scheduling, crash recovery, and per-user stores are
+outside this contract.
 
 ### Application handoff
 
-For Bible Search or another host application: upgrade to a tested Tubeless release
-containing this contract, implement session and admin permission checks in every
-forwarding handler, configure a fixed upstream and backend token, and register an
-explicit deployment-specific pipeline catalog. Provision persistent storage and a
-supervised process; coordinate sleeping/restarts with ongoing work. The local
-catalog may contain seeding or filesystem commands unsuitable for deployment.
-Keep framework, authentication-provider, and hosting-vendor configuration in the
-application. The repository proxy integration tests exercise the contract; they do
-not prove a consuming application's gateway is configured correctly.
+Upgrade to a tested Tubeless release, enforce session and admin checks in every
+forwarding handler, configure a fixed upstream and the backend token, register an
+explicit deployment-specific command catalog (a local catalog may contain seeding or
+filesystem commands unsuitable for deployment), and provision persistent storage and
+a supervised process. Keep framework, auth-provider, and hosting configuration in the
+application. The repository's proxy integration tests exercise this contract; they do
+not prove your gateway is configured correctly. See
+[SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
 
-See [SECURITY.md](https://github.com/chetmancini/tubeless/blob/main/SECURITY.md).
-Studio previews and recorded versions also expose [graph metadata](./graph-metadata.md).
-Expand **Explore steps** on the Versions tab to search metadata and group by owner or
+Previews and recorded versions also expose [graph metadata](./graph-metadata.md):
+expand **Explore steps** on the Versions tab to search it and group by owner or
 domain.
