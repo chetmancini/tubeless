@@ -29,7 +29,8 @@ Commit `package.json` with `"packageManager": "bun@1.4.4"`, `bun.lock`, and
 
 Define `typecheck` explicitly in package scripts; use the command that checks your
 repository. Pin `vitest` to `5.1.0` in `devDependencies`. Every configured check is
-required. A missing script is a configuration error. This initial version rejects
+required. A missing script or a script name starting with `-` is a configuration error.
+This initial version rejects
 workspaces, alternate/mixed lockfiles, other toolchains, unknown configuration
 fields, cycles, duplicate IDs and overlapping report paths.
 

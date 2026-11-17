@@ -80,6 +80,7 @@ function checkOptions(raw: Record<string, unknown>): Required<CheckOptions> {
 function script(value: unknown, body: unknown): { name: string; body: string } {
   if (
     typeof value !== "string" ||
+    value.startsWith("-") ||
     !/^[a-zA-Z0-9:_-]{1,80}$/.test(value) ||
     typeof body !== "string" ||
     !body.trim() ||

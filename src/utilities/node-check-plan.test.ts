@@ -43,6 +43,23 @@ describe("portable Node recipe resolution", () => {
   ])("rejects unsupported or ambiguous configuration %#", (value) => {
     expect(() => resolveNodeCheckPlan(value, manifest)).toThrow();
   });
+  it.each(["--help", "--version", "-h", "-"])(
+    "rejects option-like script %s during resolution and transported-plan decoding",
+    (name) => {
+      expect(() =>
+        resolveNodeCheckPlan(
+          { ...config, checks: [{ id: "types", script: name }] },
+          { ...manifest, scripts: { [name]: "exit 9" } }
+        )
+      ).toThrow("invalid package script");
+      const plan = resolveNodeCheckPlan(config, manifest);
+      const command = plan.commands[1];
+      if (command.kind !== "script") throw new Error("Expected script fixture.");
+      command.script = { name, body: "exit 9" };
+      command.argv = ["bun", "run", "--silent", name];
+      expect(decodeNodeCheckPlan(plan)).toBeUndefined();
+    }
+  );
 });
 
 it("decodes transported plans without accepting modified argv or dependencies", () => {
