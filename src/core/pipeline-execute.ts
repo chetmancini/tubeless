@@ -374,7 +374,7 @@ export async function executePlannedRun<
     shouldStop: () =>
       stopError !== undefined ||
       runtime.signal?.aborted === true ||
-      !!journalFailure(executionContext),
+      journalFailure(executionContext) !== undefined,
   });
   const fatalJournalError = journalFailure(executionContext);
   if (fatalJournalError && !stopError) {
