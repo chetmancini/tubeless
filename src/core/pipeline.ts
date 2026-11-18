@@ -25,14 +25,14 @@ import {
 } from "./pipeline-identity.js";
 import { renderPipelineMermaid } from "./pipeline-mermaid.js";
 import { buildPipelinePlan } from "./pipeline-plan.js";
-import { snapshotRunControls } from "./run-controls.js";
-import { isStepOutputObserver } from "./pipeline-output-observer.js";
+import { prepareRunControls } from "./run-controls.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import type {
   InferSchemaOutput,
   Pipeline,
   PipelineContext,
   PipelineDefinitionSnapshot,
+  PipelineError,
   PipelineMermaidOptions,
   PipelinePlan,
   PipelineRun,
@@ -179,21 +179,18 @@ export function definePipeline<
   // SAFETY: each compiled target id is a string key of `TTargets`.
   const targetIds = compiled.targetIds as readonly TTargetId[];
 
-  function prepareRun(controls: PipelineRunControls<TStepId, TTargetId>): {
-    controls: PipelineRunControls<TStepId, TTargetId>;
-    plan: PipelinePlan;
-  } {
-    const normalizedControls = snapshotRunControls(controls);
-    if (controls.outputObserver !== undefined)
-      normalizedControls.outputObserver = controls.outputObserver;
-    const plan = buildPipelinePlan(compiled, normalizedControls);
-    const observer = normalizedControls.outputObserver;
-    if (plan.ok && isStepOutputObserver(observer))
-      normalizedControls.outputObserver = Object.freeze({
-        encode: observer.encode.bind(observer),
-        write: observer.write.bind(observer),
-      });
-    return { controls: normalizedControls, plan };
+  function prepareRun(
+    controls: PipelineRunControls<TStepId, TTargetId>,
+    additionalErrors: readonly PipelineError[] = []
+  ): { controls: PipelineRunControls<TStepId, TTargetId>; plan: PipelinePlan } {
+    const prepared = prepareRunControls(controls);
+    return {
+      controls: prepared.controls,
+      plan: buildPipelinePlan(compiled, prepared.controls, [
+        ...prepared.errors,
+        ...additionalErrors,
+      ]),
+    };
   }
 
   function plan(controls: PipelineRunControls<TStepId, TTargetId> = {}): PipelinePlan {
@@ -282,25 +279,21 @@ export function definePipeline<
           );
         resolved.set(compiledStep, value);
       }
-      const prepared = prepareRun(controls);
-      const plan: PipelinePlan =
-        overrides.size > 0 && controls.outputObserver !== undefined
-          ? {
-              ...prepared.plan,
-              ok: false,
-              errors: [
-                ...prepared.plan.errors,
-                pipelineDiagnostic(
-                  "TUBELESS_RUN_OUTPUT_RECOVERY_INVALID",
-                  "planning",
-                  "validation",
-                  "Test overrides cannot be combined with outputObserver"
-                ),
-              ],
-            }
-          : prepared.plan;
+      const errors =
+        overrides.size > 0 &&
+        (controls.outputObserver !== undefined || controls.suppliedOutputs !== undefined)
+          ? [
+              pipelineDiagnostic(
+                "TUBELESS_RUN_OUTPUT_RECOVERY_INVALID",
+                "planning",
+                "validation",
+                "Test overrides cannot be combined with output recovery controls"
+              ),
+            ]
+          : [];
+      const prepared = prepareRun(controls, errors);
       return executeCompiled(
-        plan,
+        prepared.plan,
         options === undefined ? ({} as TInputOptions) : options,
         prepared.controls,
         context,

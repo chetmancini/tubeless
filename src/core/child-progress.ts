@@ -148,6 +148,7 @@ function createChildProgress(plan: PipelinePlan) {
         message += " (overridden)";
       }
       if (event.outputSource === "cache") message += " (cached)";
+      if (event.outputSource === "supplied") message += " (supplied)";
       const previous = terminalSteps.size;
       if (event.status !== "running") terminalSteps.add(event.step.id);
       const latest = progress.get(event.step.id);

@@ -1,3 +1,4 @@
+import type { PipelineStepOutputSource } from "../tracing/tracing-constants.js";
 import type { PipelineHooks, PipelineLogger } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
 import { safeTerminalText } from "./terminal-text.js";
@@ -147,8 +148,14 @@ export function createReporterTheme(config: RunReporterConfig = {}): ReporterThe
   };
 }
 
-export function outputSourceSuffix(source?: "override" | "cache"): string {
-  return source === "override" ? " (overridden)" : source === "cache" ? " (cached)" : "";
+export function outputSourceSuffix(source?: PipelineStepOutputSource): string {
+  return source === "override"
+    ? " (overridden)"
+    : source === "cache"
+      ? " (cached)"
+      : source === "supplied"
+        ? " (supplied)"
+        : "";
 }
 
 /** Create concise, append-only lifecycle logging for a pipeline run. */
@@ -166,7 +173,7 @@ export function createRunReporter<TResult = unknown>(
   const displayName = (step: {
     id: string;
     name?: string;
-    outputSource?: "override" | "cache";
+    outputSource?: PipelineStepOutputSource;
   }): string => safeTerminalText(step.name ?? step.id) + outputSourceSuffix(step.outputSource);
   const clearProgress = (stepId: string): void => {
     lastProgressLogAt.delete(stepId);

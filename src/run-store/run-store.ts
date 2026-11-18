@@ -1,3 +1,4 @@
+import type { PipelineStepOutputSource } from "../tracing/tracing-constants.js";
 import type { AgentTranscriptReader } from "../tracing/agent-transcript.js";
 import type {
   RUN_MODEL_VERSION,
@@ -81,7 +82,7 @@ export interface StoredPipelineLog {
 }
 
 export interface StoredPipelineAttempt {
-  outputSource?: "override" | "cache";
+  outputSource?: PipelineStepOutputSource;
   attemptId: string;
   durationMs?: number;
   finishedAtMs?: number;
@@ -101,7 +102,7 @@ export type StoredPipelineArtifact = Extract<
 
 export interface StoredPipelineStep {
   artifacts?: StoredPipelineArtifact[];
-  outputSource?: "override" | "cache";
+  outputSource?: PipelineStepOutputSource;
   /** One execution attempt; `retries` excludes initial `reportAttempt(1)` telemetry. */
   attempt?: StoredPipelineAttempt;
   /** Planned required inputs, bounded like other trace lists. Absent when no plan was recorded. */

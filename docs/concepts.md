@@ -434,6 +434,10 @@ mocked. See [`cancellation-and-testing.ts`](../examples/cancellation-and-testing
 
 ### Supplying step outputs
 
+Hosts can supply saved raw outputs with the invocation-local `suppliedOutputs`
+map. See [output recovery](./step-output-observation.md#supply-saved-raw-values)
+for validation, selection, and compatibility rules. For typed test fixtures:
+
 `overrideStep` from `tubeless/testing` supplies a typed intermediate value
 without changing the pipeline:
 

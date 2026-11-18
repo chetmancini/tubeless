@@ -132,7 +132,12 @@ Optional capabilities:
   before schema transformation and writes detached bytes after validation, before
   dependents start. Supply a lossless codec and owned persistence; dry runs bypass
   capture and children never inherit it. See `docs/step-output-observation.md`.
-  Production output supply is not implemented yet.
+  Supply compatible decoded raw values with `suppliedOutputs`, a map of selected
+  step IDs to unknown values. Output schemas still validate; handlers/cache are
+  bypassed and supplies are not observed again. Exact `stepIds` must include
+  supplied intermediates and their consumers to omit upstream work. The host
+  checks business execution, implementation, input, and codec identity before reuse.
+  Recovery controls belong only on direct invocations, not authored child controls.
 - Artifacts: `context.recordArtifact`, `loadArtifact`, `saveArtifact`
   (`docs/artifacts.md`). Graph metadata (`docs/graph-metadata.md`). Node helpers
   from `tubeless/node` (`definePaths`, `writeJson`, `resetDir`; mark writes

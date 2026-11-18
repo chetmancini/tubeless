@@ -1,3 +1,4 @@
+import type { PipelineStepOutputSource } from "../../../tracing/tracing-constants.js";
 import type { ComponentChildren } from "preact";
 import type { GraphStep } from "../graph/input.js";
 import { StepArtifacts } from "./artifacts.js";
@@ -33,7 +34,7 @@ export function Status({
   outputSource,
 }: {
   value: string;
-  outputSource?: "override" | "cache";
+  outputSource?: PipelineStepOutputSource;
 }) {
   return (
     <span class={`status ${value}`}>
@@ -43,6 +44,7 @@ export function Status({
       {value}
       {outputSource === "override" && " (overridden)"}
       {outputSource === "cache" && " (cached)"}
+      {outputSource === "supplied" && " (supplied)"}
     </span>
   );
 }
@@ -225,6 +227,7 @@ export function StepRow({ step, steps = [], selected = false, onSelect }: StepRo
                   {detail.label && <span>{detail.label}</span>}
                   {detail.outputSource === "override" && <span>(overridden)</span>}
                   {detail.outputSource === "cache" && <span>(cached)</span>}
+                  {detail.outputSource === "supplied" && <span>(supplied)</span>}
                 </div>
               ))}
               {detailCount && step.progress.details.length < detailCount ? (

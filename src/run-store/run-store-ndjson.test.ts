@@ -587,7 +587,7 @@ describe("recorded fan-out diagnostics", () => {
 });
 
 it.each(
-  (["override", "cache"] as const).flatMap((outputSource) =>
+  (["override", "cache", "supplied"] as const).flatMap((outputSource) =>
     (["completed", "failed", "cancelled"] as const).map((status) => ({ outputSource, status }))
   )
 )(
@@ -636,7 +636,9 @@ it.each(
       {},
       outputSource === "override"
         ? { overrides: [overrideStep(load, "private supplied value")] }
-        : {}
+        : outputSource === "supplied"
+          ? { suppliedOutputs: new Map([["load", "private supplied value"]]) }
+          : {}
     );
     expect(lines.join("\n")).not.toContain("private supplied value");
     expect(lines.join("\n")).not.toContain("private key");

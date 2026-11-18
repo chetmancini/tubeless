@@ -126,7 +126,10 @@ Only boundaries that are not obvious from names are listed.
 - `run-controls.ts` snapshots graph controls for direct runs, child runs and
   static iteration identities. Its property order preserves durable definition
   hashes; do not reorder without a definition-identity version bump. Direct runs
-  snapshot their output observer separately; child controls reject it.
+  use `prepareRunControls` to admit and snapshot output observers and supplied
+  entries separately, returning diagnostics to the planner; child controls reject
+  both. Only the planner constructs failed plans. Supplied raw values share the test override validation
+  path without observation, cache access, or handler execution.
 - `PipelineChildRunControls` is the shared authored-control contract for child
   constructors, project adapters, and decoded plan metadata. Keep invocation-only
   capabilities excluded there rather than adding exclusions at each consumer.
@@ -137,6 +140,12 @@ Only boundaries that are not obvious from names are listed.
 - `child-execution.ts` owns inherited child runtime context; invocation-specific hooks
   and identities stay with callers. Core carries the agent's opaque execution scope
   through child execution; orchestration steps hold no leaf permit.
+
+### Tracing
+
+- `tracing-constants.ts` owns output-source vocabulary and its derived type.
+  `tracing-schema.ts` owns the shared decoder used by trace and stored-run schemas.
+  Keep provenance fields on that contract instead of repeating literal unions.
 
 ### Agent
 

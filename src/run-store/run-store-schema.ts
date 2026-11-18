@@ -10,6 +10,7 @@ import {
   progressSchema,
   PIPELINE_STEP_SKIP_REASONS,
   remoteSchema,
+  stepOutputSourceSchema,
 } from "../tracing/tracing-schema.js";
 import {
   wireArray,
@@ -32,7 +33,7 @@ const count = wireNumber({ integer: true, minimum: 0 });
 const positive = wireNumber({ integer: true, minimum: 1 });
 const status = wireEnum(["running", "completed", "failed", "cancelled"]);
 const stepStatus = wireEnum(["planned", "running", "completed", "failed", "cancelled", "skipped"]);
-const outputSource = wireOptional(wireEnum(["override", "cache"]));
+const outputSource = wireOptional(stepOutputSourceSchema);
 const agentCall = wireObject({
   agentRunId: id,
   turn: positive,

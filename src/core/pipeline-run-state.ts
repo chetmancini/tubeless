@@ -1,3 +1,4 @@
+import type { PipelineStepOutputSource } from "../tracing/tracing-constants.js";
 import { isCancellationOnly } from "./pipeline-execution-error.js";
 import type { PipelineLifecycleObserver } from "./lifecycle.js";
 import { RUN_MODEL_VERSION } from "./pipeline-ids.js";
@@ -18,7 +19,7 @@ import type {
 } from "./pipeline-types.js";
 
 export interface PipelineStepAttempt {
-  outputSource?: "override" | "cache";
+  outputSource?: PipelineStepOutputSource;
   attemptId: string;
   startedAtMs: number;
 }
@@ -148,7 +149,7 @@ export class PipelineRunState<TResult> {
   beginAttempt(
     step: PipelinePlanStep,
     startedAtMs = this.now(),
-    outputSource?: "override" | "cache"
+    outputSource?: PipelineStepOutputSource
   ): PipelineStepAttempt {
     const attempt = {
       attemptId: `${this.identity.runId}:attempt:${(this.#nextAttemptSequence += 1).toString(36)}`,

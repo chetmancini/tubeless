@@ -17,7 +17,7 @@ export const DOC_NAV = [
   { slug: "concepts", label: "Concepts", blurb: "Understand dependencies, results, failures, and execution controls." },
   { slug: "cli", label: "CLI", blurb: "Select and run commands, record results, and inspect history." },
   { slug: "step-output-cache", label: "Step output caching", blurb: "Reuse deterministic outputs with explicit keys, versions, and cache policies." },
-  { slug: "step-output-observation", label: "Step output observation", blurb: "Capture raw values through host-owned encoding and awaited persistence." },
+  { slug: "step-output-observation", label: "Step output observation", blurb: "Capture and supply raw values through host-owned encoding and persistence." },
   { slug: "artifacts", label: "Artifacts", blurb: "Load, save, and trace typed artifacts with dry-run safety." },
   { slug: "node-check-recipe", label: "Portable Node checks", blurb: "Inspect and run explicit Node/Bun check gates with structured Vitest reports." },
   { slug: "structured-diagnostics", label: "Structured failures", blurb: "Inspect bounded Vitest reports and preserve framework errors across machine interfaces." },

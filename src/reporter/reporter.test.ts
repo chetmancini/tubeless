@@ -251,7 +251,7 @@ describe("formatDurationMs", () => {
   });
 });
 
-it.each(["override", "cache"] as const)(
+it.each(["override", "cache", "supplied"] as const)(
   "labels %s outputs in the line reporter",
   async (source) => {
     const { step } = createSteps();
@@ -274,10 +274,14 @@ it.each(["override", "cache"] as const)(
     await test.run(
       pipeline,
       {},
-      source === "override" ? { overrides: [overrideStep(load, 2)] } : {}
+      source === "override"
+        ? { overrides: [overrideStep(load, 2)] }
+        : source === "supplied"
+          ? { suppliedOutputs: new Map([["load", 2]]) }
+          : {}
     );
     expect(messages.log.join("\n")).toContain(
-      `ok load (${source === "override" ? "overridden" : "cached"})`
+      `ok load (${source === "override" ? "overridden" : source === "cache" ? "cached" : "supplied"})`
     );
   }
 );

@@ -5,7 +5,6 @@ import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepIds, TargetIds } from "./pipeline-definition.js";
 import { decideStepDisposition } from "./pipeline-disposition.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
-import { isStepOutputObserver } from "./pipeline-output-observer.js";
 import type { CompiledStep } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_NESTED_PIPELINE, STEP_REMOTE, STEP_AGENT } from "./pipeline-step-metadata.js";
@@ -161,25 +160,35 @@ export function buildPipelinePlan<
   TResultSchema extends StandardSchemaV1 | undefined,
 >(
   compiled: CompiledPipeline<TSteps, TResult, TTargets, TResultSchema>,
-  controls: PipelineRunControls<StepIds<TSteps>, TargetIds<TTargets>>
+  controls: PipelineRunControls<StepIds<TSteps>, TargetIds<TTargets>>,
+  admissionErrors: readonly PipelineError[] = []
 ): PipelinePlan {
   const dryRun = controls.dryRun === true;
   const steps = compiled.orderedSteps;
-  const errors: PipelineError[] = [];
+  const errors: PipelineError[] = [...admissionErrors];
+  const invalidPlan: PipelinePlan = {
+    dryRun,
+    errors,
+    ok: false,
+    pipelineId: compiled.id,
+    definition: compiled.definition,
+    steps: [],
+  };
 
   const knownStepIds = new Set(compiled.stepIds);
   const declaredTargetIds = new Set(compiled.declaredTargets.map((target) => target.id));
   const requestedStepIds = controls.stepIds ?? [];
   const requestedTargets = controls.targets ?? [];
-  if (controls.outputObserver !== undefined && !isStepOutputObserver(controls.outputObserver)) {
-    errors.push(
-      pipelineDiagnostic(
-        "TUBELESS_RUN_OUTPUT_RECOVERY_INVALID",
-        "planning",
-        "validation",
-        "outputObserver requires encode and write callbacks"
-      )
-    );
+  for (const stepId of controls.suppliedOutputs?.keys() ?? []) {
+    if (!knownStepIds.has(stepId))
+      errors.push(
+        pipelineDiagnostic(
+          "TUBELESS_RUN_OUTPUT_RECOVERY_INVALID",
+          "planning",
+          "validation",
+          "suppliedOutputs contains an unknown step ID"
+        )
+      );
   }
   if (controls.cache !== undefined && !isStepCachePolicy(controls.cache)) {
     errors.push(
@@ -305,16 +314,7 @@ export function buildPipelinePlan<
     );
   }
 
-  if (errors.length > 0) {
-    return {
-      dryRun,
-      errors,
-      ok: false,
-      pipelineId: compiled.id,
-      definition: compiled.definition,
-      steps: [],
-    };
-  }
+  if (errors.length > 0) return invalidPlan;
 
   let selectionReasonsByStepId: Map<string, PipelineStepSelectionReason[]>;
   if (controls.stepIds !== undefined) {
@@ -348,17 +348,32 @@ export function buildPipelinePlan<
       steps.map((step) => [step.id, [{ kind: "all" }] satisfies PipelineStepSelectionReason[]])
     );
   }
+  for (const stepId of controls.suppliedOutputs?.keys() ?? []) {
+    if (!selectionReasonsByStepId.get(stepId)?.some(selectsStep))
+      errors.push(
+        pipelineDiagnostic(
+          "TUBELESS_RUN_OUTPUT_RECOVERY_INVALID",
+          "planning",
+          "validation",
+          "suppliedOutputs contains an unselected step ID"
+        )
+      );
+  }
+  if (errors.length > 0) return invalidPlan;
   const planSteps: PipelinePlanStep[] = [];
   const plannedReportsByStepId = new Map<string, PipelineStepReport>();
   for (const step of steps) {
     const selectionReasons = selectionReasonsByStepId.get(step.id)!;
     const selected = selectionReasons.some(selectsStep);
-    const disposition = decideStepDisposition({
-      dryRun,
-      selected,
-      reportsByStepId: plannedReportsByStepId,
-      step,
-    });
+    const disposition =
+      selected && controls.suppliedOutputs?.has(step.id)
+        ? ({ kind: "run" } as const)
+        : decideStepDisposition({
+            dryRun,
+            selected,
+            reportsByStepId: plannedReportsByStepId,
+            step,
+          });
     const skipReason = disposition.kind === "skip" ? disposition.reason : undefined;
     const planStep = stepToPlanStep(step, selected, skipReason, selectionReasons);
     planSteps.push(planStep);
@@ -387,14 +402,7 @@ export function buildPipelinePlan<
     }
   }
 
-  return {
-    dryRun,
-    errors,
-    ok: errors.length === 0,
-    pipelineId: compiled.id,
-    definition: compiled.definition,
-    steps: planSteps,
-  };
+  return { ...invalidPlan, ok: true, steps: planSteps };
 }
 
 export function planStepById(plan: PipelinePlan): Map<string, PipelinePlanStep> {

@@ -386,7 +386,7 @@ describe("Studio API response parsing", () => {
   );
 });
 
-it.each(["override", "cache"] as const)(
+it.each(["override", "cache", "supplied"] as const)(
   "accepts %s steps and attempts in recorded Studio runs",
   (outputSource) => {
     const recorded = run({

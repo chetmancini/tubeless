@@ -1,3 +1,4 @@
+import type { PipelineStepOutputSource } from "../tracing/tracing-constants.js";
 import type { PipelineMetadata } from "../tracing/graph-metadata.js";
 import type { CheckpointStore } from "../utilities/checkpoint-store.js";
 import type { PipelineStepQuery } from "./pipeline-query.js";
@@ -93,6 +94,8 @@ export type PipelineRunControls<
   TStepId extends string = string,
   TTargetId extends string = string,
 > = {
+  /** Resolved raw outputs for selected steps in this invocation; validated without running their handlers. */
+  suppliedOutputs?: ReadonlyMap<TStepId, unknown>;
   /** Capture this invocation's raw step outputs; bypassed in dry runs and never inherited by children. */
   outputObserver?: PipelineStepOutputObserver<TStepId>;
   /** Maximum simultaneous steps, including skip predicates and output validation. Defaults to 1. */
@@ -122,11 +125,14 @@ export type PipelineRunControls<
     }
 );
 
-/** Authored child policy, excluding output persistence owned by a direct invocation. */
+/** Authored child policy, excluding output recovery owned by a direct invocation. */
 export type PipelineChildRunControls<
   TStepId extends string = string,
   TTargetId extends string = string,
-> = PipelineRunControls<TStepId, TTargetId> & { outputObserver?: never };
+> = PipelineRunControls<TStepId, TTargetId> & {
+  outputObserver?: never;
+  suppliedOutputs?: never;
+};
 
 /** Resolved caller context. Core fills `now` and `sleep` before execution. */
 export interface PipelineRuntime extends PipelineContext {
@@ -162,8 +168,8 @@ export type PipelineStepProgressDetailStatus =
 
 /** One optional nested row in a step progress snapshot. */
 export interface PipelineStepProgressDetail {
-  /** Provenance of a supplied test or cached output, independent of the row status. */
-  outputSource?: "override" | "cache";
+  /** Provenance of a supplied, test, or cached output, independent of the row status. */
+  outputSource?: PipelineStepOutputSource;
   /** Stable identity for the row (item key, path, job id, …). */
   id: string;
   /** Optional display name; identity remains `id`. */
@@ -335,8 +341,8 @@ export interface PipelineErrorCause {
 }
 
 interface PipelineStepReportBase {
-  /** Present once a test or cached output is selected, including failed/cancelled validation. */
-  outputSource?: "override" | "cache";
+  /** Present once a supplied, test, or cached output is selected, including failed/cancelled validation. */
+  outputSource?: PipelineStepOutputSource;
   /** Present when the step started an execution attempt. */
   attemptId?: string;
   id: string;
@@ -462,8 +468,8 @@ export type PipelineStepStatus =
   | {
       attemptId: string;
       pipelineId: string;
-      /** Supplied test output; the normal step handler is not executing. */
-      outputSource?: "override" | "cache";
+      /** Reused output; the normal step handler is not executing. */
+      outputSource?: PipelineStepOutputSource;
       progress?: PipelineStepProgress;
       status: "running";
       step: PipelinePlanStep;
