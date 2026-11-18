@@ -114,3 +114,11 @@ Dagster engine:
 ```sh
 .context/dagster-venv/bin/python -m unittest discover -s examples/dagster -p 'test_*.py'
 ```
+
+## Host-owned output recovery
+
+This adapter retains the whole-attempt retry behavior described above. To reuse
+individual step outputs across attempts, add host-owned persistence, compatibility
+checks, loading, and `suppliedOutputs` explicitly. Adapt the
+[fresh-host recovery recipe](./step-output-recovery.md) and reconcile uncertain
+side effects with business idempotency keys before retrying.

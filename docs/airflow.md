@@ -95,3 +95,11 @@ file only on success and returned as the task's `return_value` XCom.
 `make check` exercises the adapter against a local HTTP fixture and the real
 Bun worker; it does not replace testing the DAG with your auth manager,
 executor, and XCom backend.
+
+## Host-owned output recovery
+
+This adapter retains the whole-attempt retry behavior described above. To reuse
+individual step outputs across attempts, add host-owned persistence, compatibility
+checks, loading, and `suppliedOutputs` explicitly. Adapt the
+[fresh-host recovery recipe](./step-output-recovery.md) and reconcile uncertain
+side effects with business idempotency keys before retrying.

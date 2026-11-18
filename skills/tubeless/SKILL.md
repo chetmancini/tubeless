@@ -138,6 +138,10 @@ Optional capabilities:
   supplied intermediates and their consumers to omit upstream work. The host
   checks business execution, implementation, input, and codec identity before reuse.
   Recovery controls belong only on direct invocations, not authored child controls.
+  Adapt `examples/step-output-recovery.ts` and its application-owned file adapter
+  for fresh-host recovery; read `docs/step-output-recovery.md`. Reconcile effects
+  without saved outputs using business idempotency keys. Bundled engine examples
+  retain whole-attempt retries until their host adapter explicitly adds recovery.
 - Artifacts: `context.recordArtifact`, `loadArtifact`, `saveArtifact`
   (`docs/artifacts.md`). Graph metadata (`docs/graph-metadata.md`). Node helpers
   from `tubeless/node` (`definePaths`, `writeJson`, `resetDir`; mark writes

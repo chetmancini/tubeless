@@ -1,10 +1,13 @@
 # Host-owned step output recovery
 
 Contract for [#287](https://github.com/chetmancini/tubeless/issues/287).
-Slices 1 through 3 implement the design, [compile-only probes](./step-output-recovery.probes.ts),
-and [public output observation and supply](../docs/step-output-observation.md).
-The fresh-instance recovery recipe remains for slice 4. Current
-host guides retain whole-attempt retries until their recovery examples change.
+All four slices are implemented: the design and [compile-only probes](./step-output-recovery.probes.ts),
+[public observation and supply](../docs/step-output-observation.md), and the
+[fresh-host recovery recipe](../docs/step-output-recovery.md). The acceptance
+suite covers separate processes, compatibility rejection, rich codec values,
+mutating schemas, partial selection, and process loss after a committed effect
+before output acknowledgement. Existing engine adapters retain whole-attempt
+retries until an application explicitly integrates recovery.
 
 ## Outcome and boundary
 
@@ -208,3 +211,19 @@ website when the shipped human-facing documentation changes. Public exports and
 recommended usage change only in the corresponding runtime slices. The final
 acceptance test is recovery through the public API across fresh instances, with
 no leaked step values and no new runtime dependency.
+
+## Integration evidence
+
+- [Public recipe](../examples/step-output-recovery.ts): fail step 7 of nine, recreate
+  pipeline/store instances, load six raw outputs, and execute only steps 7–9.
+- [Application file adapter](../examples/recovery/file-output-store.ts): bind records
+  to the execution, normalized input, graph, implementation, format, and codec;
+  acknowledge per-step atomic file replacement and reject incompatible records.
+- [Integration tests](../src/testing/step-output-recovery.example.test.ts) and
+  [process fixture](../src/testing/step-output-recovery.test-support.ts): compare
+  recovery with uninterrupted execution, terminate a host after an effect but
+  before output persistence, and reconcile that effect with a business key.
+
+This completes the planned public-API acceptance for #287. Store formats,
+execution ownership, compatibility policy, and uncertain-effect reconciliation
+remain application responsibilities.

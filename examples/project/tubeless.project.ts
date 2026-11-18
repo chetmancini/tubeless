@@ -10,6 +10,7 @@ import { WelcomePipeline } from "../inherited-inputs.ts";
 import { OverrideExamplePipeline } from "../step-output-overrides.ts";
 import { CachedCountCommand } from "../step-output-cache.ts";
 import { OutputObservationPipeline } from "../step-output-observation.ts";
+import { RecoveryPipeline } from "../step-output-recovery.ts";
 import { PaginatedPipeline } from "../iteration.ts";
 import { ScriptedAgent } from "../agent.ts";
 import { DelegatingAgentCommand } from "../agent-delegation.ts";
@@ -54,6 +55,11 @@ export default defineProject(
     definePipelineCommand(OutputObservationPipeline, {
       params: { text: { type: "string", required: true } },
     }),
+    // For fresh-host recovery, call runRecoveryExample in ../step-output-recovery.ts.
+    // This ordinary CLI entry runs without attaching the example's file store.
+    definePipelineCommand(RecoveryPipeline, {
+      params: { seed: { type: "number", required: true } },
+    }),
     ScriptedAgent,
     // For transcript capture, use createTranscriptAgent in ../agent-transcript.ts
     // with openNdjsonAgentTranscriptWriter from tubeless/agent/node and an explicit path.
@@ -85,7 +91,7 @@ export default defineProject(
     definePipelineCommand(PaginatedPipeline, {
       params: { rows: { type: "string", multiple: true } },
     }),
-    // Ordinary execution of the override recipe; supplied outputs are testing-only.
+    // Ordinary execution of the typed override recipe; overrides are testing-only.
     definePipelineCommand(OverrideExamplePipeline, {
       params: { lines: { type: "string", multiple: true } },
     }),
