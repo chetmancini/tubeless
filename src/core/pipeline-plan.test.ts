@@ -52,6 +52,36 @@ describe("pipeline planning", () => {
     });
   });
 
+  it("records both roles of a dependency and expands its prerequisites once per target", () => {
+    const { step } = createSteps();
+    const source = step("source", { run: () => 1 });
+    const build = step("build", { dependsOn: [source], run: () => 2 });
+    const publish = step("publish", {
+      dependsOn: [build],
+      skipAfterFailureOf: [build],
+      run: () => 3,
+    });
+    const pipeline = definePipeline({
+      id: "overlap",
+      steps: [source, build, publish],
+      targets: [build, publish],
+    });
+
+    const plan = pipeline.plan({ targets: ["publish", "build"] });
+    expect(plan.steps.map((entry) => entry.selectionReasons)).toEqual([
+      [
+        { kind: "required-dependency", dependentId: "build", targetId: "publish" },
+        { kind: "required-dependency", dependentId: "build", targetId: "build" },
+      ],
+      [
+        { kind: "required-dependency", dependentId: "publish", targetId: "publish" },
+        { kind: "failure-gate", dependentId: "publish", targetId: "publish" },
+        { kind: "target", targetId: "build" },
+      ],
+      [{ kind: "target", targetId: "publish" }],
+    ]);
+  });
+
   it("normalizes controls once before validating a plan", () => {
     const { step } = createSteps();
     const pipeline = definePipeline({ id: "controls", steps: [step("work", { run: () => true })] });
