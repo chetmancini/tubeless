@@ -14,14 +14,16 @@ const page = {
 function apiFixture() {
   const list = vi.fn(async () => page);
   const clear = vi.fn();
+  const store = memoryStore(recordedRun());
+  const listEvents = vi.spyOn(store, "listEvents");
   const api = createStudioApiHandler({
-    store: memoryStore(recordedRun()),
+    store,
     transcripts: { list },
     history: { clear },
   });
   const get = (path: string) =>
     api(new Request("http://studio.local" + path), new URL("http://studio.local" + path));
-  return { api, get, list, clear };
+  return { api, get, list, listEvents, clear };
 }
 
 describe("Studio transcript routes", () => {
@@ -40,6 +42,21 @@ describe("Studio transcript routes", () => {
       sourceId: expect.any(String),
     });
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("uses one history refresh for both the first and repeated transcript poll", async () => {
+    const { get, list, listEvents } = apiFixture();
+    await get("/api/snapshot");
+    for (let poll = 0; poll < 2; poll++) {
+      listEvents.mockClear();
+      list.mockClear();
+      expect((await get("/api/runs/run/transcript")).status).toBe(200);
+      expect(listEvents.mock.calls).toEqual([
+        [{ limit: 1 }],
+        [{ afterId: 2, limit: expect.any(Number) }],
+      ]);
+      expect(list).toHaveBeenCalledExactlyOnceWith({ runId: "run", afterSequence: 0 });
+    }
   });
 
   it.each([

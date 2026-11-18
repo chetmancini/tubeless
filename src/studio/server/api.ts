@@ -1,10 +1,7 @@
 import type { PipelineRunEventReader } from "../../run-store/run-store.js";
 import type { LaunchActor, StudioLaunchMetadata } from "../shared/launch-metadata.js";
 import { jsonResponse } from "../../utilities/http-response.js";
-import {
-  agentTranscriptPageSchema,
-  type AgentTranscriptReader,
-} from "../../tracing/agent-transcript.js";
+import type { AgentTranscriptReader } from "../../tracing/agent-transcript.js";
 import {
   isPipelineRunStudioParameter,
   parseStudioLaunchRequest,
@@ -169,28 +166,16 @@ export function createStudioApiHandler(
           "invalid_cursor",
           "Invalid transcript cursor."
         );
-        if (!transcripts || !(await eventState.detail(runId)))
-          return errorResponse(
-            404,
-            "transcript_not_found",
-            "Transcript not available for this run.",
-            "Choose a recorded agent run with a transcript source."
-          );
-        const page = agentTranscriptPageSchema.decode(
-          await transcripts.list({ runId, afterSequence }),
-          "Transcript page"
-        );
-        if (page.runId !== runId || page.records.some((record) => record.sequence <= afterSequence))
-          throw new Error("Transcript reader returned a mismatched run or cursor");
-        return jsonResponse({
-          transcript: page,
-          sourceId: instanceId,
-          live: transcriptLive,
-          turnRuns: await eventState.agentTurnRuns(
-            runId,
-            page.records.map((record) => record.turn)
-          ),
-        });
+        const result =
+          transcripts && (await eventState.transcript(runId, afterSequence, transcripts));
+        return result
+          ? jsonResponse({ ...result, sourceId: instanceId, live: transcriptLive })
+          : errorResponse(
+              404,
+              "transcript_not_found",
+              "Transcript not available for this run.",
+              "Choose a recorded agent run with a transcript source."
+            );
       }
       const cancelMatch = /^\/api\/runs\/([^/]+)\/cancel$/.exec(url.pathname);
       if (request.method === "POST" && cancelMatch) {

@@ -155,6 +155,10 @@ export class StudioHistory {
     return { children: window.children, page, childCount: window.childCount };
   }
 
+  hasRun(runId: string): boolean {
+    return this.#summaries.has(runId);
+  }
+
   /** Resolve logical agent turns, including resumed turns beyond the child-summary window. */
   agentTurnRuns(runId: string, turns: readonly number[]): Record<string, string> {
     const requested = new Set(turns.filter((turn) => turn > 0));

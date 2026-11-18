@@ -3,12 +3,17 @@ import {
   type PipelineRunEventReader,
   type StoredPipelineDefinition,
 } from "../../run-store/run-store.js";
+import {
+  agentTranscriptPageSchema,
+  type AgentTranscriptReader,
+} from "../../tracing/agent-transcript.js";
 import { readPipelineEventPages } from "../../run-store/run-store-reader.js";
 import type {
   StudioSnapshot,
   StudioRunDetail,
   StudioChildRuns,
   StudioDefinitionRuns,
+  StudioTranscriptPage,
 } from "../shared/schema.js";
 import { StudioHistory } from "./history.js";
 import { StudioRunDetails } from "./run-details.js";
@@ -114,10 +119,31 @@ export class PipelineRunStudioEventState {
     });
   }
 
-  agentTurnRuns(runId: string, turns: readonly number[]): Promise<Record<string, string>> {
+  transcript(
+    runId: string,
+    afterSequence: number,
+    reader: Pick<AgentTranscriptReader, "list">
+  ): Promise<Pick<StudioTranscriptPage, "transcript" | "turnRuns"> | undefined> {
     return this.#serialize(async () => {
       await this.#appendNewEvents();
-      return this.#indexedHistory().agentTurnRuns(runId, turns);
+      const history = this.#indexedHistory();
+      if (!history.hasRun(runId)) return undefined;
+      const transcript = agentTranscriptPageSchema.decode(
+        await reader.list({ runId, afterSequence }),
+        "Transcript page"
+      );
+      if (
+        transcript.runId !== runId ||
+        transcript.records.some((record) => record.sequence <= afterSequence)
+      )
+        throw new Error("Transcript reader returned a mismatched run or cursor");
+      return {
+        transcript,
+        turnRuns: history.agentTurnRuns(
+          runId,
+          transcript.records.map((record) => record.turn)
+        ),
+      };
     });
   }
 
