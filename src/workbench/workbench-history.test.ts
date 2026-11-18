@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -201,6 +202,56 @@ describe("runHistory", () => {
         else expect(emptyIo.output).toEqual([]);
       }
     }
+  });
+
+  it("matches the event projector for partial runs, repeated lifecycle events and tied starts", async () => {
+    const directory = await tempDir();
+    const sqlite = path.join(directory, "runs.sqlite");
+    const trace = path.join(directory, "runs.ndjson");
+    const events = [
+      event("pipeline.log", { timestampMs: 0, correlationId: "original" }),
+      event("pipeline.log", { runId: "no-start", timestampMs: 10 }),
+      event("pipeline.completed", { runId: "no-start", durationMs: 0 }),
+      event("pipeline.started", { timestampMs: 10, pipelineId: "second", correlationId: "later" }),
+      event("pipeline.started", { timestampMs: 20, pipelineId: "second" }),
+      event("pipeline.completed", { durationMs: 50 }),
+      event("pipeline.completed", { payload: { status: "cancelled" } }),
+      event("pipeline.log", { runId: "running", timestampMs: 11, correlationId: "" }),
+    ];
+    await seedStore(sqlite, events);
+    await writeFile(trace, events.map((entry) => JSON.stringify(entry)).join("\n"));
+    for (const filter of [[], ["--pipeline", "second"], ["--pipeline", "import"]]) {
+      const projected = captureIo(directory);
+      const listed = captureIo(directory);
+      expect(await runHistory(["--trace", trace, "--json", ...filter], projected)).toBe(0);
+      expect(await runHistory(["--store", sqlite, "--json", ...filter], listed)).toBe(0);
+      expect(listed.output).toEqual(projected.output);
+    }
+  });
+
+  it("validates summary data on listing and unrelated payloads on event inspection", async () => {
+    const directory = await tempDir();
+    const filename = path.join(directory, "runs.sqlite");
+    await seedStore(filename, [...failedRunEvents, ...secondRunEvents]);
+    const db = new DatabaseSync(filename);
+    try {
+      db.exec(`
+        DROP TRIGGER pipeline_run_events_no_update;
+        UPDATE pipeline_run_events SET payload_json = 'invalid' WHERE event_name = 'pipeline.log';
+        UPDATE pipeline_run_events SET payload_json = '{}' WHERE event_name = 'pipeline.completed' AND pipeline_id = 'publish';
+      `);
+    } finally {
+      db.close();
+    }
+
+    const list = ["--store", filename, "--pipeline", "import"];
+    expect(await runHistory(list, captureIo(directory))).toBe(0);
+    expect(await runHistory([...list, "--events"], captureIo(directory))).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
+    expect(await runHistory(["--store", filename], captureIo(directory))).toBe(
+      TUBELESS_WORKBENCH_EXIT_CODE.load
+    );
   });
 
   it("requires a pipeline selector value and documents its identity", async () => {
