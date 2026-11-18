@@ -50,6 +50,30 @@ describe("Studio state coordination", () => {
     expect(await state.workspace()).toMatchObject({ runCount: 1, eventCount: 2 });
   });
 
+  it("finishes an in-flight transcript before clearing and refuses the next poll", async () => {
+    const events = recordedRun();
+    const state = new PipelineRunStudioEventState(memoryStore(events));
+    const reader = {
+      list: vi.fn(async () => {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(events).toHaveLength(2);
+        return { runId: "run", status: "partial" as const, records: [] };
+      }),
+    };
+    const poll = state.transcript("run", 0, reader);
+    const clear = state.clear({
+      clear() {
+        events.length = 0;
+      },
+    });
+    const nextPoll = state.transcript("run", 0, reader);
+
+    expect((await poll)?.transcript.status).toBe("partial");
+    await clear;
+    expect(await nextPoll).toBeUndefined();
+    expect(reader.list).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps projection and detail cursors when storage rejects a clear", async () => {
     const events = recordedRun();
     const store = memoryStore(events);
@@ -100,6 +124,9 @@ describe("Studio state coordination", () => {
     const state = new PipelineRunStudioEventState(memoryStore(events));
     expect(await state.workspace()).toMatchObject({ runCount: 1 });
     events.length = 0;
+    const list = vi.fn();
+    expect(await state.transcript("run", 0, { list })).toBeUndefined();
+    expect(list).not.toHaveBeenCalled();
     expect(await state.workspace()).toMatchObject({ runCount: 0 });
   });
 
