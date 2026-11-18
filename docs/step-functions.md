@@ -134,3 +134,11 @@ bun run tubeless -- run --project examples/project/tubeless.project.ts step-func
 
 `make check` does not deploy or exercise IAM, CloudWatch, or Step Functions;
 verify a real execution in a development account before adopting this.
+
+## Host-owned output recovery
+
+This adapter retains the whole-attempt retry behavior described above. To reuse
+individual step outputs across attempts, add host-owned persistence, compatibility
+checks, loading, and `suppliedOutputs` explicitly. Adapt the
+[fresh-host recovery recipe](./step-output-recovery.md) and reconcile uncertain
+side effects with business idempotency keys before retrying.

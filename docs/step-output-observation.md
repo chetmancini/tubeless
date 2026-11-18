@@ -22,7 +22,8 @@ const run = await pipeline.run(options, {
 `pipeline` and `outputStore` are application-owned. The Node codec is optional;
 other runtimes supply their own lossless encoder. There is no default output
 store, encoding, retention policy, or CLI flag. Hosts can decode their saved raw
-values and supply them to a later invocation with `suppliedOutputs`.
+values and supply them to a later invocation with `suppliedOutputs`. For a full
+failure/restart example, use the [host recovery recipe](./step-output-recovery.md).
 
 ## Encode first, write after validation
 
@@ -149,5 +150,5 @@ after an effect but before recording its result. Use business idempotency keys o
 reconcile the effect before retrying. A graph fingerprint does not establish code
 compatibility; hosts deciding reuse also need explicit implementation,
 business execution, input, and codec identity. Missing implementation versions
-mean compatibility is unknown. The [design note](https://github.com/chetmancini/tubeless/blob/main/design/step-output-recovery.md)
-tracks the remaining fresh-instance recovery recipe and host integration work.
+mean compatibility is unknown. The [host recovery guide](./step-output-recovery.md)
+shows fresh-instance recovery and the crash-before-acknowledgement case.

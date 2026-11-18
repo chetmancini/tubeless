@@ -115,3 +115,11 @@ bun run tubeless -- run --project examples/project/tubeless.project.ts inngest-n
 with the real pipeline. It does not test server-side persistence or retry
 scheduling; use the local flow above for delivery, and test authentication and
 idempotency in your deployment.
+
+## Host-owned output recovery
+
+This adapter retains the whole-attempt retry behavior described above. To reuse
+individual step outputs across attempts, add host-owned persistence, compatibility
+checks, loading, and `suppliedOutputs` explicitly. Adapt the
+[fresh-host recovery recipe](./step-output-recovery.md) and reconcile uncertain
+side effects with business idempotency keys before retrying.

@@ -13,6 +13,7 @@ Guides for developers and coding agents are also on the [website](https://tubele
 | [Studio](./studio.md)                                   | Run history, project commands, and gateway hosting                 |
 | [Artifacts](./artifacts.md)                             | Typed loaders, savers, and recorded lineage                        |
 | [Step output observation](./step-output-observation.md) | Capturing and supplying raw outputs through host-owned persistence |
+| [Step output recovery](./step-output-recovery.md)       | Restoring compatible raw values across host process restarts       |
 | [YAML and JSON pipelines](./declarative-pipelines.md)   | Compiling documents with registered handlers                       |
 | [In-process agents](./agents.md)                        | Model-backed agents, tools, subagents, and durable execution       |
 | [Child pipelines](./child-pipeline-composition.md)      | Running a reusable pipeline once or per item                       |

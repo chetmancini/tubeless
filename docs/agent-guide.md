@@ -102,7 +102,8 @@ For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node
   `stepIds` when omitting upstream work. Schemas still validate, supplied values
   bypass cache/handlers and are not captured again. Check business execution,
   implementation, input, and codec identity before reuse. See
-  [output observation](./step-output-observation.md).
+  [output observation](./step-output-observation.md) and the
+  [fresh-host recovery recipe](./step-output-recovery.md).
 - Opt deterministic steps into `cache: { version: "v1" }`, or `cache: true` with a
   pipeline `implementationVersion`. Run with `{ cache: "recompute" }` or
   `{ cache: "bypass" }` (`--cache` on commands); keep it out of domain options.
@@ -140,8 +141,10 @@ For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node
 - Hosting inside an existing engine: [Airflow](./airflow.md),
   [Temporal](./temporal.md), [Inngest](./inngest.md), [Dagster](./dagster.md),
   [Step Functions](./step-functions.md). Call `runOrThrow` inside the host's unit
-  of work, pass `correlationId` for joins, and forward cancellation. Host retries
-  repeat the whole pipeline; correlation IDs give no persistence or resume.
+  of work, pass `correlationId` for joins, and forward cancellation. The bundled host examples
+  retry the whole pipeline. Add host-owned observation, compatibility checks,
+  loading, and supply to recover individual outputs; see
+  [host recovery](./step-output-recovery.md). Correlation IDs give no persistence.
 
 ## Projects and commands
 
