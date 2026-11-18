@@ -7,6 +7,16 @@ import type {
 } from "./run-store.js";
 import { createPipelineRunProjector } from "./run-store.js";
 
+export type PipelineRunSummary = Pick<
+  StoredPipelineRun,
+  "pipelineId" | "runId" | "startedAtMs" | "status" | "correlationId" | "durationMs"
+>;
+
+/** History can use an indexed summary read when the underlying event encoding supports it. */
+export interface PipelineRunHistoryReader extends PipelineRunEventReader {
+  listRunSummaries?(pipelineId?: string): Promise<readonly PipelineRunSummary[]>;
+}
+
 /**
  * Read an event source to exhaustion with bounded, ordered pages. A reader may
  * impose a smaller page cap than requested; only a page that cannot advance the

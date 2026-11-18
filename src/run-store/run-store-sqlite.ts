@@ -40,6 +40,8 @@ import {
   listSqliteAgentTranscript,
   clearSqliteAgentTranscripts,
 } from "./agent-transcript-sqlite.js";
+import type { PipelineRunHistoryReader } from "./run-store-reader.js";
+import { listSqliteRunSummaries } from "./run-summary-sqlite.js";
 import type { AgentTranscriptReader, AgentTranscriptRecord } from "../tracing/agent-transcript.js";
 
 interface SqliteDatabase extends SqliteConnection {
@@ -71,7 +73,7 @@ ${sqlScript(RUN_EVENT_TABLE_STATEMENTS)}
 ${sqlScript(RUN_EVENT_TRIGGER_STATEMENTS)}`;
 
 /** SQLite event store plus the explicit all-history maintenance operation. */
-export interface SqlitePipelineRunStore extends PipelineRunEventStore {
+export interface SqlitePipelineRunStore extends PipelineRunEventStore, PipelineRunHistoryReader {
   readonly transcripts: Pick<AgentTranscriptReader, "list">;
   /** Atomically ingest explicit content records, retaining identical duplicates once. */
   importTranscript(records: readonly AgentTranscriptRecord[]): number;
@@ -369,6 +371,9 @@ export async function openSqlitePipelineRunStore(
         return (rows as RunEventRecord[]).map(storedRunEvent);
       });
     },
+    listRunSummaries: legacyAttributes
+      ? undefined
+      : (pipelineId) => read(() => listSqliteRunSummaries(database, pipelineId)),
     transcripts: {
       list(query) {
         return read(() => listSqliteAgentTranscript(database, query));

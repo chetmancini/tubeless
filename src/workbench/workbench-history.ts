@@ -11,14 +11,18 @@ import * as path from "node:path";
 import {
   createPipelineRunProjector,
   type PipelineRunEventQuery,
-  type PipelineRunEventReader,
   type StoredPipelineRun,
 } from "../run-store/run-store.js";
 import {
   openNdjsonAgentTranscriptReader,
   readNdjsonAgentTranscriptRecords,
 } from "../run-store/agent-transcript-ndjson.js";
-import { readPipelineEventPages, readPipelineRunTree } from "../run-store/run-store-reader.js";
+import {
+  readPipelineEventPages,
+  readPipelineRunTree,
+  type PipelineRunHistoryReader,
+  type PipelineRunSummary,
+} from "../run-store/run-store-reader.js";
 import { projectAgentHistory } from "../run-store/agent-history.js";
 import { formatAgentHistory } from "./agent/history.js";
 import { readAgentTranscript, formatAgentTranscript } from "./agent/transcript.js";
@@ -40,17 +44,8 @@ function parseHistoryArgs(argv: readonly string[]) {
   return parseSubcommandArgs(argv, WORKBENCH_SPECS.history.options);
 }
 
-interface HistoryRunSummary {
-  correlationId?: string;
-  durationMs?: number;
-  pipelineId: string;
-  runId: string;
-  startedAtMs: number;
-  status: StoredPipelineRun["status"];
-}
-
-function summarizeRun(run: StoredPipelineRun): HistoryRunSummary {
-  const summary: HistoryRunSummary = {
+function summarizeRun(run: PipelineRunSummary): PipelineRunSummary {
+  const summary: PipelineRunSummary = {
     pipelineId: run.pipelineId,
     runId: run.runId,
     startedAtMs: run.startedAtMs,
@@ -61,7 +56,7 @@ function summarizeRun(run: StoredPipelineRun): HistoryRunSummary {
   return summary;
 }
 
-function formatRunList(runs: readonly StoredPipelineRun[]): string {
+function formatRunList(runs: readonly PipelineRunSummary[]): string {
   const rows = runs.map((run) => [
     terminalSafeText(run.runId),
     terminalSafeText(run.pipelineId),
@@ -100,7 +95,7 @@ type RunIdResolution = { runId: string } | { error: string };
  */
 function resolveRunIdPrefix(
   input: string,
-  runs: readonly StoredPipelineRun[],
+  runs: readonly PipelineRunSummary[],
   listCommand: string
 ): RunIdResolution {
   const matches =
@@ -298,7 +293,7 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
           }
         }
 
-        let store: PipelineRunEventReader;
+        let store: PipelineRunHistoryReader;
         try {
           if (parsed.values.trace) {
             const { openNdjsonPipelineRunStore } = await import("../run-store/run-store-ndjson.js");
@@ -334,12 +329,14 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
           for await (const page of readPipelineEventPages(store, query)) projector.append(page);
           return projector.snapshot().runs;
         };
+        const listRuns = () =>
+          store.listRunSummaries?.(scope.pipelineId) ?? projectRuns(scope, false);
         const projectRun = async (id: string): Promise<StoredPipelineRun | undefined> =>
           (await projectRuns({ ...scope, runId: id }, true)).find((run) => run.runId === id);
         const resolveRunId = async (input: string): Promise<string | undefined> => {
           const resolution = resolveRunIdPrefix(
             input,
-            await projectRuns(scope, false),
+            await listRuns(),
             historyListCommand(parsed.values)
           );
           if ("runId" in resolution) return resolution.runId;
@@ -394,7 +391,7 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
             return TUBELESS_WORKBENCH_EXIT_CODE.success;
           }
 
-          const runs = await projectRuns(scope, false);
+          const runs = await listRuns();
           if (parsed.values.json) {
             await writeCliChunk(
               commandIo.stdout,

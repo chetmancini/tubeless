@@ -71,6 +71,9 @@ describe("tubeless upgrade", () => {
     const directory = await mkdtemp(path.join(tmpdir(), "tubeless-upgrade-yes-"));
     directories.push(directory);
     const filename = legacyStore(directory);
+    const listArgs = ["history", "--store", filename, "--json"];
+    const before = captureIo(directory);
+    expect(await runWorkbenchCli(listArgs, before)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
     const io = captureIo(directory);
 
     expect(await runWorkbenchCli(["upgrade", "--yes", "--store", filename], io)).toBe(
@@ -85,6 +88,10 @@ describe("tubeless upgrade", () => {
     } finally {
       await reader.close();
     }
+
+    const after = captureIo(directory);
+    expect(await runWorkbenchCli(listArgs, after)).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(after.output).toEqual(before.output);
 
     const again = captureIo(directory);
     expect(await runWorkbenchCli(["upgrade", "--yes", "--store", filename], again)).toBe(
