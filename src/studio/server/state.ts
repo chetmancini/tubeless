@@ -62,12 +62,14 @@ export class PipelineRunStudioEventState {
     this.#revision += 1;
   }
 
-  async #appendNewEvents(): Promise<void> {
-    if (this.#oldestEventId !== undefined) {
-      const [oldest] = await this.store.listEvents({ limit: 1 });
-      // Stores delete only by clearing everything; a different oldest event means another process cleared history.
-      if (oldest?.id !== this.#oldestEventId) this.#reset();
-    }
+  async #checkForClear(): Promise<void> {
+    if (this.#oldestEventId === undefined) return;
+    const [oldest] = await this.store.listEvents({ limit: 1 });
+    // Stores delete only by clearing everything; a different oldest event means another process cleared history.
+    if (oldest?.id !== this.#oldestEventId) this.#reset();
+  }
+
+  async #readEventTail(): Promise<void> {
     for await (const page of readPipelineEventPages(this.store, {
       afterId: this.#lastEventId,
       limit: 100_000,
@@ -77,6 +79,11 @@ export class PipelineRunStudioEventState {
       this.#lastEventId = page.at(-1)!.id;
       this.#revision += 1;
     }
+  }
+
+  async #appendNewEvents(): Promise<void> {
+    await this.#checkForClear();
+    await this.#readEventTail();
   }
 
   #indexedHistory(): StudioHistory {
@@ -125,9 +132,12 @@ export class PipelineRunStudioEventState {
     reader: Pick<AgentTranscriptReader, "list">
   ): Promise<Pick<StudioTranscriptPage, "transcript" | "turnRuns"> | undefined> {
     return this.#serialize(async () => {
-      await this.#appendNewEvents();
-      const history = this.#indexedHistory();
-      if (!history.hasRun(runId)) return undefined;
+      // A known run remains in the append-only store until history is cleared.
+      await this.#checkForClear();
+      if (!this.#history?.hasRun(runId)) {
+        await this.#readEventTail();
+        if (!this.#indexedHistory().hasRun(runId)) return undefined;
+      }
       const transcript = agentTranscriptPageSchema.decode(
         await reader.list({ runId, afterSequence }),
         "Transcript page"
@@ -137,9 +147,11 @@ export class PipelineRunStudioEventState {
         transcript.records.some((record) => record.sequence <= afterSequence)
       )
         throw new Error("Transcript reader returned a mismatched run or cursor");
+      // An external writer can commit a new turn before its transcript record is read.
+      await this.#readEventTail();
       return {
         transcript,
-        turnRuns: history.agentTurnRuns(
+        turnRuns: this.#indexedHistory().agentTurnRuns(
           runId,
           transcript.records.map((record) => record.turn)
         ),

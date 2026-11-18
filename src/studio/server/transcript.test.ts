@@ -26,6 +26,36 @@ function apiFixture() {
   return { api, get, list, listEvents, clear };
 }
 
+function turnEvents(index: number, turn: number, parentRunId = "run") {
+  const identity = {
+    pipelineId: "turn",
+    runId: `${parentRunId}-turn-${turn}`,
+    parentRunId,
+    timestampMs: index + 3,
+    version: 3,
+    iteration: {
+      runId: parentRunId,
+      stepId: "agent",
+      attemptId: "attempt",
+      index: index + 1,
+    },
+  };
+  return [
+    storedEvent({ ...identity, id: index * 2 + 3, name: "pipeline.started" }),
+    storedEvent({
+      ...identity,
+      id: index * 2 + 4,
+      name: "step.attempted",
+      stepId: "decide",
+      attemptId: "decide-attempt",
+      payload: {
+        attempt: 1,
+        attributes: { "agent.runId": parentRunId, "agent.turn": turn },
+      },
+    }),
+  ];
+}
+
 describe("Studio transcript routes", () => {
   it("exposes availability without copying transcript content into run detail", async () => {
     const { get, list } = apiFixture();
@@ -132,33 +162,7 @@ describe("Studio transcript routes", () => {
           ...Array.from({ length: 21 }, (_, index) => {
             const parentRunId = index === 20 ? "other-run" : "run";
             const turn = index === 20 ? 17 : index + (resumed ? 2 : 1);
-            const identity = {
-              pipelineId: "turn",
-              runId: index === 20 ? "other-turn" : `turn-${turn}`,
-              parentRunId,
-              timestampMs: index + 3,
-              version: 3,
-              iteration: {
-                runId: parentRunId,
-                stepId: "agent",
-                attemptId: "attempt",
-                index: index + 1,
-              },
-            };
-            return [
-              storedEvent({ ...identity, id: index * 2 + 3, name: "pipeline.started" }),
-              storedEvent({
-                ...identity,
-                id: index * 2 + 4,
-                name: "step.attempted",
-                stepId: "decide",
-                attemptId: "decide-attempt",
-                payload: {
-                  attempt: 1,
-                  attributes: { "agent.runId": parentRunId, "agent.turn": turn },
-                },
-              }),
-            ];
+            return turnEvents(index, turn, parentRunId);
           }).flat(),
         ]),
         transcripts: { list: async () => ({ ...page, records }) },
@@ -167,17 +171,43 @@ describe("Studio transcript routes", () => {
         api(new Request("http://studio.local" + path), new URL("http://studio.local" + path));
       const detail = await (await get("/api/runs/run")).json();
       expect(detail.children).toHaveLength(16);
-      expect(detail.children.some((child: { runId: string }) => child.runId === "turn-20")).toBe(
-        false
-      );
+      expect(
+        detail.children.some((child: { runId: string }) => child.runId === "run-turn-20")
+      ).toBe(false);
       const response = await get("/api/runs/run/transcript");
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         transcript: { ...page, records },
         live: false,
         sourceId: expect.any(String),
-        turnRuns: { 17: "turn-17", 20: "turn-20" },
+        turnRuns: { 17: "run-turn-17", 20: "run-turn-20" },
       });
+    }
+  );
+
+  it.each([false, true])(
+    "links turns committed during the transcript read (workspace loaded=%s)",
+    async (warm) => {
+      const events = [...recordedRun(), ...turnEvents(0, 1)];
+      const records = [
+        ...[1, 2, 3].map((turn) => ({ ...transcriptRecord(turn, undefined, "run"), turn })),
+        transcriptRecord(4, { kind: "end", status: "completed" }, "run"),
+      ];
+      const list = vi.fn(async () => {
+        // A separate writer commits turn 2 before its transcript record becomes visible.
+        events.push(...turnEvents(1, 2));
+        return { ...page, records };
+      });
+      const api = createStudioApiHandler({
+        store: { ...memoryStore(events), transcripts: { list } },
+      });
+      const get = (path: string) =>
+        api(new Request("http://studio.local" + path), new URL("http://studio.local" + path));
+      if (warm) await get("/api/snapshot");
+      const response = await (await get("/api/runs/run/transcript")).json();
+      expect(response.transcript.records).toEqual(records);
+      expect(response.turnRuns).toEqual({ 1: "run-turn-1", 2: "run-turn-2" });
+      expect(list).toHaveBeenCalledTimes(1);
     }
   );
 

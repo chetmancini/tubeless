@@ -124,6 +124,9 @@ describe("Studio state coordination", () => {
     const state = new PipelineRunStudioEventState(memoryStore(events));
     expect(await state.workspace()).toMatchObject({ runCount: 1 });
     events.length = 0;
+    const list = vi.fn();
+    expect(await state.transcript("run", 0, { list })).toBeUndefined();
+    expect(list).not.toHaveBeenCalled();
     expect(await state.workspace()).toMatchObject({ runCount: 0 });
   });
 
