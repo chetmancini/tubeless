@@ -439,6 +439,10 @@ it.each(["completed", "failed", "cancelled"])("renders %s with cache provenance"
   const markup = renderToString(<Status value={status} outputSource="cache" />);
   expect(markup).toContain("(cached)");
 });
+it.each(["completed", "failed", "cancelled"])("renders %s with supplied provenance", (status) => {
+  const markup = renderToString(<Status value={status} outputSource="supplied" />);
+  expect(markup).toContain("(supplied)");
+});
 
 it("distinguishes cached outputs from application artifacts and offers filters", () => {
   const markup = renderToString(

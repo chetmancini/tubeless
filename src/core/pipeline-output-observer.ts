@@ -6,17 +6,6 @@ import type {
   PipelineStepOutputRecord,
 } from "./pipeline-types.js";
 
-export function isStepOutputObserver(value: unknown): value is PipelineStepOutputObserver {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "encode" in value &&
-    typeof value.encode === "function" &&
-    "write" in value &&
-    typeof value.write === "function"
-  );
-}
-
 export interface RunOutputObservation extends PipelineStepOutputContext {
   readonly observer: PipelineStepOutputObserver;
   readonly pipelineId: string;

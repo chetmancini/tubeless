@@ -49,7 +49,7 @@ export default defineProject(
     definePipelineCommand(MetadataPipeline, { params: {} }),
     // Plain cached results and their receipts appear in history and Studio.
     CachedCountCommand,
-    // For host-owned output capture, call runOutputObservationExample in ../step-output-observation.ts.
+    // For host-owned output capture and supply, call runOutputObservationExample in ../step-output-observation.ts.
     // This CLI registration runs the pipeline without attaching an output store.
     definePipelineCommand(OutputObservationPipeline, {
       params: { text: { type: "string", required: true } },

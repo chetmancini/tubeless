@@ -77,6 +77,8 @@ Links work only with the same Studio mount and run store.
 
 Some recordings carry annotations:
 
+- Host-supplied outputs appear as `(supplied)`; their values are not stored in
+  history or accepted by launch forms. See [output recovery](./step-output-observation.md).
 - Test-runtime overrides appear as `completed (overridden)` and similar; supplied
   values are not recorded, and launch forms accept no overrides
   ([testing overrides](./concepts.md#supplying-step-outputs)).

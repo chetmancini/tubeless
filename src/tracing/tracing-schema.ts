@@ -25,6 +25,7 @@ import {
   PIPELINE_TRACE_LIST_LIMIT,
   PIPELINE_TRACE_STRING_LIMIT,
   PIPELINE_TRACE_VERSION,
+  PIPELINE_STEP_OUTPUT_SOURCES,
   STEP_CACHE_POLICIES,
 } from "./tracing-constants.js";
 
@@ -284,8 +285,11 @@ const pipelineTraceErrorRefSchema = wireRefine(pipelineTraceErrorSchema, () => u
   $ref: "#/components/schemas/PipelineError",
 });
 
+export const stepOutputSourceSchema = wireEnum(PIPELINE_STEP_OUTPUT_SOURCES);
+const optionalOutputSourceSchema = wireOptional(stepOutputSourceSchema);
+
 const progressDetailSchema = wireObject({
-  outputSource: wireOptional(wireEnum(["override", "cache"])),
+  outputSource: optionalOutputSourceSchema,
   completed: wireOptional(finiteNumber),
   depth: wireOptional(finiteNumber),
   id: wireString({ allowEmpty: true, maxLength: PIPELINE_TRACE_STRING_LIMIT }),
@@ -658,7 +662,7 @@ const pipelineTraceEventSchemas = {
     name: wireLiteral("step.cancelled"),
     payload: wireObject({
       status: wireLiteral("cancelled"),
-      outputSource: wireOptional(wireEnum(["override", "cache"])),
+      outputSource: optionalOutputSourceSchema,
     }),
   }),
   "step.complete": wireObject({
@@ -668,7 +672,7 @@ const pipelineTraceEventSchemas = {
     name: wireLiteral("step.complete"),
     payload: wireObject({
       status: wireLiteral("completed"),
-      outputSource: wireOptional(wireEnum(["override", "cache"])),
+      outputSource: optionalOutputSourceSchema,
     }),
   }),
   "step.failed": wireObject({
@@ -679,7 +683,7 @@ const pipelineTraceEventSchemas = {
     name: wireLiteral("step.failed"),
     payload: wireObject({
       status: wireLiteral("failed"),
-      outputSource: wireOptional(wireEnum(["override", "cache"])),
+      outputSource: optionalOutputSourceSchema,
     }),
   }),
   "step.planned": wireObject({
@@ -710,7 +714,7 @@ const pipelineTraceEventSchemas = {
     name: wireLiteral("step.running"),
     payload: wireObject({
       progress: wireOptional(progressSchema),
-      outputSource: wireOptional(wireEnum(["override", "cache"])),
+      outputSource: optionalOutputSourceSchema,
     }),
   }),
   "step.skipped": wireObject({
@@ -723,7 +727,7 @@ const pipelineTraceEventSchemas = {
       message: wireOptional(openString),
       reason: wireEnum(PIPELINE_STEP_SKIP_REASONS),
       status: wireLiteral("skipped"),
-      outputSource: wireOptional(wireEnum(["override", "cache"])),
+      outputSource: optionalOutputSourceSchema,
     }),
   }),
 } as const satisfies Readonly<Record<string, WireSchema<unknown>>>;

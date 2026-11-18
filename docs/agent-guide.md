@@ -97,12 +97,16 @@ For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node
 - Capture raw outputs with a run's `outputObserver: { encode, write }` when the
   host needs the values. Encode losslessly before schema transformation; write
   acknowledges persistence before dependents start. Dry runs bypass it and child
-  runs do not inherit it. Production output supply is not implemented yet. See
+  runs do not inherit it. Supply compatible decoded raw values with
+  `suppliedOutputs: ReadonlyMap<StepId, unknown>`; include those steps in exact
+  `stepIds` when omitting upstream work. Schemas still validate, supplied values
+  bypass cache/handlers and are not captured again. Check business execution,
+  implementation, input, and codec identity before reuse. See
   [output observation](./step-output-observation.md).
 - Opt deterministic steps into `cache: { version: "v1" }`, or `cache: true` with a
   pipeline `implementationVersion`. Run with `{ cache: "recompute" }` or
   `{ cache: "bypass" }` (`--cache` on commands); keep it out of domain options.
-  Dry runs, skips, and test overrides bypass the cache. The default codec rejects
+  Dry runs, skips, supplied outputs, and test overrides bypass the cache. The default codec rejects
   lossy round trips such as class instances. See [cache contracts](./step-output-cache.md)
   and [the cache recipe](../examples/step-output-cache.ts).
 - Record I/O with `context.recordArtifact({ operation, artifact })` or the

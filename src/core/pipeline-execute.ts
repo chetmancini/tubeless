@@ -240,13 +240,20 @@ export async function executePlannedRun<
     const plannedStep = plannedStepFor(step);
     if (cancelBeforeStepStart(step)) return;
 
-    if (plannedStep.selected && input.overrides?.has(step)) {
-      const attempt = state.beginAttempt(plannedStep, runtime.now(), "override");
+    const outputSource = controls.suppliedOutputs?.has(step.id)
+      ? "supplied"
+      : input.overrides?.has(step)
+        ? "override"
+        : undefined;
+    if (plannedStep.selected && outputSource) {
+      const attempt = state.beginAttempt(plannedStep, runtime.now(), outputSource);
       try {
         const output = await validateStepOutput(
           step,
-          input.overrides.get(step),
-          `Pipeline ${compiled.id} step ${step.id} override output`
+          outputSource === "supplied"
+            ? controls.suppliedOutputs!.get(step.id)
+            : input.overrides!.get(step),
+          `Pipeline ${compiled.id} step ${step.id} ${outputSource} output`
         );
         throwIfAborted(runtime);
         state.completeStep(plannedStep, attempt, output);

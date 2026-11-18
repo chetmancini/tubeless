@@ -1,9 +1,9 @@
 # Host-owned step output recovery
 
-Proposed contract for [#287](https://github.com/chetmancini/tubeless/issues/287).
-Slices 1 and 2 establish the design, [compile-only probes](./step-output-recovery.probes.ts),
-and [public output observation](../docs/step-output-observation.md). The supply
-controls and `supplied` provenance below remain proposed for slice 3. Current
+Contract for [#287](https://github.com/chetmancini/tubeless/issues/287).
+Slices 1 through 3 implement the design, [compile-only probes](./step-output-recovery.probes.ts),
+and [public output observation and supply](../docs/step-output-observation.md).
+The fresh-instance recovery recipe remains for slice 4. Current
 host guides retain whole-attempt retries until their recovery examples change.
 
 ## Outcome and boundary
@@ -41,9 +41,9 @@ Verified against `0564346`:
   graph structure from the explicit implementation version. Neither it nor a
   trace run ID identifies the host's business execution or input.
 
-## Proposed run controls
+## Run controls
 
-Add two invocation-local fields to the controls accepted by `run` and
+Two invocation-local fields are accepted by `run` and
 `runOrThrow`:
 
 - `suppliedOutputs?: ReadonlyMap<TStepId, unknown>` supplies resolved raw values
@@ -55,7 +55,7 @@ Add two invocation-local fields to the controls accepted by `run` and
   `write` callbacks. Encoding receives an unknown raw value; writing receives
   detached bytes plus pipeline, step, run, optional attempt, definition identity,
   and origin metadata. Both callbacks can be asynchronous and receive the run's
-  cancellation signal. The probes specify the proposed structural types.
+  cancellation signal. The probes check the public structural types.
 
 The observer has no concrete store or codec default. A host can implement its
 encoding with an existing codec, including `StepCacheCodec`, without sharing

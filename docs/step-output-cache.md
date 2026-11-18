@@ -90,15 +90,16 @@ string or a callback receiving its inputs and context.
 Selection and required-dependency checks come first: a hit cannot satisfy an
 unselected or blocked step.
 
-| Boundary                  | Behavior                                                    |
-| ------------------------- | ----------------------------------------------------------- |
-| Planning                  | No key, codec, store, or handler calls                      |
-| Dry run                   | Bypasses all caching, including reads                       |
-| Policy skip               | Evaluated before cache access; the skip value is not cached |
-| Test override             | Bypasses cache, skip predicate, and handler                 |
-| Remote and child wrappers | No cache option; ordinary steps inside children can opt in  |
-| Artifact loaders/savers   | Cache configuration rejected by types and at runtime        |
-| Declarative documents     | No cache authoring form                                     |
+| Boundary                  | Behavior                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| Planning                  | No key, codec, store, or handler calls                                                |
+| Dry run                   | Bypasses all caching, including reads                                                 |
+| Policy skip               | Evaluated before cache access; the skip value is not cached                           |
+| Supplied output           | Bypasses cache, skip predicate, and handler; [contract](./step-output-observation.md) |
+| Test override             | Bypasses cache, skip predicate, and handler                                           |
+| Remote and child wrappers | No cache option; ordinary steps inside children can opt in                            |
+| Artifact loaders/savers   | Cache configuration rejected by types and at runtime                                  |
+| Declarative documents     | No cache authoring form                                                               |
 
 - On a miss, the **raw handler result** is encoded and persisted before
   `outputSchema` transforms it; the validated value is published after a

@@ -32,7 +32,7 @@ export const OutputObservationPipeline = definePipeline({
 
 /** This host keeps encoded raw values in memory; replace write with owned persistence. */
 export async function runOutputObservationExample() {
-  const records: PipelineStepOutputRecord[] = [];
+  const records: PipelineStepOutputRecord<"count">[] = [];
   const run = await OutputObservationPipeline.run(
     { text: "hello" },
     {
@@ -48,5 +48,11 @@ export async function runOutputObservationExample() {
   const rawOutputs = await Promise.all(
     records.map(({ encodedValue }) => v8StepCacheCodec.decode(encodedValue))
   );
-  return { run, records, rawOutputs };
+  // These records belong to this same execution, implementation, input, and codec.
+  // A persistent host must check those identities before deciding to reuse records.
+  const suppliedOutputs = new Map(
+    records.map((record, index) => [record.stepId, rawOutputs[index]])
+  );
+  const restoredRun = await OutputObservationPipeline.run({ text: "hello" }, { suppliedOutputs });
+  return { run, records, rawOutputs, restoredRun };
 }

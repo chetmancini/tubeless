@@ -1145,7 +1145,7 @@ describe("createPipelineReporter", () => {
   });
 });
 
-it.each(["override", "cache"] as const)(
+it.each(["override", "cache", "supplied"] as const)(
   "retains %s provenance in the final interactive frame",
   async (source) => {
     const output = captureOutput();
@@ -1175,10 +1175,14 @@ it.each(["override", "cache"] as const)(
       await test.run(
         definePipeline({ id: "interactive-override", steps: [load] }),
         {},
-        source === "override" ? { overrides: [overrideStep(load, 2)] } : {}
+        source === "override"
+          ? { overrides: [overrideStep(load, 2)] }
+          : source === "supplied"
+            ? { suppliedOutputs: new Map([["load", 2]]) }
+            : {}
       );
       expect(output.chunks.join("")).toContain(
-        `ok load (${source === "override" ? "overridden" : "cached"})`
+        `ok load (${source === "override" ? "overridden" : source === "cache" ? "cached" : "supplied"})`
       );
     } finally {
       reporter.dispose();
