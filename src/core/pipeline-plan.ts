@@ -54,33 +54,27 @@ export function stepToPlanStep<TOptions extends object>(
   return planStep;
 }
 
-function addSelectionReason(
-  reasonsByStepId: Map<string, PipelineStepSelectionReason[]>,
-  stepId: string,
-  reason: PipelineStepSelectionReason
-): void {
-  const reasons = reasonsByStepId.get(stepId) ?? [];
-  const reasonKey = JSON.stringify(reason);
-  if (!reasons.some((candidate) => JSON.stringify(candidate) === reasonKey)) {
-    reasons.push(reason);
-    reasonsByStepId.set(stepId, reasons);
-  }
-}
-
 function targetSelectionReasons<TOptions extends object>(
   targets: readonly CompiledStep<TOptions>[]
 ): Map<string, PipelineStepSelectionReason[]> {
   const reasonsByStepId = new Map<string, PipelineStepSelectionReason[]>();
 
+  // Each target expands a step once. Validation rejects repeated IDs within each dependency list.
+  function addReason(stepId: string, reason: PipelineStepSelectionReason): void {
+    const reasons = reasonsByStepId.get(stepId);
+    if (reasons) reasons.push(reason);
+    else reasonsByStepId.set(stepId, [reason]);
+  }
+
   for (const target of targets) {
-    addSelectionReason(reasonsByStepId, target.id, { kind: "target", targetId: target.id });
+    addReason(target.id, { kind: "target", targetId: target.id });
     const expanded = new Set<CompiledStep<TOptions>>();
     const includePrerequisites = (step: CompiledStep<TOptions>): void => {
       if (expanded.has(step)) return;
       expanded.add(step);
 
       for (const dependency of step.dependsOn) {
-        addSelectionReason(reasonsByStepId, dependency.id, {
+        addReason(dependency.id, {
           dependentId: step.id,
           kind: "required-dependency",
           targetId: target.id,
@@ -88,7 +82,7 @@ function targetSelectionReasons<TOptions extends object>(
         includePrerequisites(dependency);
       }
       for (const dependency of step.skipAfterFailureOf) {
-        addSelectionReason(reasonsByStepId, dependency.id, {
+        addReason(dependency.id, {
           dependentId: step.id,
           kind: "failure-gate",
           targetId: target.id,
@@ -96,7 +90,7 @@ function targetSelectionReasons<TOptions extends object>(
         includePrerequisites(dependency);
       }
       for (const dependency of step.optionalDependsOn) {
-        addSelectionReason(reasonsByStepId, dependency.id, {
+        addReason(dependency.id, {
           dependentId: step.id,
           kind: "optional-only",
           targetId: target.id,
