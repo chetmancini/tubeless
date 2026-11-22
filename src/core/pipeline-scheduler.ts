@@ -14,13 +14,13 @@ export async function schedulePipelineSteps<TStep extends AnyStep>(input: {
   const { orderedSteps, executeOneStep, maxConcurrency, shouldStop } = input;
   const indexByStep = new Map<AnyStep, number>(orderedSteps.map((step, index) => [step, index]));
   let nextReadyIndex = 0;
-  const pending = new Set(orderedSteps);
   const ready = new Set<TStep>();
   const running = new Map<TStep, Promise<void>>();
-  const terminal = new Set<AnyStep>();
-  const prerequisites = new Map(orderedSteps.map((step) => [step, stepEdges(step)]));
+  const remainingPrerequisites = new Map<TStep, number>();
   const dependents = new Map<AnyStep, TStep[]>();
-  for (const [step, edges] of prerequisites) {
+  for (const step of orderedSteps) {
+    const edges = stepEdges(step);
+    remainingPrerequisites.set(step, edges.length);
     if (edges.length === 0) ready.add(step);
     for (const prerequisite of edges) {
       const children = dependents.get(prerequisite) ?? [];
@@ -31,9 +31,10 @@ export async function schedulePipelineSteps<TStep extends AnyStep>(input: {
 
   const settleStep = (step: TStep): void => {
     running.delete(step);
-    terminal.add(step);
     for (const dependent of dependents.get(step) ?? []) {
-      if (prerequisites.get(dependent)!.every((edge) => terminal.has(edge))) {
+      const remaining = remainingPrerequisites.get(dependent)! - 1;
+      remainingPrerequisites.set(dependent, remaining);
+      if (remaining === 0) {
         ready.add(dependent);
         nextReadyIndex = Math.min(nextReadyIndex, indexByStep.get(dependent)!);
       }
@@ -47,7 +48,7 @@ export async function schedulePipelineSteps<TStep extends AnyStep>(input: {
       while (ready.size > 0 && running.size < maxConcurrency && !shouldStop()) {
         const step = orderedSteps[nextReadyIndex++];
         if (!ready.delete(step)) continue;
-        pending.delete(step);
+        remainingPrerequisites.delete(step);
         const task = executeOneStep(step).then(() => settleStep(step));
         running.set(step, task);
       }
@@ -58,5 +59,5 @@ export async function schedulePipelineSteps<TStep extends AnyStep>(input: {
     // Even unexpected execution errors must not let in-flight work escape the run.
     await Promise.allSettled(running.values());
   }
-  return [...pending];
+  return [...remainingPrerequisites.keys()];
 }

@@ -268,7 +268,7 @@ describe("parallel DAG scheduling", () => {
     const child = step("child", {
       dependsOn: [required],
       optionalDependsOn: [optional],
-      skipAfterFailureOf: [gate],
+      skipAfterFailureOf: [required, gate],
       run: consume,
     });
     const pipeline = definePipeline({ id: "all-edges", steps: [child, required, optional, gate] });
