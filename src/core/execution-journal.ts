@@ -137,6 +137,11 @@ export async function bindJournalInput(
   const current = scope(context);
   if (!current) return;
   await withExecutionJournal(context, async () => {
+    if ((controls.suppliedOutputs?.size ?? 0) > 0)
+      throw journalError(
+        "TUBELESS_JOURNAL_SUPPLIED_OUTPUTS_UNSUPPORTED",
+        "Supplied outputs cannot bypass an active execution journal; use one recovery authority"
+      );
     if (
       typeof definition.implementationVersion !== "string" ||
       !definition.implementationVersion.trim()

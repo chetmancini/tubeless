@@ -183,11 +183,19 @@ Use `PipelineError.sourceCode` to distinguish host codes and journal diagnostics
 `TUBELESS_EXECUTION_JOURNAL_FAILED`. Original exceptions remain in the cause chain;
 these errors never fall back to executing the handler.
 
+An active journal rejects nonempty `suppliedOutputs` before journal adapter
+operations or step dispatch, with `TUBELESS_JOURNAL_SUPPLIED_OUTPUTS_UNSUPPORTED`.
+Choose one recovery authority so external supplies cannot bypass journal checks
+or native agent recovery. Empty supplies are allowed. An `outputObserver` may
+capture raw outputs alongside a journal: its write completes before journal
+completion, and journal-restored values do not invoke the observer again.
+
 Planning, invalid plans, test overrides and dry-run execution make no journal or
 agent-store calls, including identity allocation or compatibility binding. Remove
 the capability from preview contexts, including child-only dry runs. Existing
 `context.checkpoint` propagation and dry-run copies remain separate. That
 completed-item store, step caches and test overrides are not execution recovery.
+Dry runs can use supplied outputs without activating the journal or observer.
 
 ## Verification and Cloud migration
 

@@ -19,7 +19,7 @@ Guides for developers and coding agents are also on the [website](https://tubele
 | [Child pipelines](./child-pipeline-composition.md)      | Running a reusable pipeline once or per item                       |
 | [Remote steps](./remote-step-composition.md)            | Calling remote services and worker threads                         |
 | [Deploy to Cloudflare](./deploy-cloudflare.md)          | Hosting Studio and pipelines behind Access                         |
-| [Execution journals](./execution-journal.md) | Recovering acknowledged work with host-owned storage and fencing |
+| [Execution journals](./execution-journal.md)            | Recovering acknowledged work with host-owned storage and fencing   |
 | [Comparison](./comparison.md)                           | How Tubeless fits next to other job runners                        |
 
 To host pipelines in an existing engine, see [Airflow](./airflow.md),

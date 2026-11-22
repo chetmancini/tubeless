@@ -152,6 +152,7 @@ Optional capabilities:
   outer journal inside agent work. This is separate from item checkpoints and
   caches. Read the package's `docs/execution-journal.md` and adapt
   `examples/host-embedding.ts`.
+  Do not combine a live journal with nonempty `suppliedOutputs`.
 - Artifacts: `context.recordArtifact`, `loadArtifact`, `saveArtifact`
   (`docs/artifacts.md`). Graph metadata (`docs/graph-metadata.md`). Node helpers
   from `tubeless/node` (`definePaths`, `writeJson`, `resetDir`; mark writes

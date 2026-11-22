@@ -156,6 +156,7 @@ For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node
   Native agents inherit their own journal or use explicit durability before the
   host's `agentStore`; the outer journal is suppressed inside agent work.
   Adapt [host embedding](../examples/host-embedding.ts).
+  Do not combine a live journal with nonempty `suppliedOutputs`.
 
 ## Projects and commands
 
