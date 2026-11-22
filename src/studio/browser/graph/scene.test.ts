@@ -47,6 +47,23 @@ const options = () => ({
 });
 
 describe("graph scenes", () => {
+  it("routes only the edge crossing the middle step through a side lane", () => {
+    const root = run({
+      steps: [
+        step("source", "completed"),
+        step("middle", "completed", { dependencies: ["source"] }),
+        step("target", "completed", { dependencies: ["source", "middle"] }),
+      ],
+    });
+    const { scene } = buildGraphScene({ run: root }, options());
+
+    // Side lanes have a vertical SVG segment between the entry and exit curves.
+    expect(scene.edges.filter((edge) => edge.path.includes("V"))).toMatchObject([
+      { from: "source", to: "target" },
+    ]);
+    expect(scene.edges).toHaveLength(3);
+  });
+
   it("builds nested geometry and inspection indexes without mutating the previous expansion state", () => {
     const [root, child] = details(nestedRuns());
     const inputs = options();

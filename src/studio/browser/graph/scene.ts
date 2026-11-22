@@ -369,10 +369,13 @@ function buildRunScene(
       const ty = target.y + CENTER_Y - RADIUS - 3;
       const first = layerOf.get(from)! + 1;
       const last = layerOf.get(target.step.id)!;
-      const between = steps.filter((scene) => {
-        const layer = layerOf.get(scene.step.id)!;
-        return layer >= first && layer < last;
-      });
+      const between =
+        first < last
+          ? steps.filter((scene) => {
+              const layer = layerOf.get(scene.step.id)!;
+              return layer >= first && layer < last;
+            })
+          : [];
       const blocked = between.some(
         (scene) =>
           scene.x < Math.max(sx, tx) + COLUMN_GAP &&
