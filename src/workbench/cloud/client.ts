@@ -1,3 +1,4 @@
+import { isJsonObject } from "../../utilities/canonical-json.js";
 import { normalizeCloudHost } from "./config.js";
 import {
   CloudClientError,
@@ -5,7 +6,6 @@ import {
   CLOUD_INPUT_MAX_DEPTH,
   CLOUD_INPUT_MAX_BYTES,
   isCloudJsonValue,
-  isCloudObject,
   isCloudToken,
   isCloudIdempotencyKey,
   parseCliError,
@@ -70,7 +70,7 @@ function abortFailure(timedOut: boolean): CloudClientError {
 }
 
 function validateRunInput(input: unknown): void {
-  if (!isCloudObject(input))
+  if (!isJsonObject(input))
     throw new CloudClientError("Cloud run input must be a JSON object.", "invalid_request");
   if (!isCloudJsonValue(input))
     throw new CloudClientError(
@@ -286,8 +286,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       request(
         "/api/v1/auth/logout",
         (value) => {
-          if (!isCloudObject(value) || value.ok !== true)
-            throw new Error("Invalid logout response");
+          if (!isJsonObject(value) || value.ok !== true) throw new Error("Invalid logout response");
         },
         { body: {} }
       ),

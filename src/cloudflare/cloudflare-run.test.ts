@@ -38,7 +38,7 @@ describe("run object", () => {
     ]);
     expect(await storage.get("job")).toBeUndefined();
   });
-  it("executes a job once and clears its storage", async () => {
+  it("executes once, scrubs job inputs, and rejects late duplicate delivery", async () => {
     const storage = createFakeDurableStorage();
     const { studio, batches, failures } = ingest();
     const core = new RunObjectCore({ storage, commands, ingest: () => studio, now: () => 1_000 });
@@ -50,6 +50,9 @@ describe("run object", () => {
     expect(names).toContain("pipeline.completed");
     expect(batches.map((batch) => batch.sequence)).toEqual([...batches.keys()]);
     expect(failures).toEqual([]);
+    expect(await storage.get("job")).toBeUndefined();
+    const recreated = new RunObjectCore({ storage, commands, ingest: () => studio });
+    await recreated.start(job({ name: "duplicate" }));
     expect(await storage.get("job")).toBeUndefined();
     expect(storage.alarmAtMs()).toBeUndefined();
   });
@@ -241,7 +244,7 @@ describe("run lifecycle", () => {
     const { studio } = ingest();
     const broken = {
       ...storage,
-      deleteAll: async () => {
+      delete: async () => {
         throw new Error("storage down");
       },
     };

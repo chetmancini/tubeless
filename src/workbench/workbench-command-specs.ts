@@ -430,6 +430,41 @@ Set up and load pipelines in the Cloud dashboard.
       },
     },
   },
+  remote: {
+    name: "remote",
+    description: "Run and follow pipelines on a self-hosted Cloudflare deployment",
+    usage: `Usage: tubeless remote <run|status|cancel> <command-id|execution-id> --host <origin> [options]
+
+Submit a registered command and follow its execution, inspect an existing execution,
+or request cancellation. Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET for Access.
+`,
+    subcommands: ["run", "status", "cancel"],
+    options: {
+      host: {
+        type: "string",
+        description: "Self-hosted Worker origin",
+        valueName: "origin",
+        completion: "text",
+      },
+      json: { type: "boolean", description: "Emit one JSON receipt or status object" },
+      "input-file": {
+        type: "string",
+        description: "Read command parameter JSON from a file, or - for stdin",
+        valueName: "path|-",
+        completion: "file",
+        commands: ["run"],
+      },
+      "idempotency-key": {
+        type: "string",
+        description: "Reuse the key from an uncertain admission",
+        valueName: "key",
+        completion: "text",
+        commands: ["run"],
+      },
+      detach: { type: "boolean", description: "Return after durable admission", commands: ["run"] },
+      follow: { type: "boolean", description: "Wait for a terminal status", commands: ["status"] },
+    },
+  },
   ui: {
     name: "ui",
     description: "Open the optional local run studio",

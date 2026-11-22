@@ -29,6 +29,7 @@ const WORKBENCH_HANDLERS = {
   init: async (argv, io) => (await import("./workbench-init.js")).runInit(argv, io),
   auth: async (argv, io) => (await import("./cloud/auth.js")).runAuth(argv, io),
   cloud: async (argv, io) => (await import("./cloud/command.js")).runCloud(argv, io),
+  remote: async (argv, io) => (await import("./workbench-remote.js")).runRemote(argv, io),
   ui: runUi,
   completion: runCompletion,
 } satisfies Record<keyof typeof WORKBENCH_SPECS, WorkbenchCommandHandler>;

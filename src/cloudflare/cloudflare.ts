@@ -1,4 +1,4 @@
-import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
+import type { HostedFailureReason, RunJob, StudioIngest } from "../hosting/run-contract.js";
 import { DurableObject } from "cloudflare:workers";
 import type { AnyProjectPipeline, PipelineProject } from "../project/pipeline-project.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
@@ -8,13 +8,17 @@ import { createAccessAuthenticator, parseAccessConfig } from "./cloudflare-acces
 import { MAX_RUN_DURATION_MS, type CloudflareRunTraceContext } from "./cloudflare-run-contract.js";
 import { RunObjectCore } from "./cloudflare-run.js";
 import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
+import type {
+  HostedLaunchRequest,
+  HostedLaunchResult as CloudflareLaunchResult,
+  HostedLaunchStatus as CloudflareLaunchStatus,
+  HostedLaunchValues as CloudflareLaunchValues,
+} from "../hosting/launch-admission.js";
 import {
   isLaunchIdentifier,
-  type HostedLaunchRequest,
-  type HostedLaunchResult as CloudflareLaunchResult,
-  type HostedLaunchStatus as CloudflareLaunchStatus,
-  type HostedLaunchValues as CloudflareLaunchValues,
-} from "../hosting/launch-admission.js";
+  type HostedExecutionStatus as CloudflareExecutionStatus,
+} from "../hosting/execution-status.js";
+import { isExecutionPath, serveExecutionRequest } from "./cloudflare-execution-api.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import type {
   LaunchActor,
@@ -30,6 +34,7 @@ export type {
   HostedLaunchStatus as CloudflareLaunchStatus,
   HostedLaunchValues as CloudflareLaunchValues,
 } from "../hosting/launch-admission.js";
+export type { HostedExecutionStatus as CloudflareExecutionStatus } from "../hosting/execution-status.js";
 export type {
   LaunchActor as CloudflareLaunchActor,
   LaunchTrigger as CloudflareLaunchTrigger,
@@ -103,6 +108,13 @@ export interface CloudflareApp {
   ): Promise<CloudflareLaunchResult>;
   /** Read current launch state and its run id; undefined when the launch does not exist. */
   getLaunch(env: unknown, launchId: string): Promise<CloudflareLaunchStatus | undefined>;
+  /** Inspect the execution using the launch ID returned by admission. */
+  getExecution(env: unknown, executionId: string): Promise<CloudflareExecutionStatus | undefined>;
+  /** Persist a cancellation request and return the current status, including whether it stopped. */
+  cancelExecution(
+    env: unknown,
+    executionId: string
+  ): Promise<CloudflareExecutionStatus | undefined>;
   readonly durableObjects: {
     readonly TubelessStudio: CloudflareDurableObjectClass<CloudflareTranscriptIngest>;
     readonly TubelessRun: CloudflareDurableObjectClass;
@@ -117,6 +129,8 @@ interface StudioStub extends StudioIngest {
   serve(request: Request, actor?: LaunchActor): Promise<Response>;
   launch(request: HostedLaunchRequest): Promise<CloudflareLaunchResult>;
   getLaunch(launchId: string): Promise<CloudflareLaunchStatus | undefined>;
+  getExecution(launchId: string): Promise<CloudflareExecutionStatus | undefined>;
+  cancelExecution(launchId: string): Promise<CloudflareExecutionStatus | undefined>;
 }
 
 interface TubelessEnv {
@@ -124,6 +138,11 @@ interface TubelessEnv {
   readonly TUBELESS_RUN: NamespaceLike<RunStubLike>;
   readonly ACCESS_TEAM_DOMAIN?: string;
   readonly ACCESS_AUD?: string;
+}
+
+function studioBinding(env: unknown): StudioStub {
+  // SAFETY: the deployment scaffold binds the private namespace under this name.
+  return (env as TubelessEnv).TUBELESS_STUDIO.getByName("default");
 }
 
 interface DurableObjectStateLike {
@@ -172,6 +191,20 @@ export function createCloudflareApp<TEnv = unknown>(
     hostedProjectCommands(project).map((entry) => [entry.descriptor.id, entry])
   );
   const inputPolicy = launchInputPolicy(commands, options.recordInputs);
+  const submit = (
+    studio: StudioStub,
+    commandId: string,
+    values: CloudflareLaunchValues,
+    launchOptions: CloudflareLaunchOptions
+  ) =>
+    studio.launch({
+      commandId,
+      values,
+      idempotencyKey: launchOptions?.idempotencyKey,
+      projectId: project.id,
+      deploymentId,
+      context: { actor: launchOptions?.actor, trigger: launchOptions?.trigger },
+    });
   let authenticator:
     | { key: string; authenticate: ReturnType<typeof createAccessAuthenticator> }
     | undefined;
@@ -180,6 +213,7 @@ export function createCloudflareApp<TEnv = unknown>(
     async fetch(request, rawEnv) {
       // SAFETY: the scaffolded configuration binds these names; missing bindings fail at the call below.
       const env = rawEnv as TubelessEnv;
+      const url = new URL(request.url);
       let actor: LaunchActor | undefined;
       let config: ReturnType<typeof parseAccessConfig>;
       try {
@@ -200,7 +234,7 @@ export function createCloudflareApp<TEnv = unknown>(
         const identity = await authenticator.authenticate(request);
         if (identity instanceof Response) return identity;
         actor = identity;
-      } else if (!LOOPBACK_HOSTS.has(new URL(request.url).hostname)) {
+      } else if (!LOOPBACK_HOSTS.has(url.hostname)) {
         return errorResponse(
           503,
           "access_not_configured",
@@ -209,8 +243,31 @@ export function createCloudflareApp<TEnv = unknown>(
         );
       }
       try {
+        const studio = studioBinding(env);
+        if (isExecutionPath(url.pathname)) {
+          if (config && !actor)
+            return errorResponse(
+              403,
+              "access_denied",
+              "An Access identity is required.",
+              "Use an authorized Access identity or service token."
+            );
+          if (deploymentId === undefined)
+            return errorResponse(
+              503,
+              "execution_api_not_configured",
+              "The execution API requires a deploymentId.",
+              "Set deploymentId on createCloudflareApp and redeploy."
+            );
+          return await serveExecutionRequest(request, url, {
+            launch: (commandId, values, idempotencyKey) =>
+              submit(studio, commandId, values, { idempotencyKey, actor, trigger: "code" }),
+            get: (id) => studio.getExecution(id),
+            cancel: (id) => studio.cancelExecution(id),
+          });
+        }
         // Forward the original request: the Studio host checks mutation Origin against its URL.
-        return await env.TUBELESS_STUDIO.getByName("default").serve(request, actor);
+        return await studio.serve(request, actor);
       } catch (error) {
         console.error(error);
         return studioUnavailable(request);
@@ -250,6 +307,14 @@ export function createCloudflareApp<TEnv = unknown>(
       return this.#core.getLaunch(launchId);
     }
 
+    getExecution(launchId: string) {
+      return this.#core.getExecution(launchId);
+    }
+
+    cancelExecution(launchId: string) {
+      return this.#core.cancelExecution(launchId);
+    }
+
     admit(launchId: string): Promise<{ admitted: boolean }> {
       return this.#core.admit(launchId);
     }
@@ -262,8 +327,8 @@ export function createCloudflareApp<TEnv = unknown>(
       return this.#core.appendEvents(launchId, sequence, events);
     }
 
-    reportFailure(launchId: string, message: string): Promise<void> {
-      return this.#core.reportFailure(launchId, message);
+    reportFailure(launchId: string, message: string, reason?: HostedFailureReason): Promise<void> {
+      return this.#core.reportFailure(launchId, message, reason);
     }
 
     appendTranscript(record: AgentTranscriptRecord): Promise<{ accepted: boolean }> {
@@ -285,7 +350,7 @@ export function createCloudflareApp<TEnv = unknown>(
         storage: state.storage,
         commands,
         deploymentId,
-        ingest: () => env.TUBELESS_STUDIO.getByName("default"),
+        ingest: () => studioBinding(env),
         tracing:
           options.tracing === undefined
             ? undefined
@@ -324,21 +389,19 @@ export function createCloudflareApp<TEnv = unknown>(
           code: "invalid_launch",
           errors: ["Configure deploymentId on createCloudflareApp before launching from code."],
         };
-      // SAFETY: the scaffold binds this private namespace; no HTTP route exposes this capability.
-      const env = rawEnv as TubelessEnv;
-      return env.TUBELESS_STUDIO.getByName("default").launch({
-        commandId,
-        values,
-        idempotencyKey: launchOptions?.idempotencyKey,
-        projectId: project.id,
-        deploymentId,
-        context: { actor: launchOptions?.actor, trigger: launchOptions?.trigger },
-      });
+      return submit(studioBinding(rawEnv), commandId, values, launchOptions);
     },
     async getLaunch(rawEnv, launchId) {
       if (!isLaunchIdentifier(launchId)) return undefined;
-      const env = rawEnv as TubelessEnv;
-      return env.TUBELESS_STUDIO.getByName("default").getLaunch(launchId);
+      return studioBinding(rawEnv).getLaunch(launchId);
+    },
+    async getExecution(rawEnv, id) {
+      if (!isLaunchIdentifier(id)) return undefined;
+      return studioBinding(rawEnv).getExecution(id);
+    },
+    async cancelExecution(rawEnv, id) {
+      if (!isLaunchIdentifier(id)) return undefined;
+      return studioBinding(rawEnv).cancelExecution(id);
     },
   };
 }

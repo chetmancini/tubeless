@@ -161,6 +161,8 @@ Optional capabilities:
   (`docs/studio.md`).
 - Cloudflare hosting: `tubeless init cloudflare` and `docs/deploy-cloudflare.md`;
   runs are limited to 14 minutes and secrets stay out of config text bindings.
+  Set `deploymentId` for trusted `app.launch` and `tubeless remote run` submissions.
+  Follow or request cancellation by the execution ID.
 - Host engines (Airflow, Temporal, Inngest, Dagster, Step Functions): read the
   matching package guide before integrating.
 

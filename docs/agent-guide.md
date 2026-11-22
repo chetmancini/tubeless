@@ -248,6 +248,9 @@ For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node
   attribution; input history saves nothing unless `recordInputs` allowlists
   non-secret parameter keys. See the
   [scheduled Worker example](../examples/cloudflare/scheduled-worker.ts).
+- Submit to the same self-hosted deployment with `tubeless remote run <command-id> --host <origin>`.
+  Follow or cancel by the returned execution ID. Set an immutable `deploymentId`
+  and use a Cloudflare Access service token. See [the CLI setup](./deploy-cloudflare.md#submit-and-follow-from-the-cli).
 - Never put secrets in `cloudflare.config.ts` text bindings. Every user Access
   admits sees all history and commands.
 

@@ -1,3 +1,4 @@
+import { manageRemoteSignal } from "../workbench-remote-io.js";
 import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
 import {
   renderWorkbenchUsage,
@@ -16,12 +17,7 @@ import {
   writeCliChunk,
   terminalSafeText,
 } from "../workbench-shared.js";
-import {
-  cloudErrorExit,
-  cloudSignal,
-  cloudSleep,
-  type CloudCommandDependencies,
-} from "./shared.js";
+import { cloudErrorExit, cloudSleep, type CloudCommandDependencies } from "./shared.js";
 
 const CLOUD_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.cloud);
 function runUrl(host: string, workspace: string, id: string): string {
@@ -96,7 +92,7 @@ export async function runCloud(
           return writeUsageError(io, "Pass a nonempty workspace ID.", CLOUD_USAGE);
         if (values.id !== undefined && !values.id.trim())
           return writeUsageError(io, "Pass a nonempty pipeline ID.", CLOUD_USAGE);
-        const managed = cloudSignal(io);
+        const managed = manageRemoteSignal(io.signal);
         let admitted: { id: string; url: string } | undefined;
         try {
           const operation =

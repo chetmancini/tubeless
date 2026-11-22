@@ -345,7 +345,7 @@ describe("tubeless __complete", () => {
   });
 
   it("includes current workbench commands without reading Cloud credentials", async () => {
-    for (const command of ["agent", "auth", "cloud", "init", "upgrade"]) {
+    for (const command of ["agent", "auth", "cloud", "init", "remote", "upgrade"]) {
       expect(
         (await complete(tmpdir(), command)).lines.some((line) => line.startsWith(`${command}\t`))
       ).toBe(true);
@@ -386,6 +386,13 @@ describe("tubeless __complete", () => {
       ],
     ],
     ["cloud", "logs", ["--host", "--workspace", "--json", "--follow", "--help"]],
+    [
+      "remote",
+      "run",
+      ["--host", "--json", "--input-file", "--idempotency-key", "--detach", "--help"],
+    ],
+    ["remote", "status", ["--host", "--json", "--follow", "--help"]],
+    ["remote", "cancel", ["--host", "--json", "--help"]],
     ["auth", "login", ["--host", "--no-browser", "--help"]],
     ["auth", "status", ["--host", "--json", "--help"]],
     ["auth", "logout", ["--host", "--help"]],

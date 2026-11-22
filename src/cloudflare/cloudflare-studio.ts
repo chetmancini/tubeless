@@ -1,4 +1,4 @@
-import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
+import type { HostedFailureReason, RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js";
 import { createStudioHost, type StudioHost } from "../hosting/hosting-studio.js";
 import { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
@@ -19,6 +19,7 @@ import {
 } from "../hosting/launch-admission.js";
 
 const RECONCILE_GRACE_MS = 120_000;
+const DELIVERY_RETRY_MS = 2_000;
 const SILENT_OUTPUT: HostedOutput = {
   cwd: "/tmp",
   stdout: { write: () => {} },
@@ -65,7 +66,10 @@ export class StudioObjectCore implements StudioIngest {
         now: this.#now,
         executor: {
           start: (job) => deps.runStub(job.launchId).start(job),
-          cancel: async (id) => deps.runStub(id).cancel(),
+          cancel: async (id) =>
+            deps.deploymentId === undefined
+              ? deps.runStub(id).cancel()
+              : (await this.cancelExecution(id))?.cancellationRequested === true,
         },
         scheduleReconcile: () => this.#scheduleReconcile(),
       },
@@ -78,30 +82,31 @@ export class StudioObjectCore implements StudioIngest {
       deploymentId: deps.deploymentId,
       commands: deps.commands,
       output: SILENT_OUTPUT,
-      store: this.#store.admissions,
+      store: {
+        get: (key) => this.#store.admissions.get(key),
+        reserve: (request) =>
+          deps.storage.transaction(async () => {
+            const reservation = await this.#store.admissions.reserve(request);
+            if (reservation.created) await this.#scheduleReconcile();
+            return reservation;
+          }),
+      },
       maxRunDurationMs: deps.maxRunDurationMs,
       now: this.#now,
       inputPolicy: deps.inputPolicy,
-      scheduleReconcile: (atMs) => this.#scheduleReconcile(atMs),
     });
   }
 
-  async #scheduleReconcile(newLaunchAtMs?: number): Promise<void> {
+  async #scheduleReconcile(): Promise<void> {
     const pending = await this.deps.storage.getAlarm();
-    const existing = await this.#store.nextReconcileAt(
-      this.deps.maxRunDurationMs + RECONCILE_GRACE_MS
+    const earliest = this.#store.executions.nextAlarm(
+      this.deps.maxRunDurationMs,
+      RECONCILE_GRACE_MS
     );
-    const target =
-      newLaunchAtMs === undefined
-        ? existing
-        : Math.min(
-            existing ?? Infinity,
-            newLaunchAtMs + this.deps.maxRunDurationMs + RECONCILE_GRACE_MS
-          );
-    if (target === undefined) {
+    if (earliest === undefined) {
       if (pending !== null) await this.deps.storage.deleteAlarm();
-    } else if (pending === null || pending <= this.#now() || pending > target) {
-      await this.deps.storage.setAlarm(target);
+    } else if (pending === null || pending <= this.#now() || pending > earliest) {
+      await this.deps.storage.setAlarm(earliest);
     }
   }
 
@@ -109,10 +114,21 @@ export class StudioObjectCore implements StudioIngest {
     return this.#store.launchStatus(launchId);
   }
 
+  getExecution(launchId: string) {
+    return this.#store.executions.status(launchId);
+  }
+
+  cancelExecution(launchId: string) {
+    return this.deps.storage.transaction(async () => {
+      const executions = this.#store.executions;
+      if (executions.requestCancellation(launchId, this.#now())) await this.#scheduleReconcile();
+      return executions.status(launchId);
+    });
+  }
+
   async launch(request: HostedLaunchRequest): Promise<HostedLaunchResult> {
     const decision = await this.#admission(request);
     if (!decision.accepted) return decision;
-    if (decision.job) await this.#coordinator.startPrepared(decision.job, decision.job);
     return { accepted: true, launchId: decision.launchId };
   }
 
@@ -150,17 +166,33 @@ export class StudioObjectCore implements StudioIngest {
   appendEvents(launchId: string, sequence: number, events: PipelineTraceEvent[]) {
     return this.#ingest.appendEvents(launchId, sequence, events);
   }
-  reportFailure(launchId: string, message: string) {
-    return this.#ingest.reportFailure(launchId, message);
+  reportFailure(launchId: string, message: string, reason?: HostedFailureReason) {
+    return this.#ingest.reportFailure(launchId, message, reason);
   }
 
   async alarm(): Promise<void> {
     const now = this.#now();
-    for (const id of await this.#store.stale(
-      now - this.deps.maxRunDurationMs - RECONCILE_GRACE_MS
-    )) {
-      await this.#ingest.reportFailure(id, HOST_TERMINATED);
+    const executions = this.#store.executions;
+    for (const id of executions.stale(now, this.deps.maxRunDurationMs, RECONCILE_GRACE_MS)) {
+      await this.#ingest.reportFailure(id, HOST_TERMINATED, "host_terminated");
     }
-    await this.#scheduleReconcile();
+    // Commit the delivery snapshot and its next alarm before crossing RPC.
+    const actions = await this.deps.storage.transaction(async () => {
+      const pending = executions.takeDue(now, now + DELIVERY_RETRY_MS);
+      await this.#scheduleReconcile();
+      return pending;
+    });
+    await Promise.all(
+      actions.map(async (action) => {
+        try {
+          const run = this.deps.runStub(action.launchId);
+          if (action.kind === "dispatch") await run.start(action.job);
+          else if (!(await run.cancel())) return;
+          executions.delivered(action.launchId, action.kind);
+        } catch (error) {
+          console.error(error);
+        }
+      })
+    );
   }
 }

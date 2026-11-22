@@ -1,3 +1,8 @@
+/** Narrow a decoded JSON object before reading fields. */
+export function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Sort validated JSON object keys recursively, preserving array order. */
 export function canonicalJsonValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalJsonValue);

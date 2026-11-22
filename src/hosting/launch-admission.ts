@@ -11,6 +11,7 @@ import {
   type StudioLaunchMetadata,
 } from "../studio/shared/launch-metadata.js";
 import { recordedLaunch } from "./launch-metadata.js";
+import { isLaunchIdentifier } from "./execution-status.js";
 
 /** Structured command parameters, including built-in execution controls. */
 export type HostedLaunchValues = PipelineRunStudioLaunchRequest["values"];
@@ -30,7 +31,7 @@ export type HostedLaunchResult =
       readonly launchId: string;
     };
 
-/** Only the reservation creator receives a job to dispatch; replay returns no job. */
+/** Unpinned browser launches dispatch immediately. Pinned launches use the durable outbox. */
 export type HostedLaunchDecision =
   | { readonly accepted: true; readonly launchId: string; readonly job: RunJob | undefined }
   | Extract<HostedLaunchResult, { accepted: false }>;
@@ -60,22 +61,20 @@ export interface StoredLaunchAdmission {
   readonly deploymentId: string;
 }
 
-export interface HostedLaunchReservation extends StoredLaunchAdmission {
+export interface HostedLaunchReservation {
   readonly idempotencyKey: string;
+  readonly intentDigest: string;
   readonly createdAtMs: number;
   readonly metadata?: StudioLaunchMetadata;
+  readonly job: RunJob;
 }
 
-/** Reservation and its launch creation commit together; only the creator may dispatch. */
+/** Reservation, launch creation, and any outbox job commit together. */
 export interface HostedLaunchAdmissionStore {
   get(idempotencyKey: string): Promise<StoredLaunchAdmission | undefined>;
   reserve(
     request: HostedLaunchReservation
   ): Promise<{ created: boolean; admission: StoredLaunchAdmission }>;
-}
-
-export function isLaunchIdentifier(value: unknown): value is string {
-  return typeof value === "string" && /^[a-zA-Z0-9._:-]{1,200}$/.test(value);
 }
 
 function invalid(
@@ -118,13 +117,11 @@ export function createHostedLaunchAdmission(input: {
   readonly maxRunDurationMs: number;
   readonly now?: () => number;
   readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
-  scheduleReconcile(newLaunchAtMs: number): Promise<void>;
 }): (request: HostedLaunchRequest) => Promise<HostedLaunchDecision> {
   const { projectId, deploymentId, output, store, maxRunDurationMs } = input;
   const commands = new Map(input.commands);
   const policy = input.inputPolicy ?? new Map();
   const now = input.now ?? Date.now;
-  const scheduleReconcile = input.scheduleReconcile.bind(input);
   return async ({
     commandId,
     values,
@@ -183,17 +180,21 @@ export function createHostedLaunchAdmission(input: {
       byte.toString(16).padStart(2, "0")
     ).join("");
     const createdAtMs = now();
-    if (!previous) await scheduleReconcile(createdAtMs);
     const launchId = previous?.launchId ?? crypto.randomUUID();
+    const job: RunJob = {
+      launchId,
+      commandId,
+      values: normalized,
+      deploymentId,
+      maxRunDurationMs,
+    };
     const reservation = previous
       ? { created: false, admission: previous }
       : await store.reserve({
           idempotencyKey,
           intentDigest,
-          deploymentId: storedDeployment,
-          commandId,
           createdAtMs,
-          launchId,
+          job,
           metadata: recordedLaunch(
             commands.get(commandId)!,
             normalized,
@@ -208,15 +209,7 @@ export function createHostedLaunchAdmission(input: {
     return {
       accepted: true,
       launchId: admission.launchId,
-      job: reservation.created
-        ? {
-            launchId: admission.launchId,
-            commandId,
-            values: normalized,
-            deploymentId,
-            maxRunDurationMs,
-          }
-        : undefined,
+      job: reservation.created && deploymentId === undefined ? job : undefined,
     };
   };
 }

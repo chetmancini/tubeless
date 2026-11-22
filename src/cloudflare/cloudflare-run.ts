@@ -25,7 +25,8 @@ export function runCloudflareJob(options: {
       .ingest()
       .reportFailure(
         options.job.launchId,
-        "The launch deployment no longer matches the run host; user code was not executed."
+        "The launch deployment no longer matches the run host; user code was not executed.",
+        "deployment_unavailable"
       );
   }
   return runHostedJob({
@@ -60,10 +61,15 @@ export class RunObjectCore {
 
   async start(job: RunJob): Promise<void> {
     const { storage } = this.deps;
-    if ((await storage.get("job")) !== undefined) return;
-    await storage.put("job", job);
-    await storage.put("state", "pending");
-    await storage.setAlarm(this.#now());
+    await storage.transaction(async () => {
+      if ((await storage.get("state")) !== undefined || (await storage.get("job")) !== undefined)
+        return;
+      await Promise.all([
+        storage.put("job", job),
+        storage.put("state", "pending"),
+        storage.setAlarm(this.#now()),
+      ]);
+    });
   }
 
   cancel(): boolean {
@@ -90,17 +96,20 @@ export class RunObjectCore {
       // Alarms never overlap, so a running state here means an earlier attempt died.
       await this.deps
         .ingest()
-        .reportFailure(job.launchId, HOST_TERMINATED)
+        .reportFailure(job.launchId, HOST_TERMINATED, "host_terminated")
         .catch((error: unknown) => {
           console.error(error);
         });
-      await storage.deleteAlarm();
-      await storage.deleteAll();
+      await this.#finish();
       return;
     }
-    await storage.put("state", "running");
-    // Post-mortem watchdog: fires only if this invocation is killed before clearing it.
-    await storage.setAlarm(this.#now() + boundedDuration(job) + 60_000);
+    await storage.transaction(async () => {
+      await Promise.all([
+        storage.put("state", "running"),
+        // Post-mortem watchdog: fires only if this invocation is killed before clearing it.
+        storage.setAlarm(this.#now() + boundedDuration(job) + 60_000),
+      ]);
+    });
     const controller = new AbortController();
     this.#controller = controller;
     try {
@@ -120,8 +129,19 @@ export class RunObjectCore {
         .catch(() => {});
     } finally {
       this.#controller = undefined;
-      await storage.deleteAlarm();
-      await storage.deleteAll();
+      await this.#finish();
     }
+  }
+
+  async #finish(): Promise<void> {
+    const { storage } = this.deps;
+    await storage.transaction(async () => {
+      // Keep a small receipt for duplicate dispatches and discard the job's input values.
+      await Promise.all([
+        storage.put("state", "finished"),
+        storage.delete("job"),
+        storage.deleteAlarm(),
+      ]);
+    });
   }
 }

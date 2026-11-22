@@ -1,5 +1,6 @@
 import type { PipelineRunEventReader } from "../run-store/run-store.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
+import type { HostedFailureReason } from "./run-contract.js";
 
 export type BatchAcknowledgement =
   | { readonly accepted: false }
@@ -33,15 +34,16 @@ export interface HostedLaunchStore extends PipelineRunEventReader {
    * children first. Ignore unknown/terminal launches. The caller owns evidence
    * of host failure; this operation does not terminate execution.
    */
-  fail(launchId: string, message: string, nowMs: number): Promise<void>;
+  fail(
+    launchId: string,
+    message: string,
+    nowMs: number,
+    reason?: HostedFailureReason
+  ): Promise<void>;
   /** Atomically fail only if admission has not been granted. */
   failUnadmitted(launchId: string, message: string, nowMs: number): Promise<void>;
   /** Bound root ids for running trusted launches, in creation order. */
   liveRunIds(): Promise<readonly string[]>;
   /** Resolve only a running trusted launch owned by the supplied root run. */
   launchIdForRun(runId: string): Promise<string | undefined>;
-  /** Open trusted launches whose root-start/creation time is <= cutoff. */
-  stale(cutoffMs: number): Promise<readonly string[]>;
-  /** Earliest open trusted root-start/creation timestamp plus delay, or undefined when idle. */
-  nextReconcileAt(delayMs: number): Promise<number | undefined>;
 }
