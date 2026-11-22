@@ -1,6 +1,13 @@
 import { decodeStoredTraceEvent } from "../run-store/run-store-event-decoder.js";
 import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
-import { wireArray, wireCustom, wireNumber, wireObject } from "../tracing/wire-schema.js";
+import {
+  wireArray,
+  wireCustom,
+  wireNumber,
+  wireObject,
+  wireOptional,
+  type WireSchema,
+} from "../tracing/wire-schema.js";
 import {
   COLLECTOR_BATCH_BYTES,
   COLLECTOR_BATCH_EVENTS,
@@ -12,11 +19,24 @@ import {
 import { assertAttemptId } from "./attempt-store.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
-const envelopeSchema = wireObject(
+const envelope = {
+  attemptId: collectorId,
+  sequence: wireNumber({ integer: true, minimum: 0 }),
+};
+const collectorEnvelope = wireObject(
   {
-    attemptId: collectorId,
-    sequence: wireNumber({ integer: true, minimum: 0 }),
+    ...envelope,
     events: wireArray(wireCustom({}, decodeAttemptEvent), { maxItems: COLLECTOR_BATCH_EVENTS }),
+  },
+  { strict: true }
+);
+const runnerEnvelope = wireObject(
+  {
+    ...envelope,
+    events: wireArray(wireCustom({}, decodeCurrentTraceEvent), {
+      maxItems: COLLECTOR_BATCH_EVENTS,
+    }),
+    report: wireOptional(wireCustom<unknown>({}, (value) => value)),
   },
   { strict: true }
 );
@@ -56,26 +76,60 @@ export function encodeAttemptBatches(
   return batches;
 }
 
-/** Decode from the same owned bytes that are hashed; never accept a caller-supplied digest. */
-export async function decodeAttemptBatch(body: Uint8Array): Promise<{
+/** A runner child sends its root completion and validated report under one sequence. */
+export function encodeRunnerCompletion(
+  attemptId: string,
+  sequence: number,
+  event: PipelineTraceEvent,
+  report: unknown
+): Uint8Array {
+  const body = new TextEncoder().encode(
+    JSON.stringify({ attemptId, sequence, events: [event], report })
+  );
+  if (body.byteLength > COLLECTOR_BATCH_BYTES) throw new CollectorInputError(413);
+  return body;
+}
+
+interface DecodedAttemptBatch {
   readonly attemptId: string;
   readonly sequence: number;
   readonly events: readonly PipelineTraceEvent[];
   readonly digest: string;
-}> {
+}
+
+export function decodeAttemptBatch(body: Uint8Array): Promise<DecodedAttemptBatch> {
+  return decodeBatch(body, collectorEnvelope);
+}
+
+export function decodeRunnerBatch(
+  body: Uint8Array
+): Promise<DecodedAttemptBatch & { readonly report?: unknown }> {
+  return decodeBatch(body, runnerEnvelope);
+}
+
+/** Hash the exact decoded bytes so retransmissions can be checked across transports. */
+async function decodeBatch<T extends { events: PipelineTraceEvent[] }>(
+  body: Uint8Array,
+  schema: WireSchema<T>
+): Promise<T & { digest: string }> {
   if (body.byteLength > COLLECTOR_BATCH_BYTES) throw new CollectorInputError(413);
   const bytes = new Uint8Array(body);
-  const envelope = decodeCollectorJson(bytes, envelopeSchema);
+  const envelope = decodeCollectorJson(bytes, schema);
   if (envelope.events.length === 0) throw new CollectorInputError();
   return { ...envelope, digest: await digestCollectorBody(bytes) };
 }
 
 /** A fresh, validated current-version event for either transport direction. */
 export function decodeAttemptEvent(value: unknown): PipelineTraceEvent {
-  const event = decodeStoredTraceEvent(value);
-  if (event.version !== PIPELINE_TRACE_VERSION) throw new CollectorInputError();
+  const event = decodeCurrentTraceEvent(value);
   assertAttemptId(event.runId);
   assertAttemptId(event.pipelineId);
   if (event.parentRunId !== undefined) assertAttemptId(event.parentRunId);
+  return event;
+}
+
+function decodeCurrentTraceEvent(value: unknown): PipelineTraceEvent {
+  const event = decodeStoredTraceEvent(value);
+  if (event.version !== PIPELINE_TRACE_VERSION) throw new CollectorInputError();
   return event;
 }

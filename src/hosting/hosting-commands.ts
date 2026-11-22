@@ -149,7 +149,10 @@ export function studioDescriptor(command: HostedPipelineCommand): PipelineRunStu
 }
 
 export function hostedProjectCommands(
-  project: PipelineProject<string, readonly AnyProjectPipeline[]>
+  project: Pick<
+    PipelineProject<string, readonly AnyProjectPipeline[]>,
+    "commands" | "pipelines" | "tracing"
+  >
 ): readonly HostedCommand[] {
   const explicit = new Map<string, HostedPipelineCommand>();
   for (const command of project.commands) {

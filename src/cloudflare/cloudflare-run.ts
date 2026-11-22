@@ -1,5 +1,5 @@
 import type { HostedCommand } from "../hosting/hosting-commands.js";
-import { runHostedJob } from "../hosting/run.js";
+import { runHostedJob, type HostedChildPlacement } from "../hosting/run.js";
 import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { PipelineTraceExporterOptions } from "../tracing/tracing.js";
 import { boundCloudflareTraceExporter } from "./cloudflare-tracing.js";
@@ -19,6 +19,7 @@ export function runCloudflareJob(options: {
   readonly controller: AbortController;
   readonly tracing?: PipelineTraceExporterOptions<CloudflareRunTraceContext>;
   readonly deploymentId?: string;
+  readonly placeChild?: HostedChildPlacement;
 }): Promise<void> {
   if (options.job.deploymentId !== undefined && options.job.deploymentId !== options.deploymentId) {
     return options
@@ -54,6 +55,7 @@ export class RunObjectCore {
       readonly now?: () => number;
       readonly tracing?: PipelineTraceExporterOptions<CloudflareRunTraceContext>;
       readonly deploymentId?: string;
+      readonly placeChild?: HostedChildPlacement;
     }
   ) {
     this.#now = deps.now ?? Date.now;
@@ -120,6 +122,7 @@ export class RunObjectCore {
         controller,
         tracing: this.deps.tracing,
         deploymentId: this.deps.deploymentId,
+        placeChild: this.deps.placeChild,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

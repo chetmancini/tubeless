@@ -116,6 +116,7 @@ export function createHostedLaunchAdmission(input: {
   readonly store: HostedLaunchAdmissionStore;
   readonly maxRunDurationMs: number;
   readonly now?: () => number;
+  readonly localPipelines?: ReadonlyMap<string, string>;
   readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
 }): (request: HostedLaunchRequest) => Promise<HostedLaunchDecision> {
   const { projectId, deploymentId, output, store, maxRunDurationMs } = input;
@@ -162,6 +163,7 @@ export function createHostedLaunchAdmission(input: {
       return invalid([
         "Normalized launch values must use the supported bounded command parameter shapes.",
       ]);
+    const target = input.localPipelines?.has(commandId) ? "local" : undefined;
     const normalized = normalizedValues(resolved.values);
     const bytes = new TextEncoder().encode(
       JSON.stringify(
@@ -170,6 +172,7 @@ export function createHostedLaunchAdmission(input: {
           commandId,
           values: normalized,
           maxRunDurationMs,
+          ...(target === undefined ? {} : { target }),
         })
       )
     );
@@ -186,6 +189,7 @@ export function createHostedLaunchAdmission(input: {
       commandId,
       values: normalized,
       deploymentId,
+      target,
       maxRunDurationMs,
     };
     const reservation = previous
@@ -199,7 +203,7 @@ export function createHostedLaunchAdmission(input: {
             commands.get(commandId)!,
             normalized,
             policy.get(commandId),
-            { launchId, deploymentId },
+            { launchId, deploymentId, target },
             launchContext
           ),
         });

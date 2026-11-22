@@ -11,11 +11,18 @@ function relativeImports(source: string, directory: string): string[] {
 }
 
 /** A workerd module manifest: the entry plus every built module it reaches through relative imports. */
-export function manifestModules(entry: string): Record<string, { type: "esm"; contents: string }> {
+export function manifestModules(
+  entry: string,
+  extra: Record<string, string> = {}
+): Record<string, { type: "esm"; contents: string }> {
   const modules: Record<string, { type: "esm"; contents: string }> = {
     "worker.js": { type: "esm", contents: entry },
   };
   const pending = relativeImports(entry, "");
+  for (const [name, contents] of Object.entries(extra)) {
+    modules[name] = { type: "esm", contents };
+    pending.push(...relativeImports(contents, posix.dirname(name)));
+  }
   while (pending.length > 0) {
     const name = pending.pop()!;
     if (modules[name]) continue;

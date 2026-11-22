@@ -33,7 +33,7 @@ export function recordedLaunch(
   command: HostedCommand,
   values: HostedLaunchValues,
   allowed: ReadonlySet<string> | undefined,
-  identity: { launchId: string; deploymentId: string | undefined },
+  identity: { launchId: string; deploymentId: string | undefined; target?: "local" },
   context: LaunchAttribution
 ): StudioLaunchMetadata {
   return studioLaunchMetadataSchema.decode(

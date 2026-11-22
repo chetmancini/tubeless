@@ -213,6 +213,11 @@ Only boundaries that are not obvious from names are listed.
   `cloudflare-run-contract.ts` holds the deadline and host-failure vocabulary
   without loading execution. `cloudflare-execution-api.ts` serves the authenticated
   execution contract separately from the Studio browser protocol.
+  `cloudflare-runner-queue.ts` owns Bun claims, cancellation and the attempt lease
+  in the Studio object. `runner-protocol.ts` in hosting defines the shared handoff.
+  Collector and Bun ingestion use `attempt-ledger-sqlite.ts` for run binding and
+  batch receipts. Bun commits a child’s terminal event and its result together.
+  Explicit child composition calls an internal host capability when configured.
 
 ### Workbench
 

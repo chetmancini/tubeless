@@ -35,6 +35,7 @@ const WATCHDOGS = `${TRUSTED_LAUNCHES}, watchdogs AS (
   FROM trusted_launches AS launch
   LEFT JOIN tubeless_executions AS execution ON launch.launch_id = execution.launch_id
   WHERE state IN ('starting', 'running')
+    AND COALESCE(execution.target, 'cloudflare') = 'cloudflare'
     AND (execution.job_json IS NULL OR execution.offered_at_ms IS NOT NULL)
 )`;
 
@@ -49,20 +50,32 @@ export class SqliteExecutionStore {
       max_run_duration_ms INTEGER,
       cancel_requested INTEGER NOT NULL DEFAULT 0,
       outcome TEXT,
-      reason TEXT
+      reason TEXT,
+      target TEXT NOT NULL DEFAULT 'cloudflare'
     )`);
+    if (
+      !storage.sql
+        .exec("PRAGMA table_info(tubeless_executions)")
+        .toArray()
+        .some((row) => row.name === "target")
+    ) {
+      storage.sql.exec(
+        "ALTER TABLE tubeless_executions ADD COLUMN target TEXT NOT NULL DEFAULT 'cloudflare'"
+      );
+    }
     storage.sql.exec(`CREATE INDEX IF NOT EXISTS tubeless_executions_wake_idx
       ON tubeless_executions(wake_at_ms, launch_id) WHERE wake_at_ms IS NOT NULL`);
   }
 
   enqueue(job: RunJob, nowMs: number): void {
     this.storage.sql.exec(
-      `INSERT INTO tubeless_executions (launch_id, job_json, wake_at_ms, max_run_duration_ms)
-        VALUES (?, ?, ?, ?)`,
+      `INSERT INTO tubeless_executions (launch_id, job_json, wake_at_ms, max_run_duration_ms, target)
+        VALUES (?, ?, ?, ?, ?)`,
       job.launchId,
-      JSON.stringify(job),
-      nowMs,
-      job.maxRunDurationMs
+      job.target === "local" ? null : JSON.stringify(job),
+      job.target === "local" ? null : nowMs,
+      job.maxRunDurationMs,
+      job.target ?? "cloudflare"
     );
   }
 
@@ -71,7 +84,7 @@ export class SqliteExecutionStore {
       .exec(
         `${TRUSTED_LAUNCHES}
          SELECT launch.command_id, launch.state, launch.admitted, launch.run_id,
-           execution.outcome, execution.reason, execution.cancel_requested
+           execution.outcome, execution.reason, execution.cancel_requested, execution.target
          FROM trusted_launches AS launch
          LEFT JOIN tubeless_executions AS execution ON execution.launch_id = launch.launch_id
          WHERE launch.launch_id = ?`,
@@ -92,6 +105,7 @@ export class SqliteExecutionStore {
       executionId: launchId,
       commandId: String(row.command_id),
       state,
+      ...(row.target === "local" ? { target: "local" as const } : {}),
       cancellationRequested: Number(row.cancel_requested) === 1,
       ...(runId === undefined ? {} : { runId }),
       ...(reason === undefined ? {} : { reason }),
@@ -171,7 +185,7 @@ export class SqliteExecutionStore {
        ON CONFLICT(launch_id) DO UPDATE SET wake_at_ms = excluded.wake_at_ms,
          cancel_requested = 1, job_json = NULL`,
       launchId,
-      nowMs
+      row.target === "local" ? null : nowMs
     );
     if (Number(row.admitted) !== 1) {
       this.storage.sql.exec(

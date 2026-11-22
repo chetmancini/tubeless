@@ -21,6 +21,8 @@ export const HOSTED_EXECUTION_REASONS = [
   ...HOSTED_FAILURE_REASONS,
   "start_unconfirmed",
   "history_unavailable",
+  "runner_waiting",
+  "runner_incompatible",
 ] as const;
 
 export type HostedExecutionReason = (typeof HOSTED_EXECUTION_REASONS)[number];
@@ -32,5 +34,6 @@ export interface HostedExecutionStatus {
   readonly state: HostedExecutionState;
   readonly cancellationRequested: boolean;
   readonly runId?: string;
+  readonly target?: "cloudflare" | "local";
   readonly reason?: HostedExecutionReason;
 }

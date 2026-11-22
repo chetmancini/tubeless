@@ -10,26 +10,26 @@ Package: `tubeless`
 
 | Entrypoint                       | Declaration                                    | Surface hash                                                       | Exported symbols |
 | -------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ | ---------------: |
-| `tubeless/agent/node`            | `./dist/agent/node.d.ts`                       | `3cd732dac8b18e9a9671eedfa4dafcb940e3dfb0ac09eac1c5561c422b5ec2ed` |                6 |
-| `tubeless/agent`                 | `./dist/agent/agent.d.ts`                      | `efa2bdce7bda762114590573e3336c9be12ad534f1c577fd84fc4ad71c633ab3` |               44 |
-| `tubeless`                       | `./dist/core/pipeline.d.ts`                    | `571a4c0cf05046eb1c62484fb6ae5f1d860c4757df32774dca711dedfdf0a583` |               86 |
-| `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `69a27f3e5f0112cdd5dc81f5f260f1929ad45cba6e22fc214455f031170682b5` |               33 |
+| `tubeless/agent/node`            | `./dist/agent/node.d.ts`                       | `e17cae8d4cdb64ab6694ef3628973e5efa80eb8fec6924b10901491c53e3c28c` |                6 |
+| `tubeless/agent`                 | `./dist/agent/agent.d.ts`                      | `fd757cb6cd865afe212ea8d3bc99d84aff181365902cb5993153b0ef0be9d47a` |               44 |
+| `tubeless`                       | `./dist/core/pipeline.d.ts`                    | `8f97ec01526dff570f5d545722129b14c553e3fe6fb1cf999d1a7f036f7e282f` |               86 |
+| `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `d217a67ab691d2830e84c357ae05bb993d6044351c382c1edf27a631288c1b40` |               33 |
 | `tubeless/batch`                 | `./dist/utilities/batch.d.ts`                  | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
-| `tubeless/node`                  | `./dist/node/node.d.ts`                        | `0c29da8e248dce0e229b11e640178667257b48498ad3b8e7bbe0a71b1fdc2231` |               16 |
+| `tubeless/node`                  | `./dist/node/node.d.ts`                        | `fc4d27762ff4baeaf271b37c9bd595a3366335c6bf1aae3143e46680565f12b6` |               16 |
 | `tubeless/rate-limit`            | `./dist/utilities/rate-limit.d.ts`             | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
 | `tubeless/retry`                 | `./dist/utilities/retry.d.ts`                  | `ae8bdf0276b1930e4052f88a4912efe7dc6b857a8a51dcf2399eac0514fc9a0b` |                6 |
-| `tubeless/project`               | `./dist/project/project.d.ts`                  | `a705ea59cca0b7d7404a2de02ffaa30e0c837911ca0519b0ffe0693a28912d1d` |                9 |
-| `tubeless/testing`               | `./dist/testing/testing.d.ts`                  | `146ad10eae54b5d9fb0f101b01bb9a7687dcb4fe6a9e41918ca7db1139c8913a` |               16 |
+| `tubeless/project`               | `./dist/project/project.d.ts`                  | `fb419bee006cf46e0955c006a8e268ef9c537469dd336ac09e77dacfb7b5ef8e` |                9 |
+| `tubeless/testing`               | `./dist/testing/testing.d.ts`                  | `aa4ad97afa9fba8439cbe402d3dc5555d8bddf91440e3bd9008d736047f1e039` |               16 |
 | `tubeless/tracing`               | `./dist/tracing/tracing.d.ts`                  | `3146f80a68bed8ed99ed2274c27a7978dcfbb1ecb7ec4b67099818ed841a0a4c` |                4 |
-| `tubeless/agent/openai`          | `./dist/agent/openai.d.ts`                     | `dbae2951e4e3362b03a63437e5048d95173297695db5f74690454ec2e31c3a02` |                2 |
-| `tubeless/agent/mcp`             | `./dist/agent/mcp.d.ts`                        | `b02f421e7ca32e9f33b7299b458e67f4a19ab067c0ed2c9c539ad5855091892b` |                7 |
-| `tubeless/agent/anthropic`       | `./dist/agent/anthropic.d.ts`                  | `be6b25a53707a5962b0894db3a09c6413fb7caf2bbfbe9a4ef45959ae630a0b1` |                2 |
-| `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `e798e33dd297cb2435832e0b5dc16cd191add6da7c3e28d63e912c7320950225` |               22 |
-| `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `f36277dcaacff9aaec6d7c3c9b2d28c69ae92b82a7df5659f83a332b5c737c21` |                4 |
+| `tubeless/agent/openai`          | `./dist/agent/openai.d.ts`                     | `d3b30503710b553049118f2ee2d49ccec4b78ea56ef301f20975558a2a331493` |                2 |
+| `tubeless/agent/mcp`             | `./dist/agent/mcp.d.ts`                        | `a86220a7c6e47a4194c75f8d4071f510aef8388186f143d064e6eece044f28ec` |                7 |
+| `tubeless/agent/anthropic`       | `./dist/agent/anthropic.d.ts`                  | `564b37b7002e0b1545e2914553189dc69ff6543063a46730490e0b8570cbe261` |                2 |
+| `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `ffc87cfc84e17bfe9bec63a2ac3e30a598652f3824357d26185edbe618999e90` |               22 |
+| `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `d10506eefcfa24b9417ffe794786ad766b2e3e02e58fa717c5acc5f85a078038` |                4 |
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
 | `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
 | `tubeless/check-plan`            | `./dist/utilities/node-check-plan.d.ts`        | `23fef204664df9348fcfab6d1d87dd782f58d75cd9b61a868793d246ba80fb10` |                6 |
-| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `9e5e96038e09099138a6a84564623473aee92764e4fc3bc2227547c3d45373ed` |                3 |
+| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `c0cc4a82adbd529a691038ec9bc98af787ef957398bcec162724743759839ef1` |                3 |
 
 ## Symbols
 
@@ -346,26 +346,26 @@ Package: `tubeless`
 
 | Symbol                                                                                                                                   | Description                                                                                     |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L100)                                   | Worker handler and Durable Object classes that a Worker entry exports.                          |
-| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L75)                             | Configure deployment identity, application tracing and the cooperative run deadline.            |
-| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L94)                     | Durable Object class to export from the Worker entry under its binding's export name.           |
-| [`CloudflareExecutionStatus`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/execution-status.ts#L29)                     | Durable status of one hosted execution, independent of its runtime run ID.                      |
+| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L110)                                   | Worker handler and Durable Object classes that a Worker entry exports.                          |
+| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L79)                             | Configure deployment identity, application tracing and the cooperative run deadline.            |
+| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L104)                    | Durable Object class to export from the Worker entry under its binding's export name.           |
+| [`CloudflareExecutionStatus`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/execution-status.ts#L31)                     | Durable status of one hosted execution, independent of its runtime run ID.                      |
 | [`CloudflareLaunchActor`](https://github.com/chetmancini/tubeless/blob/main/src/studio/shared/launch-metadata.ts#L27)                    | User or service identity verified by the host or supplied by trusted application code.          |
-| [`CloudflareLaunchOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L66)                          | Reuse the same key for every delivery of one logical submission.                                |
+| [`CloudflareLaunchOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L70)                          | Reuse the same key for every delivery of one logical submission.                                |
 | [`CloudflareLaunchResult`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L20)                        | Admission is distinct from execution start and successful pipeline completion.                  |
 | [`CloudflareLaunchStatus`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L40)                        | Current launch bookkeeping; inspect the linked run for its pipeline outcome.                    |
 | [`CloudflareLaunchTrigger`](https://github.com/chetmancini/tubeless/blob/main/src/studio/shared/launch-metadata.ts#L44)                  | Origin of a deliberate launch submission.                                                       |
 | [`CloudflareLaunchValues`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L17)                        | Structured command parameters, including built-in execution controls.                           |
-| [`CloudflareTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L61)                           | Context for one admitted Cloudflare launch, including this Durable Object's bindings.           |
+| [`CloudflareTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L65)                           | Context for one admitted Cloudflare launch, including this Durable Object's bindings.           |
 | [`CloudflareTranscriptIngest`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-transcript.ts#L9)             | Trusted Studio Durable Object capability; keep this binding on the server.                      |
-| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L89)                                 | Worker module handler to use as the Worker entry's default export.                              |
+| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L99)                                 | Worker module handler to use as the Worker entry's default export.                              |
 | [`createCloudflareAgentTranscriptWriter`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-transcript.ts#L15) | An explicit agent sink.                                                                         |
-| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L180)                             | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
-| [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L24)                         | Step cache entries in R2.                                                                       |
+| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L191)                             | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
+| [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L25)                         | Step cache entries in R2.                                                                       |
 | [`createWorkerLoaderCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L105)     | Run each code-mode script in a fresh Cloudflare Dynamic Worker from a `worker_loaders` binding. |
-| [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L131)                            | Lossless JSON codec for Workers, where the default V8 codec is unavailable.                     |
-| [`R2BucketLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L11)                               | Structural subset of an R2 bucket binding that the cache store uses.                            |
-| [`R2ObjectLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L4)                                | Structural subset of an R2 object body that the cache store reads.                              |
+| [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L51)                             | Lossless JSON codec for Workers, where the default V8 codec is unavailable.                     |
+| [`R2BucketLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L12)                               | Structural subset of an R2 bucket binding that the cache store uses.                            |
+| [`R2ObjectLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L5)                                | Structural subset of an R2 object body that the cache store reads.                              |
 | [`WorkerLoaderCodemodeOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L22)             | Set the CPU budget and compatibility date for code-mode Dynamic Workers.                        |
 | [`WorkerLoaderLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L11)                        | The `worker_loaders` binding's `load` method, as used by the code-mode executor.                |
 
@@ -373,10 +373,10 @@ Package: `tubeless`
 
 | Symbol                                                                                                           | Description                                                                 |
 | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L24) | Step cache entries in R2.                                                   |
-| [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L131)    | Lossless JSON codec for Workers, where the default V8 codec is unavailable. |
-| [`R2BucketLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L11)       | Structural subset of an R2 bucket binding that the cache store uses.        |
-| [`R2ObjectLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L4)        | Structural subset of an R2 object body that the cache store reads.          |
+| [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L25) | Step cache entries in R2.                                                   |
+| [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L51)     | Lossless JSON codec for Workers, where the default V8 codec is unavailable. |
+| [`R2BucketLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L12)       | Structural subset of an R2 bucket binding that the cache store uses.        |
+| [`R2ObjectLike`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L5)        | Structural subset of an R2 object body that the cache store reads.          |
 
 ### `tubeless/cloudflare/transcript`
 

@@ -12,6 +12,7 @@ import {
   isPipelineProject,
   type AnyProjectPipeline,
   type ProjectOptions,
+  type PipelineProject,
 } from "../project/pipeline-project.js";
 import { didYouMean } from "../utilities/suggest.js";
 import {
@@ -44,6 +45,8 @@ export interface WorkbenchRegistration {
 }
 
 interface WorkbenchProjectFile {
+  project: PipelineProject<string, readonly AnyProjectPipeline[]>;
+  cwd: string;
   filePath: string;
   /** The module export the project was selected from: "default" or its one named export. */
   exportName: string;
@@ -151,6 +154,8 @@ export async function loadPipelineProjectFile(
       commands.set(command.id, command);
     }
     return {
+      project: root,
+      cwd,
       filePath,
       exportName,
       registrations: root.pipelines.map((pipeline) =>

@@ -434,11 +434,12 @@ Set up and load pipelines in the Cloud dashboard.
     name: "remote",
     description: "Run and follow pipelines on a self-hosted Cloudflare deployment",
     usage: `Usage: tubeless remote <run|status|cancel> <command-id|execution-id> --host <origin> [options]
+       tubeless remote runner --host <origin> --deployment-id <id> [--project <file>]
 
 Submit a registered command and follow its execution, inspect an existing execution,
 or request cancellation. Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET for Access.
 `,
-    subcommands: ["run", "status", "cancel"],
+    subcommands: ["run", "status", "cancel", "runner"],
     options: {
       host: {
         type: "string",
@@ -446,7 +447,24 @@ or request cancellation. Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET for
         valueName: "origin",
         completion: "text",
       },
-      json: { type: "boolean", description: "Emit one JSON receipt or status object" },
+      project: {
+        type: "string",
+        description: "Bun runner project (defaults to tubeless.project.ts)",
+        valueName: "file",
+        completion: "file",
+        commands: ["runner"],
+      },
+      "deployment-id": {
+        type: "string",
+        description: "Exact revision deployed on the Worker",
+        valueName: "id",
+        commands: ["runner"],
+      },
+      json: {
+        type: "boolean",
+        description: "Emit one JSON receipt or status object",
+        commands: ["run", "status", "cancel"],
+      },
       "input-file": {
         type: "string",
         description: "Read command parameter JSON from a file, or - for stdin",

@@ -7,6 +7,7 @@ import { duplicateValues } from "../utilities/collections.js";
 import type { PipelineDefinition, StepsOptions } from "./pipeline-definition.js";
 import { requiredFinalizerMetadata } from "./pipeline-finalizer.js";
 import { stepEdges, targetClosure, topologicalSort } from "./pipeline-graph.js";
+import { isAuthoredPipelineId } from "./pipeline-ids.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import {
@@ -28,7 +29,7 @@ export function validatePipelineDefinition<
   const steps = definition.steps;
   const errors: PipelineError[] = [];
   const compiledCaches = new Map<AnyStep, CompiledStepCache<TOptions>>();
-  if (definition.id.trim().length === 0) {
+  if (!isAuthoredPipelineId(definition.id)) {
     errors.push(
       pipelineDiagnostic(
         "TUBELESS_DEFINITION_PIPELINE_ID_BLANK",
@@ -139,7 +140,7 @@ export function validatePipelineDefinition<
         )
       );
     }
-    if (step.id.trim().length === 0) {
+    if (!isAuthoredPipelineId(step.id)) {
       errors.push(
         pipelineDiagnostic(
           "TUBELESS_DEFINITION_STEP_ID_BLANK",

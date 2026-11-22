@@ -108,7 +108,7 @@ async function requestExecution(
 function executionStatus(data: unknown, id: string): HostedExecutionStatus {
   if (!isJsonObject(data))
     throw new HostedRequestError("The Worker returned an invalid execution status.");
-  const { commandId, cancellationRequested, runId } = data;
+  const { commandId, cancellationRequested, runId, target } = data;
   const state = HOSTED_EXECUTION_STATES.find((state) => state === data.state);
   const reason = HOSTED_EXECUTION_REASONS.find((reason) => reason === data.reason);
   if (
@@ -117,7 +117,8 @@ function executionStatus(data: unknown, id: string): HostedExecutionStatus {
     !state ||
     typeof cancellationRequested !== "boolean" ||
     (runId !== undefined && typeof runId !== "string") ||
-    (data.reason !== undefined && !reason)
+    (data.reason !== undefined && !reason) ||
+    (target !== undefined && target !== "cloudflare" && target !== "local")
   ) {
     throw new HostedRequestError("The Worker returned an invalid execution status.");
   }
@@ -128,6 +129,7 @@ function executionStatus(data: unknown, id: string): HostedExecutionStatus {
     cancellationRequested,
     ...(runId === undefined ? {} : { runId }),
     ...(reason === undefined ? {} : { reason }),
+    ...(target === undefined ? {} : { target }),
   };
 }
 
@@ -166,11 +168,11 @@ function showStatus(
     io.stdout.write(`${JSON.stringify(status)}\n`);
     return;
   }
-  const { executionId, state, cancellationRequested, runId, reason } = status;
+  const { executionId, state, cancellationRequested, runId, reason, target } = status;
   const cancelling =
     state === "running" && cancellationRequested ? " (cancellation requested)" : "";
   io.stdout.write(
-    `Execution ${executionId}: ${state}${cancelling}${reason ? ` (${terminalSafeText(reason)})` : ""}\n`
+    `Execution ${executionId}: ${state}${target ? ` on ${target}` : ""}${cancelling}${reason ? ` (${terminalSafeText(reason)})` : ""}\n`
   );
   if (runId !== undefined) io.stdout.write(`${host}/?run=${encodeURIComponent(runId)}\n`);
 }
@@ -189,22 +191,40 @@ export async function runRemote(
     {
       spec: SPEC,
       parse: (args) => parseSubcommandArgs(args, SPEC.options),
-      positionalCountError: {
-        count: 2,
-        message: "Pass a subcommand and one command or execution ID.",
-      },
-      async run({ values, positionals: [operation, target] }, commandIo) {
-        if (operation !== "run" && operation !== "status" && operation !== "cancel")
+      async run({ values, positionals }, commandIo) {
+        const [operation, target] = positionals;
+        if (
+          operation !== "run" &&
+          operation !== "status" &&
+          operation !== "cancel" &&
+          operation !== "runner"
+        )
           return writeUsageError(
             commandIo,
-            "Choose remote run, status or cancel.",
+            "Choose remote run, status, cancel or runner.",
             renderWorkbenchUsage(SPEC)
           );
-        if (operation !== "run" && !isLaunchIdentifier(target))
+        const usage = renderWorkbenchUsage(SPEC, operation);
+        if (positionals.length !== (operation === "runner" ? 1 : 2))
+          return writeUsageError(
+            commandIo,
+            operation === "runner"
+              ? "Use --project to select the runner project."
+              : "Pass one command or execution ID.",
+            usage
+          );
+        if (operation !== "run" && operation !== "runner" && !isLaunchIdentifier(target))
           return writeUsageError(
             commandIo,
             "Pass the execution ID from an admission receipt.",
-            renderWorkbenchUsage(SPEC, operation)
+            usage
+          );
+        const deploymentId = values["deployment-id"];
+        if (operation === "runner" && !isLaunchIdentifier(deploymentId))
+          return writeUsageError(
+            commandIo,
+            "Pass the exact Worker revision with --deployment-id.",
+            usage
           );
         let host: string;
         try {
@@ -224,6 +244,19 @@ export async function runRemote(
         try {
           const headers = accessHeaders(host, dependencies.env ?? process.env);
           const fetcher = dependencies.fetch ?? fetch;
+          if (operation === "runner") {
+            const { runRemoteRunner } = await import("./workbench-remote-runner.js");
+            return await runRemoteRunner({
+              host,
+              projectFile: values.project ?? "tubeless.project.ts",
+              deploymentId: deploymentId!,
+              io: commandIo,
+              fetcher,
+              headers,
+              signal,
+              sleep: dependencies.sleep,
+            });
+          }
           const send = (path: string, method: "GET" | "POST" = "GET", body?: string) =>
             requestExecution(fetcher, host, headers, signal, path, method, body);
           if (operation === "run") {

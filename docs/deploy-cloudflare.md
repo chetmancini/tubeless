@@ -212,11 +212,89 @@ A `202` response gives the `executionId`. A `409` conflict returns the original 
 Use `GET /api/executions/v1/<executionId>` for status and
 `POST /api/executions/v1/<executionId>/cancel` for cancellation. Both return the
 status object with `executionId`, `commandId`, `state`, `cancellationRequested`,
-and optional `runId` and `reason`. An active cancellation request returns `202`.
+and optional `runId`, `reason` and `target` (`"cloudflare"` or `"local"` with runner placement). An active cancellation request returns `202`.
 Include `X-Tubeless-Execution: 1` on writes, and `Content-Type: application/json`
 on submission. Requests with a browser `Origin` header must use the Worker's own
 origin. The Worker verifies Access's signed assertion and derives launch attribution
 from it.
+
+## Place work on a local Bun runner
+
+A self-hosted deployment can run registered commands on its Cloudflare Worker or
+on an enrolled Bun process. Configure placement on the Worker and submit through
+the same `tubeless remote run`, Studio, or `app.launch` entry points.
+
+1. Create a dedicated [Cloudflare Access service token](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)
+   and grant it a **Service Auth** policy on the Worker's Access app. Use its Client ID
+   as `serviceId`. Keep its secret on the Bun machine as `CF_ACCESS_CLIENT_SECRET`
+   and its ID as `CF_ACCESS_CLIENT_ID`. Use a different credential to submit jobs
+   or open Studio.
+2. Set an immutable `deploymentId` on the Worker. List the registered pipeline IDs
+   owned by Bun in `localRunner.pipelines`. Each needs an explicit
+   `implementationVersion`, shared schemas, and a matching definition in the Bun
+   project. Update the deployment ID with any code or placement change and build
+   both catalogs from the same release.
+
+   ```ts
+   const app = createCloudflareApp(project, {
+     deploymentId: "release-42",
+     localRunner: {
+       serviceId: "your-runner-client-id.access",
+       pipelines: ["normalize-on-bun"],
+     },
+   });
+   ```
+
+3. Start the runner from the Bun release. It connects outbound over HTTPS and runs
+   one claim at a time. The runner project resolves its working directory relative
+   to its project file.
+
+   ```sh
+   tubeless remote runner --host https://studio.example.com \
+     --project ./runner.project.ts --deployment-id release-42
+   ```
+
+A top-level command listed in `localRunner.pipelines` waits for Bun. Other top-level
+commands run on Cloudflare. A Worker-run pipeline can use `fromPipeline` to call a
+listed child on Bun and consume the child's result in its next step. Unplaced
+children run in their parent's runtime. Iteration and fan-out use their existing
+in-process placement rules.
+
+For a runnable example, use [the Worker entry](../examples/cloudflare/runner-placement/worker.ts)
+and [the Bun project](../examples/cloudflare/runner-placement/runner.project.ts).
+Point the Cloudflare scaffold at that Worker entry, keep its `TUBELESS_BUCKET`
+binding, set the runner's Access Client ID in `project.ts`, and upload an object
+named `source.txt` to the bucket. Launch `fetch-transform-publish` with
+`{"text":"source.txt"}` from the CLI or configure its Worker schedule. Cloudflare
+reads the input object, Bun transforms it and writes `normalized.txt`, and
+Cloudflare writes the returned value to `published.txt`. The shared project
+factory supplies the same registered definitions in both environments. The
+Worker's placeholder for the local transform fails if invoked directly, and its
+imports never reach the filesystem implementation.
+
+The versioned stage handoff takes at most 64 KiB per request and per result.
+It supports plain objects, dense arrays, strings, finite JSON numbers, booleans,
+null, and a finalized void result. Values such as dates, bigints, nonfinite
+numbers, negative zero, and nested `undefined` fail the transfer. The owning
+pipeline validates its options and result before returning it. Dry-run controls,
+the parent's remaining execution deadline, and cooperative cancellation cross
+the handoff. Studio records the child's terminal event and result together.
+If acknowledgement is lost, the runner can resend that completion without
+running the child again. Author effectful steps with a safe `dryRun` handler or `dryRun: "skip"`.
+
+Use `tubeless remote status <id>` to inspect a launch. A local root can stay
+`queued` with `runner_waiting` while the runner is offline. `runner_incompatible`
+means the offered definitions cannot claim it. Check the runner's project and
+release. `deployment_unavailable` on a queued local launch identifies an older
+revision that the current Worker cannot offer. A queued child remains part of
+its running parent and can wait until the parent's deadline. Studio's run
+details show the root runner and link stage runs under the parent step. Open the
+stage to see its runner attempt, logs, and progress.
+
+A lost active lease closes the attempt as interrupted. Root executions show
+`outcome_unknown` with `runner_interrupted` when no terminal trace was confirmed.
+A waiting parent fails if its child loses the lease. Inspect external effects
+before starting a new run. Automatic restart recovery is tracked in [issue #352](https://github.com/chetmancini/tubeless/issues/352).
 
 ## Application trace exporters
 
