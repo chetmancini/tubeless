@@ -1,0 +1,114 @@
+import { createSingleChildTraceProgress } from "../core/child-progress.js";
+import type { StoredPipelineEvent } from "../run-store/run-store.js";
+import type { ChildPlacement } from "../core/child-placement.js";
+import {
+  boundedRunnerJson,
+  runnerChildControls,
+  runnerValue,
+  type RunnerJob,
+  type RunnerStageResult,
+} from "../hosting/runner-protocol.js";
+import { abortableSleep, awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
+
+export interface RunnerStageObservation {
+  readonly result?: RunnerStageResult;
+  readonly events: readonly StoredPipelineEvent[];
+}
+
+export interface RunnerStageStore {
+  enqueueStage(job: RunnerJob & { kind: "stage" }): Promise<void>;
+  readStage(launchId: string, id: string, afterId: number): Promise<RunnerStageObservation>;
+  cancelStage(launchId: string, id: string): Promise<void>;
+}
+
+function canRetryRead(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "retryable" in error &&
+    error.retryable === true &&
+    !("overloaded" in error && error.overloaded === true)
+  );
+}
+
+export function placeCloudflareChild(options: {
+  readonly definitions: ReadonlyMap<string, string>;
+  readonly launchId: string;
+  readonly deploymentId: string;
+  readonly deadlineAtMs: number;
+  readonly flush: () => Promise<void>;
+  readonly store: () => RunnerStageStore;
+}): ChildPlacement {
+  return ({ pipeline, plan, options: input, controls, context, stepId, reportProgress }) => {
+    const definitionId = options.definitions.get(pipeline.id);
+    if (!definitionId) return undefined;
+    return (async () => {
+      if (
+        plan.definition?.identity.definitionId !== definitionId ||
+        context.parentRunId === undefined
+      )
+        throw new Error(
+          `The deployed local runner definition for ${pipeline.id} does not match this child.`
+        );
+      const stage = {
+        parentRunId: context.parentRunId,
+        stepId,
+        correlationId: context.correlationId,
+        itemKey: context.tracing?.itemKey,
+        // The source validates transfer shape. The Bun pipeline owns domain validation.
+        input: runnerValue(input, "Remote stage input") as object,
+        controls: runnerChildControls(controls),
+      };
+      const job = {
+        kind: "stage",
+        id: crypto.randomUUID(),
+        launchId: options.launchId,
+        deploymentId: options.deploymentId,
+        pipelineId: pipeline.id,
+        definitionId,
+        deadlineAtMs: options.deadlineAtMs,
+        stage,
+      } as const;
+      boundedRunnerJson(job, "Remote stage request");
+      await options.flush();
+      throwIfAborted(context.signal, "Queue remote stage");
+      await options.store().enqueueStage(job);
+      const onProgress = createSingleChildTraceProgress(plan, reportProgress);
+      let afterId = -1;
+      let delayMs = 500;
+      try {
+        for (;;) {
+          throwIfAborted(context.signal, "Wait for remote stage");
+          let observation: RunnerStageObservation;
+          try {
+            const read = options.store().readStage(job.launchId, job.id, afterId);
+            observation = context.signal
+              ? await awaitWithAbort(read, context.signal, "Wait for remote stage")
+              : await read;
+          } catch (error) {
+            if (!canRetryRead(error)) throw error;
+            await abortableSleep(delayMs, context.signal, "Reconnect to Studio");
+            delayMs = Math.min(delayMs * 2, 5_000);
+            continue;
+          }
+          for (const event of observation.events) {
+            afterId = event.id;
+            onProgress(event);
+          }
+          const { result } = observation;
+          if (result) {
+            if ("error" in result) throw new Error(result.error);
+            return result.report;
+          }
+          delayMs = 500;
+          await abortableSleep(delayMs, context.signal, "Wait for remote stage");
+        }
+      } finally {
+        if (context.signal?.aborted)
+          await options
+            .store()
+            .cancelStage(job.launchId, job.id)
+            .catch(() => {});
+      }
+    })();
+  };
+}

@@ -22,6 +22,7 @@ import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.j
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
 import { EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-identity.js";
+import { CHILD_PLACEMENT, childPlacement, type ChildPlacement } from "./child-placement.js";
 import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
 import { rejectChildOutputRecovery, snapshotRunControls } from "./run-controls.js";
 import type {
@@ -242,6 +243,7 @@ function childContext(
         signal: context.signal,
         sleep: context.sleep,
         tracing: childTracingOptions(context, identity.stepId, traceItemKey),
+        [CHILD_PLACEMENT]: childPlacement(context),
       },
       identity,
       dryRun
@@ -325,7 +327,8 @@ async function runChildPipeline(
   context: PipelineContext,
   hooks: PipelineHooks,
   messagePrefix: string,
-  plan: PipelinePlan
+  plan: PipelinePlan,
+  placement?: Pick<Parameters<ChildPlacement>[0], "stepId" | "reportProgress">
 ): Promise<PipelineRun<unknown>> {
   if (!plan.ok) {
     const firstError = plan.errors[0];
@@ -339,10 +342,22 @@ async function runChildPipeline(
     );
   }
 
-  const result = await executeCompiledChild(pipeline, plan, domainOptions, controls, {
-    ...context,
-    hooks,
-  });
+  const placed =
+    placement && !context.executionJournal
+      ? childPlacement(context)?.({
+          pipeline,
+          plan,
+          options: domainOptions,
+          controls,
+          context,
+          ...placement,
+        })
+      : undefined;
+  const result = await (placed ??
+    executeCompiledChild(pipeline, plan, domainOptions, controls, {
+      ...context,
+      hooks,
+    }));
   if (result.status !== "completed") {
     const { failureLocation, message } = firstChildFailure(result);
     throw new PipelineExecutionError(
@@ -372,23 +387,27 @@ export function createSingleChildRunner<TParentOptions extends object>(
     const childHooks = hasProgressObserver(context)
       ? createSingleChildProgress(childPlan, context.reportProgress)
       : {};
+    const runtime = childContext(
+      context,
+      {
+        pipelineId: config.pipeline.id,
+        stepId: config.stepId,
+        itemKey: config.itemKey,
+        iterationIndex: config.iterationIndex,
+      },
+      controls.dryRun === true
+    );
     const childResult = await runChildPipeline(
       config.pipeline,
       domainOptions,
       controls,
-      childContext(
-        context,
-        {
-          pipelineId: config.pipeline.id,
-          stepId: config.stepId,
-          itemKey: config.itemKey,
-          iterationIndex: config.iterationIndex,
-        },
-        controls.dryRun === true
-      ),
+      runtime,
       childHooks,
       `Child pipeline ${config.pipeline.id} `,
-      childPlan
+      childPlan,
+      config.iterationIndex === undefined
+        ? { stepId: config.stepId, reportProgress: context.reportProgress }
+        : undefined
     );
 
     return config.mapResult

@@ -13,6 +13,7 @@ import { createLaunchTracing, type LaunchTracing } from "./launch-tracing.js";
 import type { RunJob, HostedRunTraceContext, StudioIngest } from "./run-contract.js";
 import { BatchingTraceExporter } from "./trace-batching.js";
 import { withRetry } from "../utilities/retry.js";
+import { CHILD_PLACEMENT, type ChildPlacement } from "../core/child-placement.js";
 
 /**
  * Durable Object SQLite rejects a string or row over 2 MB. These trace strings have no
@@ -104,6 +105,12 @@ async function admitted(ingest: StudioIngest, launchId: string): Promise<boolean
   }
 }
 
+export type HostedChildPlacement = (
+  job: RunJob,
+  deadlineAtMs: number,
+  flush: () => Promise<void>
+) => ChildPlacement;
+
 export async function runHostedJob(options: {
   readonly job: RunJob;
   readonly commands: ReadonlyMap<string, HostedCommand>;
@@ -116,6 +123,7 @@ export async function runHostedJob(options: {
     deadlineAtMs: number
   ) => PipelineTraceExporter;
   readonly tracing?: PipelineTraceExporterOptions<HostedRunTraceContext>;
+  readonly placeChild?: HostedChildPlacement;
 }): Promise<void> {
   const { job, ingest, controller, wrapExporter } = options;
   const entry = options.commands.get(job.commandId);
@@ -163,6 +171,7 @@ export async function runHostedJob(options: {
     exporter: batches,
     wrapExporter,
     tracing: options.tracing,
+    placeChild: options.placeChild,
   });
   if (history.status === "unconfirmed") {
     // The run may be fully recorded locally yet unknown to Studio; tell it, best effort.
@@ -200,6 +209,7 @@ export async function executeHostedRun(options: {
     deadlineAtMs: number
   ) => PipelineTraceExporter;
   readonly tracing?: PipelineTraceExporterOptions<HostedRunTraceContext>;
+  readonly placeChild?: HostedChildPlacement;
 }): Promise<{ exitCode: number; history: HostedRunHistory }> {
   const { job, entry, controller, output, wrapExporter } = options;
   const deadlineAtMs = Date.now() + job.maxRunDurationMs;
@@ -219,7 +229,7 @@ export async function executeHostedRun(options: {
       }
       return options.exporter.export(boundHostedEvent(event));
     },
-    flush: () => options.exporter.flush(),
+    flush: async () => options.exporter.flush(),
   };
   const deadline = setTimeout(
     () =>
@@ -240,14 +250,18 @@ export async function executeHostedRun(options: {
       exporters: [exporter],
       wrapExporter: wrapExporter && ((destination) => wrapExporter(destination, deadlineAtMs)),
     });
+    const context = {
+      tracing: launchTracing.prepare(),
+      [CHILD_PLACEMENT]: options.placeChild?.(job, deadlineAtMs, async () =>
+        options.exporter.flush()
+      ),
+    };
     exitCode = await executeHostedCommand(
       entry.command,
       options.values,
       output,
       controller.signal,
-      {
-        tracing: launchTracing.prepare(),
-      }
+      context
     );
   } finally {
     try {

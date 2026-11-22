@@ -12,6 +12,7 @@ export interface RunJob {
   readonly values: Record<string, unknown>;
   /** When supplied, the target must refuse execution under another deployment. */
   readonly deploymentId?: string;
+  readonly target?: "local";
   /** Target-approved cooperative budget, starting after admission is confirmed. */
   readonly maxRunDurationMs: number;
 }
@@ -20,6 +21,7 @@ export const HOSTED_FAILURE_REASONS = [
   "deployment_unavailable",
   "host_failure",
   "host_terminated",
+  "runner_interrupted",
 ] as const;
 export type HostedFailureReason = (typeof HOSTED_FAILURE_REASONS)[number];
 

@@ -597,6 +597,11 @@ receipt or status object. Following exits with `0` for success, `6` for failure
 or unknown outcome, and `7` for cancellation or a local interruption.
 See [self-hosted authentication and status](./deploy-cloudflare.md#submit-and-follow-from-the-cli).
 
+`tubeless remote runner --host <origin> --deployment-id <id> [--project <file>]`
+starts an enrolled local Bun runner. The project defaults to `tubeless.project.ts`
+and must supply definitions from the same deployment revision. Use the runner's
+dedicated Access service credential. See [runner placement](./deploy-cloudflare.md#place-work-on-a-local-bun-runner).
+
 ## Tubeless Cloud
 
 The same executable supplies `auth` and `cloud` commands. Create or join a workspace,

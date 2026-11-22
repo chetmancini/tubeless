@@ -251,6 +251,12 @@ For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node
 - Submit to the same self-hosted deployment with `tubeless remote run <command-id> --host <origin>`.
   Follow or cancel by the returned execution ID. Set an immutable `deploymentId`
   and use a Cloudflare Access service token. See [the CLI setup](./deploy-cloudflare.md#submit-and-follow-from-the-cli).
+- For a local Bun target, list versioned pipeline IDs in `createCloudflareApp`'s
+  `localRunner.pipelines`, start `tubeless remote runner` with the same deployment
+  revision and its own Access service token, and submit through the existing
+  launch entry points. A Worker pipeline can hand off a listed `fromPipeline`
+  child. Keep Node-only handlers in the separate runner project. See
+  [runner placement](./deploy-cloudflare.md#place-work-on-a-local-bun-runner).
 - Never put secrets in `cloudflare.config.ts` text bindings. Every user Access
   admits sees all history and commands.
 

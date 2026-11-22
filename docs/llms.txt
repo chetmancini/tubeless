@@ -43,6 +43,7 @@ Hosting:
 
 - Host-owned execution recovery: ./execution-journal.md
 - Deploy to Cloudflare: ./deploy-cloudflare.md
+- Cloudflare and local Bun runner placement: ./deploy-cloudflare.md#place-work-on-a-local-bun-runner
 - Airflow: ./airflow.md
 - Temporal: ./temporal.md
 - Inngest: ./inngest.md

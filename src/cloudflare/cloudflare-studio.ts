@@ -11,6 +11,9 @@ import { openDurableRunStore, type DurableRunStore } from "./cloudflare-run-stor
 import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
 import { PipelineRunStudioHistoryBusyError } from "../studio/server/state.js";
 import { HOST_TERMINATED } from "./cloudflare-run-contract.js";
+import { CloudflareRunnerQueue } from "./cloudflare-runner-queue.js";
+import { serveRunnerRequest } from "./cloudflare-runner-api.js";
+import type { RunnerJob } from "../hosting/runner-protocol.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import {
   createHostedLaunchAdmission,
@@ -41,6 +44,7 @@ export interface StudioObjectDependencies {
   readonly startTimeoutMs?: number;
   readonly projectId: string;
   readonly deploymentId?: string;
+  readonly localPipelines?: ReadonlyMap<string, string>;
   readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
@@ -49,6 +53,7 @@ export class StudioObjectCore implements StudioIngest {
   readonly #events: DurableRunStore;
   readonly #coordinator: HostedRunCoordinator;
   readonly #ingest: StudioIngest;
+  readonly #runners: CloudflareRunnerQueue;
   readonly #now: () => number;
   readonly #admission: ReturnType<typeof createHostedLaunchAdmission>;
   #host: Promise<StudioHost> | undefined;
@@ -56,7 +61,7 @@ export class StudioObjectCore implements StudioIngest {
   constructor(private readonly deps: StudioObjectDependencies) {
     this.#now = deps.now ?? Date.now;
     this.#events = openDurableRunStore(deps.storage);
-    this.#store = new SqliteHostedLaunchStore(deps.storage, this.#events);
+    this.#store = new SqliteHostedLaunchStore(deps.storage, this.#events, this.#now);
     const { launcher, ingest } = createTrustedHostedRun(
       {
         commands: deps.commands,
@@ -77,6 +82,14 @@ export class StudioObjectCore implements StudioIngest {
     );
     this.#coordinator = launcher;
     this.#ingest = ingest;
+    this.#runners = new CloudflareRunnerQueue({
+      storage: deps.storage,
+      store: this.#store,
+      events: this.#events,
+      ingest,
+      now: this.#now,
+      schedule: () => this.#scheduleReconcile(),
+    });
     this.#admission = createHostedLaunchAdmission({
       projectId: deps.projectId,
       deploymentId: deps.deploymentId,
@@ -87,23 +100,40 @@ export class StudioObjectCore implements StudioIngest {
         reserve: (request) =>
           deps.storage.transaction(async () => {
             const reservation = await this.#store.admissions.reserve(request);
-            if (reservation.created) await this.#scheduleReconcile();
+            if (!reservation.created) return reservation;
+            const { job } = request;
+            if (job.target === "local") {
+              const definitionId = deps.localPipelines?.get(job.commandId);
+              if (job.deploymentId === undefined || definitionId === undefined)
+                throw new Error("Cannot queue an unpinned local runner job.");
+              this.#runners.enqueue({
+                id: job.launchId,
+                kind: "root",
+                launchId: job.launchId,
+                deploymentId: job.deploymentId,
+                pipelineId: job.commandId,
+                definitionId,
+                run: job,
+              });
+            }
+            await this.#scheduleReconcile();
             return reservation;
           }),
       },
       maxRunDurationMs: deps.maxRunDurationMs,
       now: this.#now,
       inputPolicy: deps.inputPolicy,
+      localPipelines: deps.localPipelines,
     });
   }
 
   async #scheduleReconcile(): Promise<void> {
     const pending = await this.deps.storage.getAlarm();
-    const earliest = this.#store.executions.nextAlarm(
-      this.deps.maxRunDurationMs,
-      RECONCILE_GRACE_MS
+    const earliest = Math.min(
+      this.#store.executions.nextAlarm(this.deps.maxRunDurationMs, RECONCILE_GRACE_MS) ?? Infinity,
+      this.#runners.nextAlarm() ?? Infinity
     );
-    if (earliest === undefined) {
+    if (earliest === Infinity) {
       if (pending !== null) await this.deps.storage.deleteAlarm();
     } else if (pending === null || pending <= this.#now() || pending > earliest) {
       await this.deps.storage.setAlarm(earliest);
@@ -115,14 +145,62 @@ export class StudioObjectCore implements StudioIngest {
   }
 
   getExecution(launchId: string) {
-    return this.#store.executions.status(launchId);
+    const status = this.#store.executions.status(launchId);
+    if (!status) return undefined;
+    if (status.target === undefined && this.deps.localPipelines !== undefined)
+      return { ...status, target: "cloudflare" as const };
+    if (status.target !== "local" || status.state !== "queued") return status;
+    return {
+      ...status,
+      reason: this.#runners.queuedReason(
+        launchId,
+        this.deps.deploymentId,
+        this.deps.localPipelines
+      ),
+    };
   }
 
   cancelExecution(launchId: string) {
     return this.deps.storage.transaction(async () => {
       const executions = this.#store.executions;
-      if (executions.requestCancellation(launchId, this.#now())) await this.#scheduleReconcile();
-      return executions.status(launchId);
+      if (executions.requestCancellation(launchId, this.#now())) {
+        this.#runners.cancel(launchId);
+        await this.#scheduleReconcile();
+      }
+      return this.getExecution(launchId);
+    });
+  }
+
+  serveRunner(request: Request): Promise<Response> {
+    const { projectId, deploymentId, localPipelines } = this.deps;
+    if (deploymentId === undefined || localPipelines === undefined)
+      throw new Error("Local runner unavailable.");
+    return serveRunnerRequest(request, this.#runners, projectId, deploymentId, localPipelines);
+  }
+
+  enqueueStage(job: RunnerJob & { kind: "stage" }): Promise<void> {
+    return this.deps.storage.transaction(async () => {
+      const status = this.getExecution(job.launchId);
+      if (
+        status?.state !== "running" ||
+        status.cancellationRequested ||
+        job.deploymentId !== this.deps.deploymentId ||
+        job.definitionId !== this.deps.localPipelines?.get(job.pipelineId)
+      )
+        throw new Error("The execution cannot queue this stage.");
+      this.#runners.enqueue(job);
+      await this.#scheduleReconcile();
+    });
+  }
+
+  readStage(launchId: string, id: string, afterId: number) {
+    return this.#runners.readStage(launchId, id, afterId);
+  }
+
+  cancelStage(launchId: string, id: string): Promise<void> {
+    return this.deps.storage.transaction(async () => {
+      this.#runners.cancel(launchId, id);
+      await this.#scheduleReconcile();
     });
   }
 
@@ -164,20 +242,34 @@ export class StudioObjectCore implements StudioIngest {
     return this.#ingest.admit(launchId);
   }
   appendEvents(launchId: string, sequence: number, events: PipelineTraceEvent[]) {
-    return this.#ingest.appendEvents(launchId, sequence, events);
+    return this.deps.storage.transaction(async () => {
+      const result = await this.#ingest.appendEvents(launchId, sequence, events);
+      if (
+        result.accepted &&
+        events.some(
+          (event) => event.name === "pipeline.completed" && event.parentRunId === undefined
+        )
+      )
+        this.#runners.clearFinishedLaunch(launchId);
+      return result;
+    });
   }
   reportFailure(launchId: string, message: string, reason?: HostedFailureReason) {
-    return this.#ingest.reportFailure(launchId, message, reason);
+    return this.deps.storage.transaction(async () => {
+      await this.#ingest.reportFailure(launchId, message, reason);
+      this.#runners.clearFinishedLaunch(launchId);
+    });
   }
 
   async alarm(): Promise<void> {
     const now = this.#now();
     const executions = this.#store.executions;
     for (const id of executions.stale(now, this.deps.maxRunDurationMs, RECONCILE_GRACE_MS)) {
-      await this.#ingest.reportFailure(id, HOST_TERMINATED, "host_terminated");
+      await this.reportFailure(id, HOST_TERMINATED, "host_terminated");
     }
     // Commit the delivery snapshot and its next alarm before crossing RPC.
     const actions = await this.deps.storage.transaction(async () => {
+      await this.#runners.expire();
       const pending = executions.takeDue(now, now + DELIVERY_RETRY_MS);
       await this.#scheduleReconcile();
       return pending;

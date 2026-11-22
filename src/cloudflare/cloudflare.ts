@@ -1,3 +1,4 @@
+import { isAuthoredPipelineId } from "../core/pipeline-ids.js";
 import type { HostedFailureReason, RunJob, StudioIngest } from "../hosting/run-contract.js";
 import { DurableObject } from "cloudflare:workers";
 import type { AnyProjectPipeline, PipelineProject } from "../project/pipeline-project.js";
@@ -19,6 +20,9 @@ import {
   type HostedExecutionStatus as CloudflareExecutionStatus,
 } from "../hosting/execution-status.js";
 import { isExecutionPath, serveExecutionRequest } from "./cloudflare-execution-api.js";
+import { isRunnerPath } from "./cloudflare-runner-api.js";
+import { placeCloudflareChild, type RunnerStageStore } from "./cloudflare-child-placement.js";
+import type { RunnerJob } from "../hosting/runner-protocol.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import type {
   LaunchActor,
@@ -77,6 +81,12 @@ export interface CloudflareAppOptions<TEnv = unknown> {
   readonly deploymentId?: string;
   /** Input values saved in Studio history, by command id and parameter key. Defaults to none. */
   readonly recordInputs?: LaunchInputPolicy;
+  /** Registered pipelines that run on the enrolled local Bun runner. Others run on the Worker. */
+  readonly localRunner?: {
+    /** Client ID of the Access service token enrolled for local work. */
+    readonly serviceId: string;
+    readonly pipelines: readonly string[];
+  };
   /** Extra destinations composed with project exporters and Studio ingestion. */
   readonly tracing?: PipelineTraceExporterOptions<CloudflareTraceContext<TEnv>>;
   readonly limits?: {
@@ -125,7 +135,8 @@ interface NamespaceLike<T> {
   getByName(name: string): T;
 }
 
-interface StudioStub extends StudioIngest {
+interface StudioStub extends StudioIngest, RunnerStageStore {
+  serveRunner(request: Request): Promise<Response>;
   serve(request: Request, actor?: LaunchActor): Promise<Response>;
   launch(request: HostedLaunchRequest): Promise<CloudflareLaunchResult>;
   getLaunch(launchId: string): Promise<CloudflareLaunchStatus | undefined>;
@@ -190,6 +201,24 @@ export function createCloudflareApp<TEnv = unknown>(
   const commands = new Map(
     hostedProjectCommands(project).map((entry) => [entry.descriptor.id, entry])
   );
+  const runnerService = options.localRunner?.serviceId;
+  let localPipelines: ReadonlyMap<string, string> | undefined;
+  if (options.localRunner !== undefined) {
+    if (!deploymentId || !runnerService || runnerService.length > 1024)
+      throw new Error("Local runner placement requires deploymentId and an Access serviceId.");
+    if (options.localRunner.pipelines.length < 1 || options.localRunner.pipelines.length > 200)
+      throw new Error("Configure 1–200 local runner pipelines.");
+    localPipelines = new Map(
+      options.localRunner.pipelines.map((id) => {
+        const identity = commands.get(id)?.command.plan().definition?.identity;
+        if (!isAuthoredPipelineId(id) || !identity?.implementationVersion)
+          throw new Error(
+            `Local runner pipeline ${JSON.stringify(id)} requires a registered, versioned definition.`
+          );
+        return [id, identity.definitionId];
+      })
+    );
+  }
   const inputPolicy = launchInputPolicy(commands, options.recordInputs);
   const submit = (
     studio: StudioStub,
@@ -244,6 +273,23 @@ export function createCloudflareApp<TEnv = unknown>(
       }
       try {
         const studio = studioBinding(env);
+        if (isRunnerPath(url.pathname)) {
+          if (!runnerService || actor?.kind !== "service" || actor.id !== runnerService)
+            return errorResponse(
+              403,
+              "runner_access_denied",
+              "An enrolled Access service identity is required.",
+              "Use the enrolled runner service token."
+            );
+          return await studio.serveRunner(request);
+        }
+        if (actor?.kind === "service" && actor.id === runnerService)
+          return errorResponse(
+            403,
+            "runner_access_denied",
+            "The runner credential is scoped to runner operations.",
+            "Use a separate Access identity for executions or Studio."
+          );
         if (isExecutionPath(url.pathname)) {
           if (config && !actor)
             return errorResponse(
@@ -290,6 +336,7 @@ export function createCloudflareApp<TEnv = unknown>(
         projectId: project.id,
         deploymentId,
         inputPolicy,
+        localPipelines,
         runStub: (launchId) => env.TUBELESS_RUN.getByName(launchId),
       });
     }
@@ -313,6 +360,22 @@ export function createCloudflareApp<TEnv = unknown>(
 
     cancelExecution(launchId: string) {
       return this.#core.cancelExecution(launchId);
+    }
+
+    serveRunner(request: Request) {
+      return this.#core.serveRunner(request);
+    }
+
+    enqueueStage(job: RunnerJob & { kind: "stage" }) {
+      return this.#core.enqueueStage(job);
+    }
+
+    readStage(launchId: string, id: string, afterId: number) {
+      return this.#core.readStage(launchId, id, afterId);
+    }
+
+    cancelStage(launchId: string, id: string) {
+      return this.#core.cancelStage(launchId, id);
     }
 
     admit(launchId: string): Promise<{ admitted: boolean }> {
@@ -351,6 +414,18 @@ export function createCloudflareApp<TEnv = unknown>(
         commands,
         deploymentId,
         ingest: () => studioBinding(env),
+        placeChild:
+          localPipelines && deploymentId
+            ? (job, deadlineAtMs, flush) =>
+                placeCloudflareChild({
+                  definitions: localPipelines,
+                  launchId: job.launchId,
+                  deploymentId,
+                  deadlineAtMs,
+                  flush,
+                  store: () => studioBinding(env),
+                })
+            : undefined,
         tracing:
           options.tracing === undefined
             ? undefined

@@ -51,6 +51,13 @@ export function LaunchHistory({
         <dd>
           <code>{launch.launchId}</code>
         </dd>
+        {launch.deploymentId && (
+          <>
+            <dt>Runner</dt>
+            <dd>{launch.target === "local" ? "Local Bun" : "Cloudflare"}</dd>
+          </>
+        )}
+
         <dt>Deployment</dt>
         <dd>
           <code>{launch.deploymentId ?? "Not recorded"}</code>
