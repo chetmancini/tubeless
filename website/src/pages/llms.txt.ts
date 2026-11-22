@@ -6,15 +6,15 @@ import { GITHUB_BLOB, absUrl } from "../lib/paths";
 export const GET: APIRoute = () => {
   const body = `# tubeless
 
-> A TypeScript library for data pipelines and multi-step CLI workflows, with no runtime dependencies.
+> Typed, previewable pipelines for TypeScript. Run them locally, or schedule them on Tubeless Cloud. No runtime dependencies.
 
 Version: ${PACKAGE.version}
 Full documentation: ${absUrl("llms-full.txt")}
 
 Tubeless is a TypeScript library by Chet Mancini. Run pipelines from your code or
 the CLI for data imports, validation and publication jobs, or scripts that need
-progress reporting. Pipelines run in your process. Use an external workflow engine
-when you need persisted execution, crash recovery, or distributed scheduling.
+progress reporting. Pipelines run in your process. Tubeless Cloud schedules the
+same files. Use a host engine when a job must survive a crash or outlive one run.
 
 Read the guide and simplest example that fits your task before writing a pipeline. Import public package
 entrypoints, preserve stable IDs, and mark external side effects dryRun: "skip".

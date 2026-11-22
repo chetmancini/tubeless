@@ -1,7 +1,7 @@
 {
   "name": "tubeless",
   "version": "0.4.6",
-  "description": "Typed pipelines and bounded conversational workspace agents with inspectable execution graphs.",
+  "description": "Typed, previewable pipelines for TypeScript. Run them locally, or schedule them on Tubeless Cloud.",
   "author": {
     "name": "Chet Mancini",
     "url": "https://github.com/chetmancini"
