@@ -10,7 +10,7 @@
         "openSqliteAgentCheckpointStore",
         "SqliteAgentCheckpointStore"
       ],
-      "sha256": "2ed1e458a532d52b63e0ffad3394d50b4aad024fa6dfded6c6a6eb18a32cb411",
+      "sha256": "3cd732dac8b18e9a9671eedfa4dafcb940e3dfb0ac09eac1c5561c422b5ec2ed",
       "specifier": "tubeless/agent/node"
     },
     {
@@ -61,7 +61,7 @@
         "plainAgentCheckpointCodec",
         "ToolError"
       ],
-      "sha256": "2efd72d0757849fc5490702dd4a850bfa743bef7009ea999613adb7f734e064a",
+      "sha256": "efa2bdce7bda762114590573e3336c9be12ad534f1c577fd84fc4ad71c633ab3",
       "specifier": "tubeless/agent"
     },
     {
@@ -98,6 +98,7 @@
         "PipelineErrorPhase",
         "PipelineExecutionContext",
         "PipelineExecutionError",
+        "PipelineExecutionJournal",
         "PipelineFanOutDiagnostics",
         "PipelineFanOutFailure",
         "PipelineHooks",
@@ -153,7 +154,7 @@
         "StepCacheStore",
         "StepSkipDecision"
       ],
-      "sha256": "46c62606ad112eeeac4b47e591acc9ccef049342fe595cba12d1cb1597ec96d1",
+      "sha256": "571a4c0cf05046eb1c62484fb6ae5f1d860c4757df32774dca711dedfdf0a583",
       "specifier": "tubeless"
     },
     {
@@ -193,7 +194,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "15e6ee0d1f2930a53b82e7940b51598c756d091971f1363645c01c6455f4c648",
+      "sha256": "69a27f3e5f0112cdd5dc81f5f260f1929ad45cba6e22fc214455f031170682b5",
       "specifier": "tubeless/cli"
     },
     {
@@ -230,7 +231,7 @@
         "WorkerThreadContext",
         "writeJson"
       ],
-      "sha256": "fc7780f736433963e7788eac1d834c93395ad4eb7c297fad5b7993334323c52f",
+      "sha256": "0c29da8e248dce0e229b11e640178667257b48498ad3b8e7bbe0a71b1fdc2231",
       "specifier": "tubeless/node"
     },
     {
@@ -265,7 +266,7 @@
         "ProjectRegistry",
         "ProjectTraceContext"
       ],
-      "sha256": "bc32b28d2ae7f515317b08d1b136f9402cb22a950191ccf3a190951cca295431",
+      "sha256": "a705ea59cca0b7d7404a2de02ffaa30e0c837911ca0519b0ffe0693a28912d1d",
       "specifier": "tubeless/project"
     },
     {
@@ -288,7 +289,7 @@
         "PipelineTestRuntimeOptions",
         "PipelineTestSleep"
       ],
-      "sha256": "802d233d15b216ef71d0797268716f29d20bf1bb8b55535cec1406b5072e5445",
+      "sha256": "146ad10eae54b5d9fb0f101b01bb9a7687dcb4fe6a9e41918ca7db1139c8913a",
       "specifier": "tubeless/testing"
     },
     {
@@ -305,7 +306,7 @@
     {
       "declaration": "./dist/agent/openai.d.ts",
       "exports": ["openaiModel", "OpenAIModelOptions"],
-      "sha256": "4de40f50705cf843ef13968c5ce67e7e291a9e961c9dee0d3743a6551c81188a",
+      "sha256": "dbae2951e4e3362b03a63437e5048d95173297695db5f74690454ec2e31c3a02",
       "specifier": "tubeless/agent/openai"
     },
     {
@@ -319,13 +320,13 @@
         "McpTool",
         "McpToolResult"
       ],
-      "sha256": "2eb7947d803bf1ce0b2b1ea7f4be38a909c7913cea12c41d0c29cd0af996cf45",
+      "sha256": "b02f421e7ca32e9f33b7299b458e67f4a19ab067c0ed2c9c539ad5855091892b",
       "specifier": "tubeless/agent/mcp"
     },
     {
       "declaration": "./dist/agent/anthropic.d.ts",
       "exports": ["anthropicModel", "AnthropicModelOptions"],
-      "sha256": "359ecc4cb51b0eb04d3dde2811198e1b4393c32e09f7af95332b1c0755608620",
+      "sha256": "be6b25a53707a5962b0894db3a09c6413fb7caf2bbfbe9a4ef45959ae630a0b1",
       "specifier": "tubeless/agent/anthropic"
     },
     {
@@ -353,13 +354,13 @@
         "WorkerLoaderCodemodeOptions",
         "WorkerLoaderLike"
       ],
-      "sha256": "6b1b7f4690039403af0f009c5d7a4bb3c41fb94a39009798e8bcd95d691dca28",
+      "sha256": "f4cf610d49ac94e25203a6b46d32475f8d42a7dab8734ff1dd96a99240e159bc",
       "specifier": "tubeless/cloudflare"
     },
     {
       "declaration": "./dist/cloudflare/cloudflare-cache.d.ts",
       "exports": ["createR2CacheStore", "jsonCacheCodec", "R2BucketLike", "R2ObjectLike"],
-      "sha256": "3db27bcfb8d9135a8a061436cc824d1ea93e4f07a706a56f58c84b14a3e0a673",
+      "sha256": "f36277dcaacff9aaec6d7c3c9b2d28c69ae92b82a7df5659f83a332b5c737c21",
       "specifier": "tubeless/cloudflare/cache"
     },
     {
@@ -405,7 +406,7 @@
     {
       "declaration": "./dist/check/node-check.d.ts",
       "exports": ["NodeCheckExecution", "readNodeCheckPlan", "runNodeCheck"],
-      "sha256": "315e8c3eded67541562631d2a85c04016699feb613e1e32709bb4c81f9d4d610",
+      "sha256": "9e5e96038e09099138a6a84564623473aee92764e4fc3bc2227547c3d45373ed",
       "specifier": "tubeless/node/check"
     }
   ],

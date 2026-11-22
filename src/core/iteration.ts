@@ -109,6 +109,7 @@ export function createIterationRunner<TOptions extends object>(config: Iteration
           pipeline: config.pipeline,
           stepId: config.stepId,
           itemKey: key,
+          iterationIndex: index,
           controls: config.controls,
           mapOptions: () => config.mapOptions(iterationState, inputs, context),
         });

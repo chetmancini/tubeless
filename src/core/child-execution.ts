@@ -1,4 +1,11 @@
 import { childExecutionScope } from "./execution-scope.js";
+import {
+  assertJournalHealthy,
+  bindExecutionJournal,
+  inheritExecutionJournal,
+  journalFailure,
+  withExecutionJournal,
+} from "./execution-journal.js";
 import type { PreparedOptions } from "./prepared-options.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { inMemoryCheckpointStore } from "../utilities/checkpoint-store.js";
@@ -63,6 +70,15 @@ function executeCompiledChild(
 ): Promise<PipelineRun<unknown>> {
   const execute = compiledChildExecute(pipeline);
   if (execute === undefined) {
+    if (context.executionJournal)
+      return withExecutionJournal(context, async () => {
+        throw Object.assign(
+          new Error("Journaled child execution requires a compiled Tubeless pipeline"),
+          {
+            code: "TUBELESS_JOURNAL_UNSUPPORTED_CHILD",
+          }
+        );
+      });
     return pipeline.run(domainOptions, controls, context);
   }
   return execute(plan, domainOptions, controls, context, undefined, preparedOptions);
@@ -128,6 +144,7 @@ type ChildInputs = Record<string, unknown>;
 
 export interface SingleChildExecutionConfig<TParentOptions extends object> {
   stepId: string;
+  iterationIndex?: number;
   itemKey?: string;
   pipeline: ChildPipeline;
   controls?:
@@ -198,27 +215,37 @@ function childTracingOptions(
 
 function childContext(
   context: PipelineStepContext<object>,
-  identity: { pipelineId: string; stepId: string; itemKey?: string },
+  identity: {
+    pipelineId: string;
+    stepId: string;
+    itemKey?: string;
+    iterationIndex?: number;
+  },
   dryRun: boolean,
   traceItemKey = context.trace?.itemKey
 ): PipelineContext {
   return childExecutionScope(
     context,
-    {
-      // A previewed child records into a copy, so its dry run cannot mark parent work done.
-      checkpoint:
-        dryRun && context.checkpoint
-          ? inMemoryCheckpointStore(context.checkpoint.entries())
-          : context.checkpoint,
-      correlationId: context.correlationId,
-      cwd: context.cwd,
-      log: context.log,
-      now: context.now,
-      parentRunId: context.runId,
-      signal: context.signal,
-      sleep: context.sleep,
-      tracing: childTracingOptions(context, identity.stepId, traceItemKey),
-    },
+    inheritExecutionJournal(
+      context,
+      {
+        // A previewed child records into a copy, so its dry run cannot mark parent work done.
+        checkpoint:
+          dryRun && context.checkpoint
+            ? inMemoryCheckpointStore(context.checkpoint.entries())
+            : context.checkpoint,
+        correlationId: context.correlationId,
+        cwd: context.cwd,
+        log: context.log,
+        now: context.now,
+        parentRunId: context.runId,
+        signal: context.signal,
+        sleep: context.sleep,
+        tracing: childTracingOptions(context, identity.stepId, traceItemKey),
+      },
+      identity,
+      dryRun
+    ),
     identity
   );
 }
@@ -355,6 +382,7 @@ export function createSingleChildRunner<TParentOptions extends object>(
           pipelineId: config.pipeline.id,
           stepId: config.stepId,
           itemKey: config.itemKey,
+          iterationIndex: config.iterationIndex,
         },
         controls.dryRun === true
       ),
@@ -391,6 +419,7 @@ function settleMappedOutcomes(
   context: PipelineStepContext<object>
 ): unknown[] {
   const { outcomes, itemCount, stopped, schedulerFailure } = fanOut;
+  assertJournalHealthy(context);
   const failures = outcomes.filter(
     (outcome): outcome is Extract<MappedOutcome, { ok: false }> => !outcome.ok
   );
@@ -454,6 +483,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
         `Mapped child pipeline ${config.pipeline.id} received duplicate item keys: ${duplicateKeys.join(", ")}`
       );
     }
+    await bindExecutionJournal(context, ["fan-out", config.stepId], { items, keys });
     const concurrency = isConcurrencyFunction(config.concurrency)
       ? config.concurrency(inputs, context)
       : (config.concurrency ?? 1);
@@ -479,6 +509,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
         const key = keys[itemIndex];
         progress?.start(key);
         try {
+          assertJournalHealthy(context);
           throwIfAborted(context.signal, `Mapped child pipeline ${config.pipeline.id}`);
           const domainOptions = config.mapOptions(item, itemIndex, inputs, context);
           const configuredControls =
@@ -523,6 +554,7 @@ export function createMappedChildRunner<TParentOptions extends object>(
           const cancelled = isPipelineCancellation(cause, context);
           progress?.fail(key, cause, cancelled);
           settled[itemIndex] = { error: cause, key, index: itemIndex, ok: false };
+          if (journalFailure(context)) throw cause;
           if (policy === "stop" && !cancelled) throw stopScheduling;
         }
       }

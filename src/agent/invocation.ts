@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { setExecutionScope } from "../core/execution-scope.js";
+import { journalAgentStore, withExecutionJournal } from "../core/execution-journal.js";
 import { isPipelineCancellation } from "../core/pipeline-execution-error.js";
 import type { PipelineDefinitionSnapshot, PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
@@ -43,10 +45,11 @@ export async function runAgentInvocation<Options extends object, State>(
 ): Promise<unknown> {
   throwIfAborted(context.signal, "Agent workspace");
   const parent = agentScope(context);
-  const durability = context.dryRun ? undefined : config.durability;
   const inherited = context.dryRun ? undefined : parent?.journal;
+  const durability = context.dryRun ? undefined : config.durability;
+  const recovering = inherited || durability || (!context.dryRun && context.executionJournal);
   if (
-    (durability || inherited) &&
+    recovering &&
     (typeof config.implementationVersion !== "string" || !config.implementationVersion.trim())
   )
     throw agentError(
@@ -69,16 +72,22 @@ export async function runAgentInvocation<Options extends object, State>(
   if (typeof cwd !== "string" || !cwd.trim() || cwd.length > 4096)
     throw new Error("Agent environment requires a nonblank cwd of at most 4096 characters");
   throwIfAborted(context.signal, "Agent workspace");
-  const scoped = { ...context, cwd };
+  const scoped = { ...context, cwd, executionJournal: undefined, executionJournalPath: undefined };
   const transcript =
     config.transcript && new AgentTranscriptCapture(config.transcript, config.id, scoped);
   const journal =
     inherited ??
-    (durability
-      ? await AgentCheckpointSession.open(
-          durability.store,
-          typeof durability.key === "function" ? durability.key(context.options) : durability.key,
-          durability.codec
+    (recovering
+      ? await withExecutionJournal(context, () =>
+          AgentCheckpointSession.open(
+            journalAgentStore(context, durability?.store),
+            durability
+              ? typeof durability.key === "function"
+                ? durability.key(context.options)
+                : durability.key
+              : `tubeless:journal:v1:${createHash("sha256").update(JSON.stringify(context.executionJournalPath)).digest("hex")}`,
+            durability?.codec
+          )
         )
       : undefined);
   try {
@@ -93,18 +102,20 @@ export async function runAgentInvocation<Options extends object, State>(
     );
     setExecutionScope(scoped, scope);
     if (journal) {
-      const saved = await journal.enter(
-        scope.agentKey,
-        {
-          definition: JSON.stringify(config.definition.identity),
-          implementationVersion: config.implementationVersion,
-          options: context.options,
-          environment: environment.id,
-          cwd,
-          cache: context.cachePolicy ?? "use",
-        },
-        { depth: scope.depth, limits: config.limits },
-        () => initialAgentExecution(() => config.initialState(context.options))
+      const saved = await withExecutionJournal(context, () =>
+        journal.enter(
+          scope.agentKey,
+          {
+            definition: JSON.stringify(config.definition.identity),
+            implementationVersion: config.implementationVersion,
+            options: context.options,
+            environment: environment.id,
+            cwd,
+            cache: context.cachePolicy ?? "use",
+          },
+          { depth: scope.depth, limits: config.limits },
+          () => initialAgentExecution(() => config.initialState(context.options))
+        )
       );
       if (saved.phase === "completed") {
         if (config.onCompletedReplay) {

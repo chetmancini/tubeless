@@ -6,6 +6,8 @@ export const STEP_REMOTE: unique symbol = Symbol("tubeless.stepRemote");
 
 export const STEP_CACHE: unique symbol = Symbol("tubeless.stepCache");
 export const STEP_AGENT: unique symbol = Symbol("tubeless.stepAgent");
+/** Application-owned input readers may wait without holding leaf execution permits. */
+export const STEP_INPUT: unique symbol = Symbol("tubeless.stepInput");
 
 /** Internal orchestration steps do not hold leaf execution permits. */
 export const STEP_ORCHESTRATION: unique symbol = Symbol("tubeless.stepOrchestration");
