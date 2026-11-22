@@ -7,10 +7,11 @@ export interface SqlStorageLike {
 export interface DurableStorageLike {
   readonly sql: SqlStorageLike;
   transactionSync<T>(fn: () => T): T;
+  transaction<T>(fn: () => Promise<T>): Promise<T>;
   get<T>(key: string): Promise<T | undefined>;
   put(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<boolean>;
   getAlarm(): Promise<number | null>;
   setAlarm(scheduledTimeMs: number): Promise<void>;
   deleteAlarm(): Promise<void>;
-  deleteAll(): Promise<void>;
 }

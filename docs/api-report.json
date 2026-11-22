@@ -335,6 +335,7 @@
         "CloudflareApp",
         "CloudflareAppOptions",
         "CloudflareDurableObjectClass",
+        "CloudflareExecutionStatus",
         "CloudflareLaunchActor",
         "CloudflareLaunchOptions",
         "CloudflareLaunchResult",
@@ -354,7 +355,7 @@
         "WorkerLoaderCodemodeOptions",
         "WorkerLoaderLike"
       ],
-      "sha256": "f4cf610d49ac94e25203a6b46d32475f8d42a7dab8734ff1dd96a99240e159bc",
+      "sha256": "e798e33dd297cb2435832e0b5dc16cd191add6da7c3e28d63e912c7320950225",
       "specifier": "tubeless/cloudflare"
     },
     {

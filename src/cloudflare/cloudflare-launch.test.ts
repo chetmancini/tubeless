@@ -26,21 +26,26 @@ function setup(
     commands?: typeof commands;
     maxRunDurationMs?: number;
     recordInputs?: LaunchInputPolicy;
+    runs?: Map<string, RunObjectCore>;
+    cancel?: (run: RunObjectCore | undefined) => Promise<boolean>;
   } = {}
 ) {
   const storage = options.storage ?? createFakeDurableStorage();
   const deploymentId = options.deploymentId ?? "release-1";
   const catalog = options.commands ?? commands;
-  const runs = new Map<string, RunObjectCore>();
+  const runs = options.runs ?? new Map<string, RunObjectCore>();
   let studio!: StudioObjectCore;
   const start = vi.fn(async (job: RunJob) => {
-    const run = new RunObjectCore({
-      storage: createFakeDurableStorage(),
-      commands: catalog,
-      deploymentId,
-      ingest: () => studio,
-    });
-    runs.set(job.launchId, run);
+    let run = runs.get(job.launchId);
+    if (!run) {
+      run = new RunObjectCore({
+        storage: createFakeDurableStorage(),
+        commands: catalog,
+        deploymentId,
+        ingest: () => studio,
+      });
+      runs.set(job.launchId, run);
+    }
     if (options.start) await options.start(job, run);
     else await run.start(job);
   });
@@ -53,7 +58,10 @@ function setup(
     maxRunDurationMs: options.maxRunDurationMs ?? 60_000,
     now: options.now,
     inputPolicy: launchInputPolicy(catalog, options.recordInputs),
-    runStub: () => ({ start, cancel: () => false }),
+    runStub: (id) => ({
+      start,
+      cancel: () => options.cancel?.(runs.get(id)) ?? runs.get(id)?.cancel() ?? false,
+    }),
   });
   const launch = (
     idempotencyKey = "daily.1",
@@ -80,6 +88,7 @@ describe("Cloudflare programmatic launch admission", () => {
     };
     const receipt = await first.launch("history.1", { name: "Ada" }, "effect", context);
     if (!receipt.accepted) throw new Error("Expected admission");
+    await first.studio.alarm();
     await first.runs.get(receipt.launchId)!.alarm();
     const status = await first.studio.getLaunch(receipt.launchId);
     const detail = async (studio: StudioObjectCore) =>
@@ -133,6 +142,7 @@ describe("Cloudflare programmatic launch admission", () => {
       );
     expect((await clear()).status).toBe(409);
     expect(rows()).toHaveLength(1);
+    await studio.alarm();
     await runs.get(receipt.launchId)!.alarm();
     expect((await clear()).status).toBe(200);
     expect(rows()).toEqual([]);
@@ -154,7 +164,7 @@ describe("Cloudflare programmatic launch admission", () => {
     expect(first.accepted).toBe(true);
     expect(duplicate).toEqual(first);
     expect(first).toEqual({ accepted: true, launchId: expect.any(String) });
-    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).not.toHaveBeenCalled();
     expect(sideEffect).not.toHaveBeenCalled();
     if (!first.accepted) throw new Error("Expected admission");
     expect(await studio.getLaunch(first.launchId)).toEqual({
@@ -162,6 +172,9 @@ describe("Cloudflare programmatic launch admission", () => {
       commandId: "effect",
       state: "starting",
     });
+    expect(studio.getExecution(first.launchId)).toMatchObject({ state: "queued" });
+    await studio.alarm();
+    expect(start).toHaveBeenCalledTimes(1);
     await runs.get(first.launchId)!.alarm();
     expect(sideEffect).toHaveBeenCalledTimes(1);
     expect(await studio.getLaunch(first.launchId)).toMatchObject({
@@ -177,7 +190,7 @@ describe("Cloudflare programmatic launch admission", () => {
   });
 
   it("conflicts on changed command, values, controls, or deployment without consuming a new launch", async () => {
-    const { storage, launch, start } = setup();
+    const { studio, storage, launch, start } = setup();
     const first = await launch();
     expect(first.accepted).toBe(true);
     for (const result of [
@@ -194,9 +207,11 @@ describe("Cloudflare programmatic launch admission", () => {
         code: "idempotency_conflict",
         launchId: "launchId" in first ? first.launchId : undefined,
       });
+    await studio.alarm();
     expect(start).toHaveBeenCalledTimes(1);
     expect(storage.sql.exec("SELECT launch_id FROM tubeless_launches").toArray()).toHaveLength(1);
     expect((await launch("daily.2")).accepted).toBe(true);
+    await studio.alarm();
     expect(start).toHaveBeenCalledTimes(2);
   });
 
@@ -205,6 +220,7 @@ describe("Cloudflare programmatic launch admission", () => {
     const first = setup({ now: () => now });
     const receipt = await first.launch();
     if (!receipt.accepted) throw new Error("Expected admission");
+    await first.studio.alarm();
     await first.runs.get(receipt.launchId)!.alarm();
     const clear = await first.studio.fetch(
       new Request("https://studio.example/api/history", {
@@ -236,6 +252,7 @@ describe("Cloudflare programmatic launch admission", () => {
     values.name = "changed";
     options.idempotencyKey = "changed";
     const receipt = await pending;
+    await studio.alarm();
     expect(start.mock.calls[0][0].values.name).toBe("Ada");
     expect(await launch("original")).toEqual(receipt);
     expect(start).toHaveBeenCalledTimes(1);
@@ -262,13 +279,14 @@ describe("Cloudflare programmatic launch admission", () => {
         entry,
       ])
     );
-    const { launch, runs, start } = setup({ commands: catalog });
+    const { studio, launch, runs, start } = setup({ commands: catalog });
     const receipt = await launch("numbers", { offset: -0, labels: ["a", "b"] }, "numeric");
     if (!receipt.accepted) throw new Error("Expected admission");
     expect(await launch("numbers", { labels: ["a", "b"], offset: 0 }, "numeric")).toEqual(receipt);
     expect(await launch("numbers", { labels: ["b", "a"], offset: 0 }, "numeric")).toMatchObject({
       code: "idempotency_conflict",
     });
+    await studio.alarm();
     await runs.get(receipt.launchId)!.alarm();
     expect(observed).toHaveBeenCalledWith({
       offset: 0,
@@ -312,23 +330,26 @@ describe("Cloudflare programmatic launch admission", () => {
   });
 
   it("does not commit admission when recovery cannot be scheduled", async () => {
-    const { storage, launch, start } = setup();
+    const { studio, storage, launch, start } = setup();
     const setAlarm = storage.setAlarm.bind(storage);
     storage.setAlarm = () => Promise.reject(new Error("alarm unavailable"));
     await expect(launch()).rejects.toThrow("alarm unavailable");
     expect(storage.sql.exec("SELECT * FROM tubeless_launches").toArray()).toEqual([]);
+    expect(storage.sql.exec("SELECT * FROM tubeless_launch_admissions").toArray()).toEqual([]);
+    expect(storage.sql.exec("SELECT * FROM tubeless_executions").toArray()).toEqual([]);
     storage.setAlarm = setAlarm;
     expect((await launch()).accepted).toBe(true);
+    await studio.alarm();
     expect(start).toHaveBeenCalledTimes(1);
   });
 
   it("preserves a committed admission whose reply was lost before dispatch, then reconciles it", async () => {
     let now = 1_000;
     const original = setup({ now: () => now });
-    const transaction = original.storage.transactionSync.bind(original.storage);
-    original.storage.transactionSync = (fn) => {
-      const result = transaction(fn);
-      original.storage.transactionSync = transaction;
+    const transaction = original.storage.transaction.bind(original.storage);
+    original.storage.transaction = async (fn) => {
+      const result = await transaction(fn);
+      original.storage.transaction = transaction;
       throw new Error(`lost admission reply: ${typeof result}`);
     };
     await expect(original.launch()).rejects.toThrow("lost admission reply");
@@ -337,16 +358,21 @@ describe("Cloudflare programmatic launch admission", () => {
     const receipt = await restarted.launch();
     if (!receipt.accepted) throw new Error("Expected admission replay");
     expect(restarted.start).not.toHaveBeenCalled();
-    expect(original.storage.alarmAtMs()).toBe(181_000);
+    expect(original.storage.alarmAtMs()).toBe(1_000);
+    // Queue age does not consume the runner's execution budget.
     now = 181_001;
     await restarted.studio.alarm();
-    expect(await restarted.studio.getLaunch(receipt.launchId)).toMatchObject({ state: "failed" });
+    expect(restarted.start).toHaveBeenCalledTimes(1);
+    await restarted.runs.get(receipt.launchId)!.alarm();
+    expect(restarted.studio.getExecution(receipt.launchId)).toMatchObject({ state: "completed" });
     expect(await restarted.launch()).toEqual(receipt);
-    expect(sideEffect).not.toHaveBeenCalled();
+    expect(sideEffect).toHaveBeenCalledTimes(1);
   });
 
-  it("never retries an unconfirmed dispatch and fences a pending unadmitted job", async () => {
+  it("redelivers after a lost start reply without replacing the original runner job", async () => {
+    let now = 1_000;
     const { launch, studio, runs, start } = setup({
+      now: () => now,
       start: async (job, run) => {
         await run.start(job);
         throw new Error("start RPC lost");
@@ -354,11 +380,16 @@ describe("Cloudflare programmatic launch admission", () => {
     });
     const receipt = await launch();
     if (!receipt.accepted) throw new Error("Expected durable admission");
-    expect(await studio.getLaunch(receipt.launchId)).toMatchObject({ state: "failed" });
+    await studio.alarm();
+    expect(studio.getExecution(receipt.launchId)).toMatchObject({ state: "queued" });
+    now += 2_000;
+    await studio.alarm();
+    expect(start.mock.calls[0][0]).toEqual(start.mock.calls[1][0]);
     await runs.get(receipt.launchId)!.alarm();
-    expect(sideEffect).not.toHaveBeenCalled();
+    expect(sideEffect).toHaveBeenCalledTimes(1);
+    expect(studio.getExecution(receipt.launchId)).toMatchObject({ state: "completed" });
     expect(await launch()).toEqual(receipt);
-    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledTimes(2);
   });
 
   it("preserves the outcome when a dispatch reply is lost after execution", async () => {
@@ -371,9 +402,104 @@ describe("Cloudflare programmatic launch admission", () => {
     });
     const receipt = await launch();
     if (!receipt.accepted) throw new Error("Expected durable admission");
+    await studio.alarm();
     expect(await studio.getLaunch(receipt.launchId)).toMatchObject({ state: "finished" });
     expect(await launch()).toEqual(receipt);
     expect(start).toHaveBeenCalledTimes(1);
     expect(sideEffect).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails an admitted revision safely when a new deployment dispatches it", async () => {
+    const before = setup();
+    const receipt = await before.launch();
+    if (!receipt.accepted) throw new Error("Expected admission");
+    const after = setup({ storage: before.storage, deploymentId: "release-2" });
+    await after.studio.alarm();
+    await after.runs.get(receipt.launchId)!.alarm();
+    expect(after.studio.getExecution(receipt.launchId)).toMatchObject({
+      state: "failed",
+      reason: "deployment_unavailable",
+    });
+    expect(sideEffect).not.toHaveBeenCalled();
+  });
+
+  it("fences a dispatch whose start cannot be confirmed by the watchdog deadline", async () => {
+    let now = 1_000;
+    const { launch, studio, start } = setup({
+      now: () => now,
+      start: async () => {
+        throw new Error("runner unavailable");
+      },
+    });
+    const receipt = await launch();
+    if (!receipt.accepted) throw new Error("Expected admission");
+    await studio.alarm();
+    expect(start).toHaveBeenCalledTimes(1);
+    now += 180_000;
+    await studio.alarm();
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(studio.getExecution(receipt.launchId)).toMatchObject({
+      state: "failed",
+      reason: "start_unconfirmed",
+    });
+    expect(await studio.admit(receipt.launchId)).toEqual({ admitted: false });
+  });
+
+  it("cancels queued work and refuses a job already stored by the runner", async () => {
+    const original = setup();
+    const queued = await original.launch("still-queued");
+    const dispatched = await original.launch("already-dispatched");
+    if (!queued.accepted || !dispatched.accepted) throw new Error("Expected admission");
+    expect(await original.studio.cancelExecution(queued.launchId)).toMatchObject({
+      state: "cancelled",
+      cancellationRequested: true,
+    });
+    await original.studio.alarm();
+    expect(original.start).toHaveBeenCalledTimes(1);
+    await original.studio.cancelExecution(dispatched.launchId);
+    const recreated = setup({ storage: original.storage, runs: original.runs });
+    await original.runs.get(dispatched.launchId)!.alarm();
+    expect(recreated.studio.getExecution(dispatched.launchId)).toMatchObject({
+      state: "cancelled",
+      cancellationRequested: true,
+    });
+    expect(sideEffect).not.toHaveBeenCalled();
+  });
+
+  it("redelivers durable cancellation after recreation and waits for terminal evidence", async () => {
+    let now = Date.now();
+    const before = setup({ now: () => now });
+    const receipt = await before.launch("slow", { name: "Ada" }, "waiting");
+    if (!receipt.accepted) throw new Error("Expected admission");
+    await before.studio.alarm();
+    const running = before.runs.get(receipt.launchId)!.alarm();
+    await vi.waitFor(() =>
+      expect(before.studio.getExecution(receipt.launchId)).toMatchObject({
+        state: "running",
+        runId: expect.any(String),
+      })
+    );
+    expect(await before.studio.cancelExecution(receipt.launchId)).toMatchObject({
+      state: "running",
+      cancellationRequested: true,
+    });
+    const unavailable = setup({
+      storage: before.storage,
+      runs: before.runs,
+      now: () => now,
+      cancel: async () => {
+        throw new Error("lost cancellation reply");
+      },
+    });
+    await unavailable.studio.alarm();
+    expect(unavailable.studio.getExecution(receipt.launchId)).toMatchObject({ state: "running" });
+    now += 2_000;
+    const restarted = setup({ storage: before.storage, runs: before.runs, now: () => now });
+    await restarted.studio.alarm();
+    await running;
+    expect(restarted.studio.getExecution(receipt.launchId)).toMatchObject({
+      state: "cancelled",
+      cancellationRequested: true,
+    });
   });
 });

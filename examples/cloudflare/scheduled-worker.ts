@@ -23,7 +23,8 @@ export default {
       }
     );
     if (!admission.accepted) throw new Error(`${admission.code}: ${admission.errors.join("; ")}`);
-    console.log(`Admitted launch ${admission.launchId}`);
+    // Use this ID with `tubeless remote status` or app.getExecution.
+    console.log(`Admitted execution ${admission.launchId}`);
   },
 };
 export const { TubelessStudio, TubelessRun } = app.durableObjects;

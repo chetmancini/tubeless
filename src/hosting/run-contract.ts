@@ -16,6 +16,13 @@ export interface RunJob {
   readonly maxRunDurationMs: number;
 }
 
+export const HOSTED_FAILURE_REASONS = [
+  "deployment_unavailable",
+  "host_failure",
+  "host_terminated",
+] as const;
+export type HostedFailureReason = (typeof HOSTED_FAILURE_REASONS)[number];
+
 /** Trusted host/collector capability; this is not an authenticated network protocol. */
 export interface StudioIngest {
   /** Studio's consent to execute; false when the launch is unknown or already closed. */
@@ -26,5 +33,5 @@ export interface StudioIngest {
     sequence: number,
     events: PipelineTraceEvent[]
   ): Promise<{ readonly accepted: boolean }>;
-  reportFailure(launchId: string, message: string): Promise<void>;
+  reportFailure(launchId: string, message: string, reason?: HostedFailureReason): Promise<void>;
 }

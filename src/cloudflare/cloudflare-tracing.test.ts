@@ -437,18 +437,20 @@ describe("Cloudflare application exporters", () => {
       throw new Error("factory failed");
     });
     const { studio, failures } = ingest(async () => ({ admitted: false }));
-    const core = new RunObjectCore({
-      storage: createFakeDurableStorage(),
-      commands,
-      ingest: () => studio,
-      tracing: { exporters },
-    });
-    await core.start({ ...job({ name: "ada" }), commandId: "effect" });
-    await core.alarm();
+    const start = async (launchId: string) => {
+      const core = new RunObjectCore({
+        storage: createFakeDurableStorage(),
+        commands,
+        ingest: () => studio,
+        tracing: { exporters },
+      });
+      await core.start({ ...job({ name: "ada" }), launchId, commandId: "effect" });
+      await core.alarm();
+    };
+    await start("refused");
     expect(exporters).not.toHaveBeenCalled();
     studio.admit = async () => ({ admitted: true });
-    await core.start({ ...job({ name: "ada" }), commandId: "effect" });
-    await core.alarm();
+    await start("admitted");
     expect(exporters).toHaveBeenCalledTimes(1);
     expect(failures).toEqual(["Run host error: factory failed"]);
     expect(sideEffect).not.toHaveBeenCalled();

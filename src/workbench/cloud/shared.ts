@@ -1,5 +1,4 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { onFirstProcessSignal } from "../../cli/cli-signal.js";
 import type { CloudCredentialStore } from "./credentials.js";
 import { CloudClientError } from "./protocol.js";
 import { errorMessage, terminalSafeText, type WorkbenchCliIo } from "../workbench-shared.js";
@@ -17,13 +16,6 @@ export interface CloudCommandDependencies {
 
 export async function cloudSleep(milliseconds: number, signal?: AbortSignal): Promise<void> {
   await delay(milliseconds, undefined, { signal });
-}
-
-export function cloudSignal(io: WorkbenchCliIo): { signal: AbortSignal; cleanup(): void } {
-  if (io.signal) return { signal: io.signal, cleanup() {} };
-  const controller = new AbortController();
-  const cleanup = onFirstProcessSignal(["SIGINT", "SIGTERM"], () => controller.abort());
-  return { signal: controller.signal, cleanup };
 }
 
 export function cloudErrorExit(error: unknown, io: WorkbenchCliIo, signal: AbortSignal): number {

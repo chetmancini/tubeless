@@ -9,6 +9,7 @@ import type {
   CloudflareLaunchValues,
 } from "./cloudflare.js";
 import { manifestModules } from "./cloudflare-workerd.test-support.js";
+import { runRemote } from "../workbench/workbench-remote.js";
 
 const WORKER = String.raw`
 import { env } from "cloudflare:workers";
@@ -29,8 +30,7 @@ const effect = step("effect", { run: async (_inputs, context) => {
 } });
 const project = defineProject("launch-test", [definePipeline({ id: "count", steps: [effect] })]);
 const app = createCloudflareApp(project, { deploymentId: env.DEPLOYMENT_ID, recordInputs: { count: ["name"] } });
-// Only this test harness exposes the trusted capability through HTTP. The library
-// handler below must continue to expose only its authenticated Studio routes.
+// Test-only entry simulates a trusted application trigger.
 export default { async fetch(request, env) {
   const url = new URL(request.url);
   if (url.pathname === "/_test/launch") {
@@ -189,7 +189,7 @@ it("admits once over RPC, survives a full workerd restart, and conflicts after r
   ).toBe("2");
 }, 60_000);
 
-it("requires deployment identity and adds no public HTTP launch route", async () => {
+it("requires deployment identity and preserves the Studio mutation guards", async () => {
   expect(
     await (await runtime.dispatchFetch("http://localhost/_test/unconfigured")).json()
   ).toMatchObject({ accepted: false, code: "invalid_launch" });
@@ -215,4 +215,66 @@ it("requires deployment identity and adds no public HTTP launch route", async ()
       })
     ).status
   ).toBe(403);
+}, 30_000);
+
+it("shares the execution identity and history between the CLI and a Worker trigger", async () => {
+  let output = "";
+  let errors = "";
+  const io = {
+    cwd: persist,
+    stdout: {
+      write: (line: string) => {
+        output += line;
+      },
+    },
+    stderr: {
+      write: (line: string) => {
+        errors += line;
+      },
+    },
+  };
+  const trigger = await launch("shared-origin", { name: "shared-origin" });
+  if (!trigger.accepted) throw new Error("Expected Worker admission");
+  const dependencies = {
+    fetch: (async (url, init) => {
+      const response = await runtime.dispatchFetch(String(url), {
+        method: init?.method,
+        headers: Object.fromEntries(new Headers(init?.headers)),
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      return new Response(await response.text(), { status: response.status });
+    }) satisfies typeof fetch,
+    readStdin: async () => JSON.stringify({ name: "shared-origin" }),
+  };
+  const host = ["--host", "http://localhost", "--json"];
+  expect(
+    await runRemote(
+      [
+        "run",
+        "count",
+        ...host,
+        "--input-file",
+        "-",
+        "--idempotency-key",
+        "shared-origin",
+        "--detach",
+      ],
+      io,
+      dependencies
+    )
+  ).toBe(0);
+  expect(JSON.parse(output)).toEqual({ executionId: trigger.launchId });
+  output = "";
+  expect(await runRemote(["status", trigger.launchId, ...host, "--follow"], io, dependencies)).toBe(
+    0
+  );
+  expect(JSON.parse(output)).toMatchObject({
+    executionId: trigger.launchId,
+    state: "completed",
+    runId: expect.any(String),
+  });
+  expect(errors).toBe("");
+  expect(
+    await (await runtime.dispatchFetch("http://localhost/_test/effect?name=shared-origin")).text()
+  ).toBe("1");
 }, 30_000);

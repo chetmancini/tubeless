@@ -20,14 +20,16 @@ function hasMultipleStatements(skeleton: string): boolean {
 
 /**
  * Mimic Durable Object storage rules that matter to Tubeless, backed by node:sqlite.
- * Unlike Durable Objects, its transactionSync does not support nesting.
+ * SQL savepoints let a store's synchronous transaction join an outer storage transaction.
  */
 export function createFakeDurableStorage(): DurableStorageLike & {
   alarmAtMs(): number | undefined;
 } {
-  let database = new DatabaseSync(":memory:");
+  const database = new DatabaseSync(":memory:");
   let values = new Map<string, unknown>();
   let alarm: number | undefined;
+  let nextSavepoint = 0;
+  let pending: Promise<unknown> = Promise.resolve();
   return {
     sql: {
       exec(query, ...bindings) {
@@ -46,21 +48,45 @@ export function createFakeDurableStorage(): DurableStorageLike & {
       },
     },
     transactionSync(fn) {
-      database.exec("BEGIN");
+      const savepoint = `sync_${nextSavepoint++}`;
+      database.exec(`SAVEPOINT ${savepoint}`);
       try {
         const result = fn();
-        database.exec("COMMIT");
+        database.exec(`RELEASE ${savepoint}`);
         return result;
       } catch (error) {
-        database.exec("ROLLBACK");
+        database.exec(`ROLLBACK TO ${savepoint}`);
+        database.exec(`RELEASE ${savepoint}`);
         throw error;
       }
+    },
+    transaction(fn) {
+      const result = pending.then(async () => {
+        const savedValues = new Map(values);
+        const savedAlarm = alarm;
+        database.exec("BEGIN");
+        try {
+          const value = await fn();
+          database.exec("COMMIT");
+          return value;
+        } catch (error) {
+          database.exec("ROLLBACK");
+          values = savedValues;
+          alarm = savedAlarm;
+          throw error;
+        }
+      });
+      pending = result.catch(() => {});
+      return result;
     },
     async get<T>(key: string) {
       return values.get(key) as T | undefined;
     },
     async put(key, value) {
       values.set(key, structuredClone(value));
+    },
+    async delete(key) {
+      return values.delete(key);
     },
     async getAlarm() {
       return alarm ?? null;
@@ -70,10 +96,6 @@ export function createFakeDurableStorage(): DurableStorageLike & {
     },
     async deleteAlarm() {
       alarm = undefined;
-    },
-    async deleteAll() {
-      database = new DatabaseSync(":memory:");
-      values = new Map();
     },
     alarmAtMs: () => alarm,
   };

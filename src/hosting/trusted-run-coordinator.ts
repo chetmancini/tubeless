@@ -59,8 +59,8 @@ export function createTrustedHostedRun(
         launcher.acknowledge(launchId, { accepted: true, runId: ack.runId });
       return { accepted: ack.accepted };
     },
-    async reportFailure(launchId, message) {
-      await store.fail(launchId, message, now());
+    async reportFailure(launchId, message, reason) {
+      await store.fail(launchId, message, now(), reason);
       launcher.acknowledge(launchId, { accepted: false, errors: [message] });
     },
   };

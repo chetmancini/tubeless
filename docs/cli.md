@@ -587,6 +587,16 @@ Tubeless calls it per task. Pass `signal` into async setup, and forward `text` t
 the new user task on `context.turn === 1` and return a complete plain-data
 conversation to retain it. See [`agent-repl-model.ts`](../examples/agent-repl-model.ts).
 
+## Self-hosted Cloudflare executions
+
+Use `tubeless remote run <command-id> --host <origin>` to submit to a self-hosted
+Cloudflare deployment. `--detach` returns an execution ID after durable admission.
+`remote status <id>` reads the current state, `status --follow` waits, and
+`remote cancel <id>` records a cancellation request. Pass `--json` for a single
+receipt or status object. Following exits with `0` for success, `6` for failure
+or unknown outcome, and `7` for cancellation or a local interruption.
+See [self-hosted authentication and status](./deploy-cloudflare.md#submit-and-follow-from-the-cli).
+
 ## Tubeless Cloud
 
 The same executable supplies `auth` and `cloud` commands. Create or join a workspace,

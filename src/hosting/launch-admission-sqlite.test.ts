@@ -14,9 +14,13 @@ it("atomically binds a key to its launch and returns the original record after a
   const request = {
     idempotencyKey: "daily",
     intentDigest: "digest",
-    deploymentId: "release",
-    launchId: "launch",
-    commandId: "demo",
+    job: {
+      deploymentId: "release",
+      launchId: "launch",
+      commandId: "demo",
+      values: {},
+      maxRunDurationMs: 60_000,
+    },
     createdAtMs: 100,
     metadata: {
       launchId: "launch",
@@ -34,14 +38,20 @@ it("atomically binds a key to its launch and returns the original record after a
   expect(await store.admissions.reserve(request)).toEqual({ created: true, admission });
   const reopened = new SqliteHostedLaunchStore(storage, events);
   expect(await reopened.admissions.get("daily")).toEqual(admission);
-  expect(await reopened.admissions.reserve({ ...request, launchId: "ignored" })).toEqual({
+  expect(
+    await reopened.admissions.reserve({ ...request, job: { ...request.job, launchId: "ignored" } })
+  ).toEqual({
     created: false,
     admission,
   });
   expect(readLaunch("ignored")).toBeUndefined();
   // Intent comparison belongs to the admission policy, not this persistence port.
   expect(
-    await reopened.admissions.reserve({ ...request, intentDigest: "changed", launchId: "other" })
+    await reopened.admissions.reserve({
+      ...request,
+      intentDigest: "changed",
+      job: { ...request.job, launchId: "other" },
+    })
   ).toEqual({ created: false, admission });
   expect(readLaunch("other")).toBeUndefined();
   storage.sql.exec(
@@ -51,7 +61,7 @@ it("atomically binds a key to its launch and returns the original record after a
     store.admissions.reserve({
       ...request,
       idempotencyKey: "new",
-      launchId: "rolled-back",
+      job: { ...request.job, launchId: "rolled-back" },
       metadata: { ...request.metadata, launchId: "rolled-back" },
     })
   ).rejects.toThrow("admission failed");
@@ -64,7 +74,7 @@ it("atomically binds a key to its launch and returns the original record after a
     store.admissions.reserve({
       ...request,
       idempotencyKey: "invalid",
-      launchId: "bad",
+      job: { ...request.job, launchId: "bad" },
       metadata: { ...request.metadata, launchId: "bad", trigger: "invalid" as never },
     })
   ).rejects.toThrow();

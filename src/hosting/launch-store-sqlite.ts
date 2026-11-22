@@ -37,6 +37,8 @@ import {
 } from "../run-store/run-store-sql.js";
 import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
+import type { HostedFailureReason } from "./run-contract.js";
+import { SqliteExecutionStore, TRUSTED_LAUNCHES } from "./execution-store-sqlite.js";
 
 /** Synchronous SQLite port; adapter and schema initialization remain target-owned. */
 export interface SqliteLaunchStorage {
@@ -50,30 +52,6 @@ export interface SqliteLaunchStorage {
 export interface LaunchEventStore {
   append(events: readonly PipelineTraceEvent[]): void;
 }
-
-// Only this launcher's trusted executions participate in its cancellation and recovery policy.
-const TRUSTED_LAUNCHES = `WITH trusted_launches AS (
-  SELECT launch.* FROM tubeless_launches AS launch
-  WHERE NOT EXISTS (
-    SELECT 1 FROM tubeless_attempts AS attempt WHERE attempt.launch_id = launch.launch_id
-  )
-)`;
-
-// A launch may wait for admission before its execution budget begins. Reuse the
-// persisted root start through the run-id index, with creation time for old or
-// unstarted launches that have no root start event.
-const ACTIVE_LAUNCHES = `${TRUSTED_LAUNCHES}, active_launches AS (
-  SELECT launch_id, created_at_ms,
-    CASE WHEN state = 'running' THEN COALESCE((
-      SELECT timestamp_ms FROM pipeline_run_events AS event
-      WHERE event.run_id = launch.run_id
-        AND event.event_name = 'pipeline.started'
-        AND event.parent_run_id IS NULL
-      ORDER BY event.id LIMIT 1
-    ), created_at_ms) ELSE created_at_ms END AS started_at_ms
-  FROM trusted_launches AS launch
-  WHERE state IN ('starting', 'running')
-)`;
 
 type LaunchState = "starting" | "running" | "finished" | "failed";
 
@@ -128,6 +106,7 @@ export class SqliteHostedLaunchStore
 {
   readonly admissions: HostedLaunchAdmissionStore;
   readonly metadata: ReturnType<typeof createSqliteLaunchMetadataStore>;
+  readonly executions: SqliteExecutionStore;
   constructor(
     private readonly storage: SqliteLaunchStorage,
     private readonly events: LaunchEventStore & PipelineRunEventReader,
@@ -191,10 +170,13 @@ export class SqliteHostedLaunchStore
     ])
       storage.sql.exec(statement);
     this.metadata = createSqliteLaunchMetadataStore(storage);
+    this.executions = new SqliteExecutionStore(storage);
     this.admissions = createSqliteLaunchAdmissionStore(
       storage,
-      (launchId, commandId, createdAtMs, metadata) =>
-        this.#create(launchId, commandId, createdAtMs, metadata)
+      ({ job, createdAtMs, metadata }) => {
+        this.#create(job.launchId, job.commandId, createdAtMs, metadata);
+        if (job.deploymentId !== undefined) this.executions.enqueue(job, createdAtMs);
+      }
     );
   }
 
@@ -267,6 +249,7 @@ export class SqliteHostedLaunchStore
     return this.storage.transactionSync(() => {
       const launch = this.#get(launchId);
       if (!launch || TERMINAL.has(launch.state) || launch.ownership === "attempt") return false;
+      if (!this.executions.claim(launchId, launch.admitted)) return false;
       this.storage.sql.exec(
         "UPDATE tubeless_launches SET admitted = 1 WHERE launch_id = ?",
         launchId
@@ -326,6 +309,8 @@ export class SqliteHostedLaunchStore
         event.runId === runId
       ) {
         state = "finished";
+        if (launch.ownership === "trusted")
+          this.executions.settle(launch.launchId, event.payload.status);
       }
     }
     this.storage.sql.exec(
@@ -764,14 +749,19 @@ export class SqliteHostedLaunchStore
     });
   }
 
-  async fail(launchId: string, message: string, nowMs: number): Promise<void> {
+  async fail(
+    launchId: string,
+    message: string,
+    nowMs: number,
+    reason?: HostedFailureReason
+  ): Promise<void> {
     this.storage.transactionSync(() => {
       const launch = this.#get(launchId);
-      if (launch) this.#fail(launch, message, nowMs);
+      if (launch) this.#fail(launch, message, nowMs, reason);
     });
   }
 
-  #fail(launch: LaunchRecord, message: string, nowMs: number): void {
+  #fail(launch: LaunchRecord, message: string, nowMs: number, reason?: HostedFailureReason): void {
     if (TERMINAL.has(launch.state)) return;
     if (launch.runId)
       this.events.append(this.#openSubtreeCompletions(launch.runId, message, nowMs));
@@ -779,6 +769,14 @@ export class SqliteHostedLaunchStore
       "UPDATE tubeless_launches SET state = 'failed' WHERE launch_id = ?",
       launch.launchId
     );
+    if (launch.ownership === "trusted")
+      this.executions.settle(
+        launch.launchId,
+        launch.admitted ? "outcome_unknown" : "failed",
+        reason === "host_terminated" && !launch.admitted
+          ? "start_unconfirmed"
+          : (reason ?? "host_failure")
+      );
   }
 
   /** Close the bound run and every nested run it left open, children before parents. */
@@ -814,23 +812,6 @@ export class SqliteHostedLaunchStore
       )
       .toArray()[0];
     return row ? String(row.launch_id) : undefined;
-  }
-
-  async stale(cutoffMs: number): Promise<readonly string[]> {
-    return this.storage.sql
-      .exec(
-        `${ACTIVE_LAUNCHES} SELECT launch_id FROM active_launches WHERE started_at_ms <= ? ORDER BY created_at_ms`,
-        cutoffMs
-      )
-      .toArray()
-      .map((row) => String(row.launch_id));
-  }
-
-  async nextReconcileAt(delayMs: number): Promise<number | undefined> {
-    const row = this.storage.sql
-      .exec(`${ACTIVE_LAUNCHES} SELECT MIN(started_at_ms) AS started_at_ms FROM active_launches`)
-      .toArray()[0];
-    return row?.started_at_ms == null ? undefined : Number(row.started_at_ms) + delayMs;
   }
 
   listEvents(query?: PipelineRunEventQuery) {

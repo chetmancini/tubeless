@@ -221,13 +221,13 @@ describe("SQLite hosted launch store", () => {
     await store.create("waiting", "demo", 0);
     await store.acceptBatch("late", 0, [{ ...started("root"), timestampMs: 150_000 }]);
     await store.acceptBatch("late", 1, [{ ...started("child", "root"), timestampMs: 160_000 }]);
-    expect(await store.stale(1)).toEqual(["waiting"]);
-    expect(await store.nextReconcileAt(180_000)).toBe(180_000);
+    expect(store.executions.stale(1)).toEqual(["waiting"]);
+    expect(store.executions.nextAlarm(180_000)).toBe(180_000);
     await store.fail("waiting", "Host stopped", 180_001);
     const recreated = new SqliteHostedLaunchStore(storage, events);
-    expect(await recreated.nextReconcileAt(180_000)).toBe(330_000);
-    expect(await recreated.stale(149_999)).toEqual([]);
-    expect(await recreated.stale(150_000)).toEqual(["late"]);
+    expect(recreated.executions.nextAlarm(180_000)).toBe(330_000);
+    expect(recreated.executions.stale(149_999)).toEqual([]);
+    expect(recreated.executions.stale(150_000)).toEqual(["late"]);
   });
 
   it("falls back to creation time for old running records without a root start", async () => {
@@ -237,10 +237,10 @@ describe("SQLite hosted launch store", () => {
       "UPDATE tubeless_launches SET state = 'running', run_id = 'missing' WHERE launch_id = ?",
       "legacy"
     );
-    expect(await store.stale(10)).toEqual(["legacy"]);
-    expect(await store.nextReconcileAt(180_000)).toBe(180_010);
+    expect(store.executions.stale(10)).toEqual(["legacy"]);
+    expect(store.executions.nextAlarm(180_000)).toBe(180_010);
     await store.fail("legacy", "Host stopped", 180_010);
-    expect(await store.nextReconcileAt(180_000)).toBeUndefined();
+    expect(store.executions.nextAlarm(180_000)).toBeUndefined();
   });
 
   it("fails unbound launches without inventing history and lists stale launches", async () => {
@@ -248,8 +248,8 @@ describe("SQLite hosted launch store", () => {
     await store.create("old", "demo", 100);
     await store.create("edge", "demo", 5_000);
     await store.create("new", "demo", 10_000);
-    expect(await store.stale(5_000)).toEqual(["old", "edge"]);
-    expect(await store.nextReconcileAt(0)).toBe(100);
+    expect(store.executions.stale(5_000)).toEqual(["old", "edge"]);
+    expect(store.executions.nextAlarm(0)).toBe(100);
     await store.fail("old", "Pipeline command exited (2) before recording a run.", 6_000);
     expect(await store.listEvents()).toEqual([]);
     expect(readLaunch("old")?.state).toBe("failed");

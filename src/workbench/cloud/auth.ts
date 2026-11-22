@@ -1,3 +1,4 @@
+import { manageRemoteSignal } from "../workbench-remote-io.js";
 import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
 import {
   renderWorkbenchUsage,
@@ -12,12 +13,7 @@ import { createNativeCredentialStore, resolveCloudCredential } from "./credentia
 import { isCloudAutomationToken } from "./protocol.js";
 
 import { type WorkbenchCliIo, writeUsageError, terminalSafeText } from "../workbench-shared.js";
-import {
-  cloudErrorExit,
-  cloudSignal,
-  cloudSleep,
-  type CloudCommandDependencies,
-} from "./shared.js";
+import { cloudErrorExit, cloudSleep, type CloudCommandDependencies } from "./shared.js";
 
 const AUTH_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.auth);
 
@@ -45,7 +41,7 @@ export async function runAuth(
         ) {
           return writeUsageError(io, "Pass login, status, or logout.", AUTH_USAGE);
         }
-        const managed = cloudSignal(io);
+        const managed = manageRemoteSignal(io.signal);
         try {
           const host = resolveCloudHost(values.host);
           const store = dependencies.store ?? createNativeCredentialStore();

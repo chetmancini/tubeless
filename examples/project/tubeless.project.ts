@@ -43,7 +43,7 @@ export default defineProject(
   "example-jobs",
   [
     // Read its result with run --json validated-import -- --source rows.txt.
-    // For Cloudflare cron attribution and opt-in input history, see ../cloudflare/scheduled-worker.ts.
+    // For Cloudflare cron and CLI launches with a durable ID, see ../cloudflare/scheduled-worker.ts.
     ValidatedPipeline,
     // Its app exporters are configured by TracingExampleProject when launched separately.
     ...TracingExampleProject.commands,

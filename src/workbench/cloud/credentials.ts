@@ -1,5 +1,6 @@
+import { isJsonObject } from "../../utilities/canonical-json.js";
 import { normalizeCloudHost } from "./config.js";
-import { isCloudObject, isCloudToken } from "./protocol.js";
+import { isCloudToken } from "./protocol.js";
 
 export interface CloudCredential {
   token: string;
@@ -31,7 +32,7 @@ interface NativeSecrets {
 
 function parseCredential(value: unknown): CloudCredential {
   if (
-    !isCloudObject(value) ||
+    !isJsonObject(value) ||
     !isCloudToken(value.token) ||
     typeof value.expiresAt !== "number" ||
     !Number.isFinite(value.expiresAt) ||
@@ -44,9 +45,9 @@ function parseCredential(value: unknown): CloudCredential {
 
 function nativeSecrets(): NativeSecrets {
   const bun: unknown = Reflect.get(globalThis, "Bun");
-  const secrets: unknown = isCloudObject(bun) ? bun.secrets : undefined;
+  const secrets: unknown = isJsonObject(bun) ? bun.secrets : undefined;
   if (
-    !isCloudObject(secrets) ||
+    !isJsonObject(secrets) ||
     typeof secrets.get !== "function" ||
     typeof secrets.set !== "function" ||
     typeof secrets.delete !== "function"
@@ -68,7 +69,7 @@ function storageError(): Error {
 
 function localPersistenceOption(): { persist?: "local" } {
   const bun: unknown = Reflect.get(globalThis, "Bun");
-  if (!isCloudObject(bun) || typeof bun.version !== "string") return {};
+  if (!isJsonObject(bun) || typeof bun.version !== "string") return {};
   const version = /^(\d+)\.(\d+)\.(\d+)/.exec(bun.version);
   if (!version) return {};
   const major = Number(version[1]);

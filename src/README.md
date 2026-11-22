@@ -204,14 +204,15 @@ Only boundaries that are not obvious from names are listed.
   commit history and launch mutations in one transaction. `launch-metadata*.ts` owns
   opt-in input capture (history, deletable without deleting admission keys; schema in
   `studio/shared/launch-metadata.ts`), and `admitted-studio-launcher.ts` bridges
-  durable admission to browser start acknowledgements. Only the reservation creator
-  receives the dispatch job; targets strip it from public receipts. Verified Access
-  actors reach Studio via the private `serve` RPC, never identity headers.
+  durable admission to browser start acknowledgements. `execution-store-sqlite.ts`
+  persists pending deliveries, cancellation intent, and terminal outcomes under the
+  launch ID. Verified Access actors reach Studio via private Worker RPC.
 - The collector (`collector-*`, `attempt-*`) is internal. Claim uncertainty never
   authorizes execution, and delivery failure never declares termination.
 - Cloudflare composes hosting, Studio and storage inside Durable Objects.
   `cloudflare-run-contract.ts` holds the deadline and host-failure vocabulary
-  without loading execution.
+  without loading execution. `cloudflare-execution-api.ts` serves the authenticated
+  execution contract separately from the Studio browser protocol.
 
 ### Workbench
 

@@ -130,6 +130,9 @@ produce a failed run.
   (`starting`, `running`, `finished`, `failed`) and an optional `runId`, or
   `undefined`. Success or failure of a `finished` launch is on the run
   (`/?run=<runId>`); `failed` means the host closed it, possibly with no run.
+  For the full execution status, use `app.getExecution(env, launchId)`.
+  `app.cancelExecution(env, launchId)` persists a cancellation request and
+  returns that execution's current state. Both return `undefined` for a missing ID.
 
 ### Attribution, input history, and Run again
 
@@ -151,10 +154,69 @@ produce a failed run.
 - **Clear history** deletes launch metadata with events and refuses active launches;
   admission keys are preserved.
 
-An unconfirmed dispatch is never run again: reconciliation marks it failed, and a
-queued job from an older deployment is refused before user code runs. Use a new key
-only to deliberately request another run. This is submission deduplication, not crash
-resume or side-effect idempotency.
+If a dispatch reply is lost, Studio reoffers the same job using the original launch
+ID. The run object remembers accepted jobs and Studio grants permission to execute
+once. A queued job from an older deployment fails before user code runs. Use a new
+key only to deliberately request another run. Once work has started, an interruption
+can leave its outcome unknown. Tubeless does not replay the pipeline automatically.
+
+## Submit and follow from the CLI
+
+Set an immutable `deploymentId` on `createCloudflareApp`, as in the example above.
+Grant a [Cloudflare Access service token](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)
+access to the Worker through a **Service Auth** policy. Put its client ID and secret
+in the calling process's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`
+environment variables. The same Access trust domain covers Studio and this API.
+For local development, an unconfigured Access binding permits the API on localhost
+with a deployment ID. The CLI sends no credentials over HTTP.
+
+```sh
+# input.json contains command parameters, for example { "source": "daily.csv" }.
+tubeless remote run validated-import --host https://studio.example.com \
+  --input-file input.json --idempotency-key validated-import.manual.42 --detach --json
+tubeless remote status <execution-id> --host https://studio.example.com --follow
+tubeless remote cancel <execution-id> --host https://studio.example.com
+```
+
+`run` waits for a terminal state by default. `--detach` returns the durable
+receipt `{"executionId":"…"}` with `--json`, or just the ID without it. The
+execution ID is the `launchId` that trusted Worker code gets back from `app.launch`.
+Use `status` for a snapshot or `status --follow` to wait. Ctrl-C stops the local
+wait. Use `cancel` to request that remote execution stop. The CLI uses the deployed
+command catalog and can run from any directory. Use `--input-file -` for stdin;
+omitting it submits `{}`. Include built-in controls such as `dryRun` in that
+object. Both the submission and the normalized intent are bounded to 64 KiB.
+
+For an uncertain submission, retry with the printed idempotency key, the same
+host, command and inputs. A matching retry returns the original ID. Changed intent
+or deployment conflicts. Studio links the execution to the root attempt once it
+records a `runId`. Clearing history removes the trace and input metadata while
+retaining the admission key and the saved execution outcome. Pending execution
+values are kept in the dispatch record until the runner accepts the job or it closes.
+
+| State                              | Meaning                                                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `queued`                           | Admitted. The runner has yet to claim execution.                                                                                |
+| `running`                          | Runner granted permission to execute. `runId` appears when Studio records the root start.                                       |
+| `completed`, `failed`, `cancelled` | Terminal outcome. A `reason` can explain host failures such as `deployment_unavailable` or `start_unconfirmed`.                 |
+| `outcome_unknown`                  | The host closed the execution without a confirmed outcome. Check available history and external effects before launching again. |
+
+If the execution is still running after `cancel`, `cancellationRequested: true`
+acknowledges the request. Follow the execution to see whether it was cancelled or
+finished first. Cancelling queued work fences the runner before it can claim it.
+
+### HTTP API
+
+Use `POST /api/executions/v1` with JSON `{ commandId, values, idempotencyKey }`.
+A `202` response gives the `executionId`. A `409` conflict returns the original ID.
+Use `GET /api/executions/v1/<executionId>` for status and
+`POST /api/executions/v1/<executionId>/cancel` for cancellation. Both return the
+status object with `executionId`, `commandId`, `state`, `cancellationRequested`,
+and optional `runId` and `reason`. An active cancellation request returns `202`.
+Include `X-Tubeless-Execution: 1` on writes, and `Content-Type: application/json`
+on submission. Requests with a browser `Origin` header must use the Worker's own
+origin. The Worker verifies Access's signed assertion and derives launch attribution
+from it.
 
 ## Application trace exporters
 

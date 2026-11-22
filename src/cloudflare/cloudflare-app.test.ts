@@ -49,7 +49,7 @@ const app = createCloudflareApp(defineProject("worker-test", [
   definePipeline({ id: "agent-parent", steps: [nestedAgent] }),
 ], { tracing: {
   exporters: () => [{ export(event) { if (event.name === "pipeline.completed") console.log("project-export:" + event.runId); } }],
-} }), { tracing: {
+} }), { deploymentId: "worker-test-v1", tracing: {
   exporters: ({ env, pipelineId, launchId }) => {
     const events = [];
     return [
@@ -115,7 +115,7 @@ const b64url = (bytes: Uint8Array) => {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 };
-async function accessToken(): Promise<string> {
+async function accessToken(claims?: Record<string, unknown>): Promise<string> {
   const encode = (value: unknown) => b64url(new TextEncoder().encode(JSON.stringify(value)));
   const head = encode({ alg: "RS256", kid: "k1" });
   const body = encode({
@@ -123,6 +123,7 @@ async function accessToken(): Promise<string> {
     aud: [AUD],
     exp: Math.floor(Date.now() / 1000) + 600,
     email: "ops@example.com",
+    ...claims,
   });
   const signature = await crypto.subtle.sign(
     "RSASSA-PKCS1-v1_5",
@@ -305,6 +306,54 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
   it("requires Cloudflare Access", async () => {
     expect((await call("/api/snapshot", {}, false)).status).toBe(401);
     expect((await call("/", {}, false)).status).toBe(403);
+  });
+
+  it("authenticates the execution API and records the verified service actor", async () => {
+    const path = "/api/executions/v1";
+    const body = {
+      commandId: "greeting",
+      idempotencyKey: "service-1",
+      values: { name: "ada" },
+      actor: { id: "forged", kind: "service" },
+      trigger: "schedule",
+    };
+    const headers = { "x-tubeless-execution": "1", "cf-access-client-id": "unverified" };
+    expect((await call(path, mutation(headers, body), false)).status).toBe(401);
+    expect((await call(path, mutation({}, body))).status).toBe(403);
+    expect(
+      (await call(path, mutation({ ...headers, origin: "https://foreign.example" }, body))).status
+    ).toBe(403);
+    const response = await call(
+      path,
+      mutation(
+        {
+          ...headers,
+          "cf-access-jwt-assertion": await accessToken({ sub: "", common_name: "ci-service" }),
+        },
+        body
+      ),
+      false
+    );
+    expect(response.status).toBe(202);
+    const { executionId } = (await response.json()) as { executionId: string };
+    const executionPath = `${path}/${executionId}`;
+    expect((await call(executionPath, {}, false)).status).toBe(401);
+    expect((await call(`${executionPath}/cancel`, mutation(headers), false)).status).toBe(401);
+    await vi.waitFor(async () => {
+      expect(await (await call(executionPath)).json()).toMatchObject({
+        executionId,
+        state: "completed",
+        runId: expect.any(String),
+      });
+    });
+    const { runId } = (await (await call(executionPath)).json()) as { runId: string };
+    expect(await (await call(`/api/runs/${runId}`)).json()).toMatchObject({
+      launch: {
+        launchId: executionId,
+        actor: { kind: "service", id: "ci-service" },
+        trigger: "code",
+      },
+    });
   });
 
   it("serves Studio and the project's commands", async () => {

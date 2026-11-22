@@ -34,7 +34,7 @@ it("scopes owned liveness and root cancellation without enrolling attempts in tr
   expect(await store.liveAttemptRunIds("release-1")).toEqual(["root"]);
   expect(await store.liveAttemptRunIds("release-2")).toEqual(["other-root"]);
   expect(await store.liveRunIds()).toEqual(["trusted-root"]);
-  expect(await store.stale(10_000)).toEqual(["trusted"]);
+  expect(store.executions.stale(10_000)).toEqual(["trusted"]);
   for (const runId of ["child", "other-root", "trusted-root", "unknown"])
     expect(await store.requestAttemptRunCancellation(runId, "release-1")).toBe(false);
   expect(await store.collectorCancellationRequested(authority, "worker")).toBe(false);

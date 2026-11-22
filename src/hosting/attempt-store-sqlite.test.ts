@@ -260,16 +260,16 @@ describe("persisted hosted attempts", () => {
     await store.acceptAttemptBatch(owner, body(0, [started()]));
     expect(await store.liveRunIds()).toEqual([]);
     expect(await store.launchIdForRun("root")).toBeUndefined();
-    expect(await store.stale(1000)).toEqual([]);
-    expect(await store.nextReconcileAt(100)).toBeUndefined();
+    expect(store.executions.stale(1000)).toEqual([]);
+    expect(store.executions.nextAlarm(100)).toBeUndefined();
 
     await store.create("trusted", "command", 10);
     const trustedStart = { ...started("trusted-root"), timestampMs: 20 };
     await store.acceptBatch("trusted", 0, [trustedStart]);
     expect(await store.liveRunIds()).toEqual(["trusted-root"]);
     expect(await store.launchIdForRun("trusted-root")).toBe("trusted");
-    expect(await store.stale(20)).toEqual(["trusted"]);
-    expect(await store.nextReconcileAt(100)).toBe(120);
+    expect(store.executions.stale(20)).toEqual(["trusted"]);
+    expect(store.executions.nextAlarm(100)).toBe(120);
     expect(await store.listEvents()).toHaveLength(2);
   });
 

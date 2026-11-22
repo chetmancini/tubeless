@@ -69,20 +69,12 @@ describe("fake Durable Object storage", () => {
     const storage = createFakeDurableStorage();
     await storage.put("k", { a: 1 });
     expect(await storage.get("k")).toEqual({ a: 1 });
-    expect(await storage.get("missing")).toBeUndefined();
+    expect(await storage.delete("k")).toBe(true);
+    expect(await storage.get("k")).toBeUndefined();
     expect(storage.alarmAtMs()).toBeUndefined();
     await storage.setAlarm(123);
     expect(storage.alarmAtMs()).toBe(123);
     await storage.deleteAlarm();
     expect(storage.alarmAtMs()).toBeUndefined();
-  });
-
-  it("clears tables and values on deleteAll", async () => {
-    const storage = createFakeDurableStorage();
-    storage.sql.exec("CREATE TABLE t(x)");
-    await storage.put("k", 1);
-    await storage.deleteAll();
-    expect(() => storage.sql.exec("SELECT x FROM t")).toThrow();
-    expect(await storage.get("k")).toBeUndefined();
   });
 });

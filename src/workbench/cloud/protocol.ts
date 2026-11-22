@@ -1,3 +1,4 @@
+import { isJsonObject } from "../../utilities/canonical-json.js";
 import { decodeNodeCheckPlan, type NodeCheckPlan } from "../../utilities/node-check-plan.js";
 import {
   structuredError,
@@ -165,10 +166,6 @@ const ERROR_CODES = [
   "internal_error",
 ];
 
-export function isCloudObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** Check finite, depth-bounded JSON without recursion or silently dropping data. */
 export function isCloudJsonValue(value: unknown): value is CloudJsonValue {
   const pending: ({ value: unknown; depth: number } | { leave: object })[] = [{ value, depth: 1 }];
@@ -249,7 +246,7 @@ export function parseCloudSource(value: unknown): CliRunSource {
       "invalid_request"
     );
   };
-  if (!isCloudObject(value)) return invalid();
+  if (!isJsonObject(value)) return invalid();
   if (value.kind === "ref") {
     const ref = value.ref;
     if (
@@ -308,15 +305,15 @@ function parseResponse<T>(value: unknown, valid: boolean, name: string): T {
 
 export function parseCliSession(value: unknown): CliSession {
   const valid =
-    isCloudObject(value) &&
+    isJsonObject(value) &&
     timestamp(value.expiresAt) &&
-    isCloudObject(value.user) &&
+    isJsonObject(value.user) &&
     hasTexts(value.user, ["id", "login", "name", "email", "avatar"]) &&
     text(value.user.id) &&
     Array.isArray(value.workspaces) &&
     value.workspaces.every(
       (workspace: unknown) =>
-        isCloudObject(workspace) &&
+        isJsonObject(workspace) &&
         hasTexts(workspace, ["id", "name", "slug"]) &&
         text(workspace.id) &&
         oneOf(workspace.role, ["owner", "admin", "member", "viewer"])
@@ -326,7 +323,7 @@ export function parseCliSession(value: unknown): CliSession {
 
 function isPipeline(value: unknown): boolean {
   return (
-    isCloudObject(value) &&
+    isJsonObject(value) &&
     ["id", "name", "slug", "branch", "commit"].every((field) => text(value[field])) &&
     typeof value.enabled === "boolean" &&
     typeof value.available === "boolean"
@@ -340,7 +337,7 @@ export function parseCliPipelines(value: unknown): CliPipeline[] {
 function parseDiagnostics(value: unknown): CliRun["diagnostics"] {
   if (value === undefined) return;
   const valid =
-    isCloudObject(value) &&
+    isJsonObject(value) &&
     value.version === 1 &&
     oneOf(value.state, ["missing", "available", "unavailable"]) &&
     Number.isSafeInteger(value.omitted) &&
@@ -350,7 +347,7 @@ function parseDiagnostics(value: unknown): CliRun["diagnostics"] {
     (value.state === "available" || value.reports.length === 0);
   const source = parseResponse<NonNullable<CliRun["diagnostics"]>>(value, valid, "run");
   const reports = source.reports.map((entry: unknown) => {
-    if (!isCloudObject(entry) || !text(entry.artifact))
+    if (!isJsonObject(entry) || !text(entry.artifact))
       throw new Error("Invalid Cloud run response.");
     const result = decodeCheckReportResult(entry.result);
     if (!result) throw new Error("Invalid Cloud run response.");
@@ -367,7 +364,7 @@ function parseStructuredError(value: unknown): StructuredError {
 
 export function parseCliRun(value: unknown): CliRun {
   const valid =
-    isCloudObject(value) &&
+    isJsonObject(value) &&
     ["id", "pipelineId", "pipelineName", "commit", "branch", "actor"].every((field) =>
       text(value[field])
     ) &&
@@ -378,17 +375,17 @@ export function parseCliRun(value: unknown): CliRun {
     optionalTimestamp(value.startedAt) &&
     optionalTimestamp(value.finishedAt) &&
     optionalText(value.error) &&
-    isCloudObject(value.input) &&
+    isJsonObject(value.input) &&
     isCloudJsonValue(value.input) &&
     (value.result === undefined || isCloudJsonValue(value.result)) &&
     (value.schedule === undefined ||
-      (isCloudObject(value.schedule) &&
+      (isJsonObject(value.schedule) &&
         hasTexts(value.schedule, ["id", "name", "timezone"]) &&
         timestamp(value.schedule.scheduledAt))) &&
     Array.isArray(value.steps) &&
     value.steps.every(
       (step: unknown) =>
-        isCloudObject(step) &&
+        isJsonObject(step) &&
         hasTexts(step, ["id", "name"]) &&
         oneOf(step.status, [...RUN_STATUSES, "pending", "skipped"]) &&
         number(step.durationMs) &&
@@ -408,7 +405,7 @@ export function parseCliRun(value: unknown): CliRun {
         value.nativeCommands.length <= 32 &&
         value.nativeCommands.every(
           (command: unknown) =>
-            isCloudObject(command) &&
+            isJsonObject(command) &&
             text(command.id) &&
             Number.isInteger(command.exitCode) &&
             number(command.durationMs)
@@ -417,7 +414,7 @@ export function parseCliRun(value: unknown): CliRun {
     value.logs.length <= 400 &&
     value.logs.every(
       (log: unknown) =>
-        isCloudObject(log) &&
+        isJsonObject(log) &&
         timestamp(log.time) &&
         oneOf(log.level, ["info", "warn", "error"]) &&
         text(log.message, true)
@@ -425,14 +422,14 @@ export function parseCliRun(value: unknown): CliRun {
     Array.isArray(value.artifacts) &&
     value.artifacts.every(
       (artifact: unknown) =>
-        isCloudObject(artifact) &&
+        isJsonObject(artifact) &&
         hasTexts(artifact, ["name", "contentType"]) &&
         number(artifact.size)
     );
   const run = parseResponse<CliRun>(value, valid, "run");
   if (
     run.nodeCheck !== undefined &&
-    (!isCloudObject(run.nodeCheck) ||
+    (!isJsonObject(run.nodeCheck) ||
       run.nodeCheck.version !== 1 ||
       !/^[A-Za-z0-9_-]{43}$/.test(run.nodeCheck.digest) ||
       !/^sha256:[a-f0-9]{64}$/.test(run.nodeCheck.imageDigest) ||
@@ -460,7 +457,7 @@ export function parseCliRun(value: unknown): CliRun {
 
 export function parseCloudDeviceCode(value: unknown): CloudDeviceCode {
   const valid =
-    isCloudObject(value) &&
+    isJsonObject(value) &&
     ["device_code", "user_code", "verification_uri", "verification_uri_complete"].every((field) =>
       text(value[field])
     ) &&
@@ -476,7 +473,7 @@ export function parseCloudDeviceCode(value: unknown): CloudDeviceCode {
 export function parseCloudDeviceSession(value: unknown): CloudDeviceSession {
   return parseResponse(
     value,
-    isCloudObject(value) &&
+    isJsonObject(value) &&
       isCloudToken(value.access_token) &&
       value.token_type === "Bearer" &&
       number(value.expires_in) &&
@@ -489,8 +486,8 @@ export function parseCloudDeviceSession(value: unknown): CloudDeviceSession {
 
 export function parseCliError(value: unknown): { code: CliErrorCode; message: string } | undefined {
   if (
-    !isCloudObject(value) ||
-    !isCloudObject(value.error) ||
+    !isJsonObject(value) ||
+    !isJsonObject(value.error) ||
     !oneOf(value.error.code, ERROR_CODES) ||
     !text(value.error.message)
   ) {
@@ -500,7 +497,7 @@ export function parseCliError(value: unknown): { code: CliErrorCode; message: st
 }
 
 export function parseCloudDeviceError(value: unknown): CloudDeviceError | undefined {
-  if (!isCloudObject(value) || !text(value.error) || !optionalText(value.error_description)) {
+  if (!isJsonObject(value) || !text(value.error) || !optionalText(value.error_description)) {
     return undefined;
   }
   return {
