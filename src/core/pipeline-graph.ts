@@ -101,6 +101,16 @@ export function topologicalSort<TOptions extends object>(
   steps: readonly AnyStep<TOptions>[]
 ): readonly AnyStep<TOptions>[] | null {
   const indexById = new Map(steps.map((step, index) => [step.id, index]));
+  // Declaration order already wins every tie if all prerequisites precede their consumers.
+  if (
+    indexById.size === steps.length &&
+    steps.every((step, index) =>
+      stepEdges(step).every((dep) => (indexById.get(dep.id) ?? steps.length) < index)
+    )
+  ) {
+    return [...steps];
+  }
+
   const remainingInDegree = new Map(steps.map((step) => [step.id, stepEdges(step).length]));
   const dependentsOf = new Map<string, string[]>();
   for (const step of steps) {

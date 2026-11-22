@@ -30,6 +30,20 @@ describe("pipeline graph", () => {
     expect(topologicalSort([last, second, first])).toEqual([second, first, last]);
   });
 
+  it.each(["dependsOn", "optionalDependsOn", "skipAfterFailureOf"] as const)(
+    "respects %s in both declaration orders",
+    (policy) => {
+      const source = step("source");
+      const consumer = step("consumer", { [policy]: [source] });
+      const independent = step("independent");
+      const ordered = [source, consumer, independent];
+
+      expect(topologicalSort(ordered)).toEqual(ordered);
+      expect(topologicalSort([consumer, source, independent])).toEqual(ordered);
+      expect(topologicalSort([consumer])).toBeNull();
+    }
+  );
+
   it("returns null for a dependency cycle", () => {
     const first = step("first");
     const second = step("second", { dependsOn: [first] });
