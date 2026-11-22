@@ -193,8 +193,8 @@ export class StudioObjectCore implements StudioIngest {
     });
   }
 
-  readStage(launchId: string, id: string) {
-    return this.#runners.result(id, launchId);
+  readStage(launchId: string, id: string, afterId: number) {
+    return this.#runners.readStage(launchId, id, afterId);
   }
 
   cancelStage(launchId: string, id: string): Promise<void> {

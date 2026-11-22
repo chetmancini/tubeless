@@ -1,3 +1,5 @@
+import { storedRunEvent, type RunEventRecord } from "../run-store/run-store-sql.js";
+import type { RunnerStageObservation } from "./cloudflare-child-placement.js";
 import { HostedAttemptConflict } from "../hosting/attempt-store.js";
 import { decodeRunnerBatch } from "../hosting/attempt-batch.js";
 import type { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
@@ -377,7 +379,7 @@ export class CloudflareRunnerQueue {
     );
   }
 
-  result(id: string, launchId: string): RunnerStageResult | undefined {
+  readStage(launchId: string, id: string, afterId: number): RunnerStageObservation {
     const row = this.#sql
       .exec(
         "SELECT result_json FROM tubeless_runner_queue WHERE id = ? AND launch_id = ?",
@@ -385,11 +387,28 @@ export class CloudflareRunnerQueue {
         launchId
       )
       .toArray()[0];
-    if (!row) return { error: "Unknown remote stage." };
-    if (typeof row.result_json === "string") {
-      const result = JSON.parse(row.result_json) as RunnerStageResult;
-      return "error" in result ? result : { report: decodeRunnerReport(result.report) };
-    }
+    if (!row) return { result: { error: "Unknown remote stage." }, events: [] };
+    const runId = this.deps.store.attemptLedger.latest(id)?.runId;
+    // Only the bound root drives parent progress. Keep each RPC page bounded and skip log rows.
+    const rows =
+      runId === undefined
+        ? []
+        : (this.#sql
+            .exec(
+              `SELECT * FROM pipeline_run_events WHERE run_id = ? AND id > ?
+       AND event_name IN ('step.running', 'step.complete', 'step.skipped', 'step.cancelled', 'step.failed')
+       ORDER BY id LIMIT 32`,
+              runId,
+              afterId
+            )
+            .toArray() as unknown as RunEventRecord[]);
+    const events = rows.map(storedRunEvent);
+    if (typeof row.result_json !== "string") return { events };
+    const result = JSON.parse(row.result_json) as RunnerStageResult;
+    return {
+      events,
+      result: "error" in result ? result : { report: decodeRunnerReport(result.report) },
+    };
   }
 
   cancel(launchId: string, stageId?: string): void {

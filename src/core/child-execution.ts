@@ -22,7 +22,7 @@ import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.j
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
 import { EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-identity.js";
-import { CHILD_PLACEMENT, childPlacement } from "./child-placement.js";
+import { CHILD_PLACEMENT, childPlacement, type ChildPlacement } from "./child-placement.js";
 import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
 import { rejectChildOutputRecovery, snapshotRunControls } from "./run-controls.js";
 import type {
@@ -328,7 +328,7 @@ async function runChildPipeline(
   hooks: PipelineHooks,
   messagePrefix: string,
   plan: PipelinePlan,
-  placementStepId?: string
+  placement?: Pick<Parameters<ChildPlacement>[0], "stepId" | "reportProgress">
 ): Promise<PipelineRun<unknown>> {
   if (!plan.ok) {
     const firstError = plan.errors[0];
@@ -343,14 +343,14 @@ async function runChildPipeline(
   }
 
   const placed =
-    placementStepId !== undefined && !context.executionJournal
+    placement && !context.executionJournal
       ? childPlacement(context)?.({
           pipeline,
           plan,
           options: domainOptions,
           controls,
           context,
-          stepId: placementStepId,
+          ...placement,
         })
       : undefined;
   const result = await (placed ??
@@ -405,7 +405,9 @@ export function createSingleChildRunner<TParentOptions extends object>(
       childHooks,
       `Child pipeline ${config.pipeline.id} `,
       childPlan,
-      config.iterationIndex === undefined ? config.stepId : undefined
+      config.iterationIndex === undefined
+        ? { stepId: config.stepId, reportProgress: context.reportProgress }
+        : undefined
     );
 
     return config.mapResult

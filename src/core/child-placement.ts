@@ -4,6 +4,7 @@ import type {
   PipelinePlan,
   PipelineRun,
   PipelineRunControls,
+  PipelineStepContext,
 } from "./pipeline-types.js";
 
 /** Private host capability for explicit child composition. */
@@ -16,6 +17,7 @@ export type ChildPlacement = (input: {
   controls: PipelineRunControls;
   context: PipelineContext;
   stepId: string;
+  reportProgress: PipelineStepContext<object>["reportProgress"];
 }) => Promise<PipelineRun<unknown>> | undefined;
 
 export function childPlacement(context: PipelineContext): ChildPlacement | undefined {

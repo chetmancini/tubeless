@@ -370,8 +370,8 @@ export function createCloudflareApp<TEnv = unknown>(
       return this.#core.enqueueStage(job);
     }
 
-    readStage(launchId: string, id: string) {
-      return this.#core.readStage(launchId, id);
+    readStage(launchId: string, id: string, afterId: number) {
+      return this.#core.readStage(launchId, id, afterId);
     }
 
     cancelStage(launchId: string, id: string) {

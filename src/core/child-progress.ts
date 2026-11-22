@@ -1,6 +1,9 @@
+import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type {
   PipelineHooks,
   PipelinePlan,
+  PipelinePlanStep,
+  PipelineStepSkipReason,
   PipelineStepProgress,
   PipelineStepProgressDetail,
   PipelineStepStatus,
@@ -15,6 +18,16 @@ import {
 const LIVE_FAN_OUT_GROUP_LIMIT = 32;
 
 type ReportProgress = (progress: PipelineStepProgress) => void;
+
+type ChildProgressStatus = {
+  step: Pick<PipelinePlanStep, "id" | "name">;
+  outputSource?: PipelineStepProgressDetail["outputSource"];
+} & (
+  | { status: "planned" | "completed" }
+  | { status: "running"; progress?: PipelineStepProgress }
+  | { status: "skipped"; reason: PipelineStepSkipReason; message?: string }
+  | { status: "failed" | "cancelled"; error: { message: string } }
+);
 
 function sameChildProgress(
   left: PipelineStepProgress | undefined,
@@ -107,7 +120,7 @@ function createChildProgress(plan: PipelinePlan) {
       if (plan.ok) for (const id of rows.keys()) terminalSteps.add(id);
       return terminalSteps.size - previous;
     },
-    update(event: PipelineStepStatus) {
+    update(event: ChildProgressStatus) {
       const name = event.step.name ?? event.step.id;
       if (event.status === "skipped" && event.reason === "filtered") {
         return { message: `${name}: skipped: filtered`, label: undefined, terminalDelta: 0 };
@@ -187,13 +200,9 @@ function createChildProgress(plan: PipelinePlan) {
   };
 }
 
-/** Project canonical child statuses into the opaque parent's progress. */
-export function createSingleChildProgress(
-  plan: PipelinePlan,
-  report: ReportProgress
-): PipelineHooks {
+function singleChildProgress(plan: PipelinePlan, report: ReportProgress) {
   const child = createChildProgress(plan);
-  return childProgressHooks((event) => {
+  return (event: ChildProgressStatus) => {
     const update = child.update(event);
     if (!update) return;
     report({
@@ -202,7 +211,41 @@ export function createSingleChildProgress(
       message: `${plan.pipelineId}/${update.message}`,
       details: child.details(),
     });
-  });
+  };
+}
+
+/** Project canonical child statuses into the opaque parent's progress. */
+export function createSingleChildProgress(
+  plan: PipelinePlan,
+  report: ReportProgress
+): PipelineHooks {
+  return childProgressHooks(singleChildProgress(plan, report));
+}
+
+/** Project a remote child's recorded statuses through the same progress formatter. */
+export function createSingleChildTraceProgress(plan: PipelinePlan, report: ReportProgress) {
+  const update = singleChildProgress(plan, report);
+  const steps = new Map(plan.steps.map((step) => [step.id, step]));
+  return (event: PipelineTraceEvent): void => {
+    if (!("stepId" in event) || event.stepId === undefined) return;
+    const step = steps.get(event.stepId);
+    if (!step) return;
+    switch (event.name) {
+      case "step.running":
+        update({ step, status: "running", ...event.payload });
+        break;
+      case "step.complete":
+      case "step.skipped":
+        update({ step, ...event.payload });
+        break;
+      case "step.cancelled":
+      case "step.failed":
+        update({ step, ...event.payload, error: event.error });
+        break;
+      default:
+        break;
+    }
+  };
 }
 
 /** Own fan-out counts, activity labels and bounded detail rendering. */

@@ -253,6 +253,7 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
   const controller = new AbortController();
   let rejectedAttempt = false;
   let stageDeliveries = 0;
+  let sawParentProgress = false;
   const worker = inWorkerd("runner");
   const fetcher: typeof fetch = async (url, init) => {
     const path = new URL(String(url)).pathname;
@@ -270,7 +271,29 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
       Object.hasOwn(JSON.parse(new TextDecoder().decode(init.body)), "report")
     ) {
       stageDeliveries++;
-      if (stageDeliveries === 1) throw new Error("Lost request before commit");
+      if (stageDeliveries === 1) {
+        await vi.waitFor(
+          async () => {
+            const { state, runId } = await getExecution(mixed);
+            expect(state).toBe("running");
+            const detail = await (await call(`/api/runs/${runId}`)).json();
+            expect(detail.run.steps).toContainEqual(
+              expect.objectContaining({
+                id: "transform-locally",
+                status: "running",
+                progress: expect.objectContaining({
+                  details: [
+                    expect.objectContaining({ id: "transform", label: "Local file ready" }),
+                  ],
+                }),
+              })
+            );
+          },
+          { timeout: 2_500 }
+        );
+        sawParentProgress = true;
+        throw new Error("Lost request before commit");
+      }
       if (stageDeliveries === 2) {
         expect(await (await worker(url, init)).json()).toEqual({ accepted: true });
         throw new Error("Lost response after commit");
@@ -302,6 +325,7 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
     expect(rejectedAttempt).toBe(true);
     expect(err.join("")).toContain("Attempt-specific rejection");
     await vi.waitFor(() => expect(stageDeliveries).toBe(3));
+    expect(sawParentProgress).toBe(true);
     expect(await (await call("/_test/published")).text()).toBe("EXAMPLE TEXT");
     expect(await readFile(join(temp, "normalized.txt"), "utf8")).toBe("EXAMPLE TEXT");
     const { runId } = await getExecution(mixed);
@@ -548,13 +572,15 @@ it("fences duplicate claims and an expired attempt, cancels queued work, and rej
     (await request("finish", { id: "stage", token: stageClaim.token, result: { value: "forged" } }))
       .status
   ).toBe(400);
-  expect(studio.readStage(parent, "stage")).toBeUndefined();
+  expect(studio.readStage(parent, "stage", -1).result).toBeUndefined();
   await studio.cancelStage(parent, "stage");
   expect(
     await (await request("heartbeat", { id: "stage", token: stageClaim.token })).json()
   ).toEqual({ active: true, cancelled: true });
   await request("finish", { id: "stage", token: stageClaim.token, result: "cancelled" });
-  expect(studio.readStage(parent, "stage")).toEqual({ error: "The remote stage was cancelled." });
+  expect(studio.readStage(parent, "stage", -1).result).toEqual({
+    error: "The remote stage was cancelled.",
+  });
 
   await studio.enqueueStage({
     kind: "stage",
@@ -609,17 +635,17 @@ it("fences duplicate claims and an expired attempt, cancels queued work, and rej
       )
     ).status
   ).toBe(400);
-  expect(studio.readStage(parent, "complete-stage")).toBeUndefined();
+  expect(studio.readStage(parent, "complete-stage", -1).result).toBeUndefined();
   expect(statusOfStage()).toBe(0);
 
   const completion = encodeRunnerCompletion("complete-stage", 1, terminal, report);
   expect(await (await request("events", completion, token)).json()).toEqual({ accepted: true });
-  expect(studio.readStage(parent, "complete-stage")).toMatchObject({
+  expect(studio.readStage(parent, "complete-stage", -1).result).toMatchObject({
     report: { value: "ACTUAL REPORT", status: "completed" },
   });
   expect(statusOfStage()).toBe(1);
   await studio.reportFailure(parent, "Fixture parent done.");
-  expect(studio.readStage(parent, "complete-stage")).toBeUndefined();
+  expect(studio.readStage(parent, "complete-stage", -1).result).toBeUndefined();
   now += RUNNER_LEASE_MS + 1;
   expect(await (await request("events", completion, "wrong-token")).json()).toEqual({
     accepted: false,
