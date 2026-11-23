@@ -216,6 +216,7 @@ describe("Cloud HTTP client", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(
       JSON.stringify({ pipelineId: "pipeline", input: { hello: "world" } })
     );
+    fetcher.mockResolvedValueOnce(json({ ...run, id: "run/with?characters" }));
     await client.getRun("workspace", "run/with?characters");
     expect(String(fetcher.mock.calls[1][0])).toBe(
       `${host}/api/v1/workspaces/workspace/runs/run%2Fwith%3Fcharacters`

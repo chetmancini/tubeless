@@ -353,17 +353,20 @@ Sign in to Tubeless Cloud with an expiring first-party session.
   },
   cloud: {
     name: "cloud",
-    description: "List and run deployed Cloud pipelines",
-    usage: `Usage: tubeless cloud <list|run|logs> [options]
+    description: "List, run, and follow deployed Cloud pipelines",
+    usage: `Usage: tubeless cloud <list|run|follow|logs> [options]
 
   list [--json]
-  run <pipeline-name-or-slug> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach] [--json]
-  run --id <cloud-pipeline-id> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach] [--json]
-  logs <run-id> [--follow] [--json]
+  run <pipeline-name-or-slug> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach|--poll] [--json]
+  run --id <cloud-pipeline-id> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach|--poll] [--json]
+  follow <run-id> [--cursor <cursor>|--poll] [--json]
+  logs <run-id> [--follow [--cursor <cursor>|--poll]] [--json]
 
 All commands accept --workspace <id>, --host <origin>, and --help.
 Use a listed slug or an exact name. Quote names containing spaces.
-Run watches logs by default; --detach returns after printing the run ID.
+Run streams progress and output by default; --detach returns the admission.
+Follow attaches to an existing run. Ctrl-C stops observation. To cancel the
+run itself, use the Cloud dashboard. Use --poll for older Cloud services.
 Automation uses TUBELESS_TOKEN and an explicit --workspace. Known --id with
 --detach needs run scope only; names, listing, logs and waiting need read scope.
 Use --ref for a GitHub branch, tag or commit; omission uses the configured branch HEAD.
@@ -372,7 +375,7 @@ retry the same pipeline/input/source after an uncertain admission.
 Remote runs use Cloud-admitted source. Local edits and modules are never loaded.
 Set up and load pipelines in the Cloud dashboard.
 `,
-    subcommands: ["list", "run", "logs"],
+    subcommands: ["list", "run", "follow", "logs"],
     options: {
       host: CLOUD_HOST_OPTION,
       workspace: {
@@ -427,6 +430,18 @@ Set up and load pipelines in the Cloud dashboard.
         type: "boolean",
         description: "Watch the run until it finishes",
         commands: ["logs"],
+      },
+      cursor: {
+        type: "string",
+        description: "Resume streaming from the last acknowledged cursor",
+        valueName: "cursor",
+        completion: "text",
+        commands: ["follow", "logs"],
+      },
+      poll: {
+        type: "boolean",
+        description: "Explicitly poll retained status and logs instead of streaming",
+        commands: ["run", "follow", "logs"],
       },
     },
   },

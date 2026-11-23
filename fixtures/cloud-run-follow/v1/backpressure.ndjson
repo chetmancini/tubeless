@@ -1,0 +1,3 @@
+{"version":1,"workspaceId":"fixture-workspace","runId":"worker-backlog","cursor":"opaque-backlog-0","type":"snapshot","payload":{"run":{"id":"worker-backlog","pipelineId":"check","pipelineName":"Check","status":"completed","createdAt":1730000000000,"durationMs":0},"truncatedFields":["result"]}}
+{"version":1,"workspaceId":"fixture-workspace","runId":"worker-backlog","cursor":"opaque-backlog-1","type":"log","payload":{"position":1,"level":"info","message":"Retained first line"}}
+{"version":1,"workspaceId":"fixture-workspace","runId":"worker-backlog","cursor":"opaque-backlog-1","type":"end","payload":{"reason":"backpressure","resumable":true}}

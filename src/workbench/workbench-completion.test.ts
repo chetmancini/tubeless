@@ -361,6 +361,8 @@ describe("tubeless __complete", () => {
         "--idempotency-key",
         "--detach",
         "--follow",
+        "--cursor",
+        "--poll",
         "--json",
         "--help",
       ].sort()
@@ -382,10 +384,16 @@ describe("tubeless __complete", () => {
         "--ref",
         "--idempotency-key",
         "--detach",
+        "--poll",
         "--help",
       ],
     ],
-    ["cloud", "logs", ["--host", "--workspace", "--json", "--follow", "--help"]],
+    [
+      "cloud",
+      "logs",
+      ["--host", "--workspace", "--json", "--follow", "--cursor", "--poll", "--help"],
+    ],
+    ["cloud", "follow", ["--host", "--workspace", "--json", "--cursor", "--poll", "--help"]],
     [
       "remote",
       "run",

@@ -2,6 +2,11 @@ import { isJsonObject } from "../../utilities/canonical-json.js";
 import { normalizeCloudHost } from "./config.js";
 import { isCloudToken } from "./protocol.js";
 
+export function redactCloudText(value: string, token?: string): string {
+  if (!token) return value;
+  return value.replaceAll(token, "[redacted]".includes(token) ? "�" : "[redacted]");
+}
+
 export interface CloudCredential {
   token: string;
   expiresAt: number;

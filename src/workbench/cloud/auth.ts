@@ -11,6 +11,7 @@ import { createCloudClient, cloudVerificationUrl } from "./client.js";
 import { resolveCloudHost } from "./config.js";
 import { createNativeCredentialStore, resolveCloudCredential } from "./credentials.js";
 import { isCloudAutomationToken } from "./protocol.js";
+import { cloudOutput } from "./output.js";
 
 import { type WorkbenchCliIo, writeUsageError, terminalSafeText } from "../workbench-shared.js";
 import { cloudErrorExit, cloudSleep, type CloudCommandDependencies } from "./shared.js";
@@ -150,10 +151,11 @@ export async function runAuth(
           }
           const session = await client.session();
           const status = { ...session, host, credentialSource: credential.source };
-          if (values.json) io.stdout.write(`${JSON.stringify(status)}\n`);
+          const output = cloudOutput(credential.token);
+          if (values.json) io.stdout.write(`${output.json(status)}\n`);
           else
             io.stdout.write(
-              `${terminalSafeText(session.user.name)} (${terminalSafeText(session.user.email)})\nHost: ${host}\nSession expires: ${new Date(session.expiresAt).toISOString()}\nCredential: ${credential.source}\n`
+              `${output.text(session.user.name)} (${output.text(session.user.email)})\nHost: ${host}\nSession expires: ${new Date(session.expiresAt).toISOString()}\nCredential: ${credential.source}\n`
             );
           return 0;
         } catch (error) {

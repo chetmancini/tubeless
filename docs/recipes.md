@@ -11,6 +11,8 @@ For an explicit Node 24/Bun repository gate, see [the portable check recipe](nod
 
 For optional structured Vitest failures, see [the diagnostic contract](structured-diagnostics.md).
 For headless Cloud submission, see [Cloud CLI](./cli.md#tubeless-cloud).
+For attaching to an admitted run or resuming after a disconnect, see
+[Follow and read results](./cli.md#follow-and-read-results).
 
 | Intent                                                  | Executable recipe                                                                                                                                       | Main primitives                                                                                                  |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |

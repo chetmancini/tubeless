@@ -88,7 +88,8 @@ export function service(
         admitted = true;
         throw new Error("lost response");
       }
-      return Response.json(options.admission ?? baseRun, { status: 202 });
+      const { pipelineId } = JSON.parse(String(init?.body));
+      return Response.json(options.admission ?? { ...baseRun, pipelineId }, { status: 202 });
     }
     if (url.pathname.endsWith(`/runs/${encodeURIComponent(options.admission?.id ?? baseRun.id)}`))
       return Response.json(runs.length > 1 ? runs.shift() : runs[0]);

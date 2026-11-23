@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { verifyPackedCloudFollow } from "./packed-cloud-follow.mjs";
 
 const binary = process.argv[2];
 const token = "packed-fixture-session";
@@ -47,7 +48,6 @@ const session = {
   },
 };
 const inventory = { method: "GET", path: `${base}/pipelines`, responseBody: [pipeline] };
-
 // Assert executable HTTP exchanges only. Cloud integration tests own admission policy.
 const exchanges = [];
 const server = createServer(async (request, response) => {
@@ -57,23 +57,27 @@ const server = createServer(async (request, response) => {
   assert.equal(request.url, expected.path);
   assert.equal(request.headers.authorization, `Bearer ${expected.token}`);
   assert.equal(request.headers.cookie, undefined);
+  assert.equal(request.headers.accept, expected.accept ?? "application/json");
   let text = "";
   for await (const chunk of request) text += chunk;
   assert.deepEqual(text ? JSON.parse(text) : undefined, expected.requestBody);
   if (expected.method === "POST") {
     assert.ok(request.headers["idempotency-key"]);
     if (expected.key) assert.equal(request.headers["idempotency-key"], expected.key);
-  }
+  } else assert.equal(request.headers["idempotency-key"], undefined);
   if (expected.disconnect) {
     request.socket.destroy();
     return;
   }
-  response.writeHead(expected.status ?? 200, { "Content-Type": "application/json" });
-  response.end(JSON.stringify(expected.responseBody));
+  response.writeHead(expected.status ?? 200, {
+    "Content-Type": expected.contentType ?? "application/json",
+  });
+  if (expected.hold) response.write(expected.raw);
+  else response.end(expected.raw ?? JSON.stringify(expected.responseBody));
 });
 await new Promise((done) => server.listen(0, "127.0.0.1", done));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const command = async (args, script, bearer = token, stdin) => {
+const execute = async (args, script, bearer = token, { stdin, exit = 0, interruptOn } = {}) => {
   exchanges.push(...script.map((step) => ({ ...step, token: bearer })));
   const execution = promisify(execFile)(binary, args, {
     env: { ...process.env, TUBELESS_TOKEN: bearer },
@@ -81,14 +85,30 @@ const command = async (args, script, bearer = token, stdin) => {
     timeout: 10000,
   });
   if (stdin !== undefined) execution.child.stdin.end(stdin);
-  try {
-    const result = await execution;
-    assert.ok(!result.stdout.includes(bearer) && !result.stderr.includes(bearer));
-    return JSON.parse(result.stdout);
-  } finally {
-    assert.equal(exchanges.length, 0, "The executable did not perform every expected exchange");
+  if (interruptOn) {
+    let received = "";
+    const interrupt = (chunk) => {
+      received += chunk;
+      if (received.includes(interruptOn)) {
+        execution.child.stderr.off("data", interrupt);
+        execution.child.kill("SIGINT");
+      }
+    };
+    execution.child.stderr.on("data", interrupt);
   }
+  const result = await execution.catch((error) => {
+    if (exit === 0) throw error;
+    assert.equal(error.code, exit, error.stderr);
+    return error;
+  });
+  assert.equal(result.code ?? 0, exit);
+  assert.ok(!result.stdout.includes(bearer) && !result.stderr.includes(bearer));
+  assert.equal(exchanges.length, 0, "The executable did not perform every expected exchange");
+  return result;
 };
+const command = async (args, script, bearer, stdin) =>
+  JSON.parse((await execute(args, script, bearer, { stdin })).stdout);
+
 try {
   const status = await command(["auth", "status", "--host", origin, "--json"], [session]);
   assert.equal(status.credentialSource, "environment");
@@ -199,21 +219,21 @@ try {
     [403, "forbidden", 2],
     [409, "conflict", 6],
   ]) {
-    await assert.rejects(
-      command(
-        args,
-        [
-          {
-            ...admission,
-            status,
-            responseBody: { error: { code, message: "Controlled rejection" } },
-          },
-        ],
-        automationToken
-      ),
-      (error) => error.code === exit && !error.stderr.includes(automationToken)
+    await execute(
+      args,
+      [
+        {
+          ...admission,
+          status,
+          responseBody: { error: { code, message: "Controlled rejection" } },
+        },
+      ],
+      automationToken,
+      { exit }
     );
   }
+
+  await verifyPackedCloudFollow({ execute, command, origin, automationToken });
 } finally {
   await new Promise((done, reject) => server.close((error) => (error ? reject(error) : done())));
   await rm(root, { recursive: true, force: true });
