@@ -328,3 +328,96 @@ it("fences stage dispatch across generations and honors cancellation after Studi
   const claim = await afterCancel.serveRunner(runnerRequest("claim", { manifest }));
   expect(await claim.json()).toEqual({});
 });
+
+it("closes interrupted Worker descendants and lets a leased Bun branch finish after recovery", async () => {
+  const storage = createFakeDurableStorage();
+  const now = 1000;
+  const studio = openStudio(storage, () => now, true);
+  const commandId = "fetch-transform-publish";
+  const receipt = await studio.launch({
+    projectId,
+    deploymentId,
+    commandId,
+    idempotencyKey: "recover-descendants",
+    values: { text: "source.txt" },
+  });
+  if (!receipt.accepted) throw new Error(receipt.errors.join("\n"));
+  const { launchId } = receipt;
+  expect(await studio.admit(launchId, 1)).toEqual({ admitted: true });
+  const root = {
+    name: "pipeline.started",
+    version: PIPELINE_TRACE_VERSION,
+    runId: "worker-root",
+    pipelineId: commandId,
+    timestampMs: now,
+    payload: { stepCount: 3, dryRun: false, planOk: true, targetIds: [] },
+  } satisfies PipelineTraceEvent;
+  const workerChild = { ...root, runId: "worker-child", parentRunId: root.runId };
+  const workerGrandchild = { ...root, runId: "worker-grandchild", parentRunId: workerChild.runId };
+  expect(await studio.appendEvents(launchId, 0, [root, workerChild, workerGrandchild], 1)).toEqual({
+    accepted: true,
+  });
+  const stageId = "leased-stage";
+  const stepId = "transform-locally";
+  const input = { text: "committed after restart" };
+  const controls = { dryRun: true };
+  await studio.enqueueStage(
+    {
+      id: stageId,
+      kind: "stage",
+      launchId,
+      deploymentId,
+      pipelineId: transformId,
+      definitionId,
+      deadlineAtMs: now + 10_000,
+      stage: { parentRunId: workerChild.runId, stepId, input, controls },
+    },
+    1
+  );
+  const claim = await studio.serveRunner(runnerRequest("claim", { manifest }));
+  const { token } = (await claim.json()).claim;
+  const events: PipelineTraceEvent[] = [];
+  const report = await runnerProject.pipelines[1].run(input, controls, {
+    parentRunId: workerChild.runId,
+    tracing: {
+      parentStep: { runId: workerChild.runId, stepId },
+      exporter: { export: (event) => void events.push(event) },
+    },
+  });
+  const terminal = events.pop()!;
+  if (terminal.name !== "pipeline.completed") throw new Error("Missing Bun terminal event.");
+  const bunChild = { ...root, runId: "bun-child", parentRunId: report.runId };
+  const batch = encodeAttemptBatches(stageId, 0, [...events, bunChild])[0];
+  const recorded = await studio.serveRunner(runnerRequest("events", batch, token));
+  expect(await recorded.json()).toEqual({ accepted: true });
+
+  const restarted = openStudio(storage, () => now, true);
+  expect(await restarted.admit(launchId, 2)).toEqual({ admitted: true });
+  const ended = storage.sql
+    .exec(
+      "SELECT run_id FROM pipeline_run_events WHERE event_name = 'pipeline.completed' ORDER BY id"
+    )
+    .toArray()
+    .map(({ run_id }) => run_id);
+  expect(ended).toEqual([workerGrandchild.runId, workerChild.runId, root.runId]);
+  const heartbeat = await restarted.serveRunner(runnerRequest("heartbeat", { id: stageId, token }));
+  expect(await heartbeat.json()).toEqual({ active: true, cancelled: false });
+
+  const childEnded = {
+    ...terminal,
+    runId: bunChild.runId,
+    pipelineId: bunChild.pipelineId,
+    parentRunId: report.runId,
+  };
+  const childBatch = encodeAttemptBatches(stageId, 1, [childEnded])[0];
+  expect(
+    await (await restarted.serveRunner(runnerRequest("events", childBatch, token))).json()
+  ).toEqual({ accepted: true });
+  const completion = encodeRunnerCompletion(stageId, 2, terminal, report);
+  expect(
+    await (await restarted.serveRunner(runnerRequest("events", completion, token))).json()
+  ).toEqual({ accepted: true });
+  expect(restarted.readStage(launchId, stageId, -1).result).toMatchObject({
+    report: { status: "completed", value: "COMMITTED AFTER RESTART" },
+  });
+});

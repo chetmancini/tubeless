@@ -434,6 +434,21 @@ export class CloudflareRunnerQueue {
     };
   }
 
+  activeStageRunIds(launchId: string): string[] {
+    return this.#sql
+      .exec(
+        `SELECT (
+          SELECT batch.run_id FROM tubeless_attempt_batches AS batch
+          WHERE batch.attempt_id = stage.id ORDER BY batch.sequence DESC LIMIT 1
+        ) AS run_id FROM tubeless_runner_queue AS stage
+        WHERE stage.launch_id = ? AND stage.id <> stage.launch_id
+          AND stage.job_json IS NOT NULL AND stage.lease_digest IS NOT NULL`,
+        launchId
+      )
+      .toArray()
+      .flatMap(({ run_id }) => (typeof run_id === "string" ? [run_id] : []));
+  }
+
   cancel(launchId: string, stageId?: string): void {
     this.#sql.exec(
       `UPDATE tubeless_runner_queue SET cancelled = 1,

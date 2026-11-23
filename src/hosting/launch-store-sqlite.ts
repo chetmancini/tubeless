@@ -272,7 +272,11 @@ export class SqliteHostedLaunchStore
   }
 
   /** Caller owns this transaction together with cancellation cleanup. */
-  admitRecovery(launchId: string, generation: number): "admitted" | "closed" | "cancelled" {
+  admitRecovery(
+    launchId: string,
+    generation: number,
+    activeStageRunIds: readonly string[]
+  ): "admitted" | "closed" | "cancelled" {
     const launch = this.#get(launchId);
     if (
       !launch ||
@@ -296,14 +300,14 @@ export class SqliteHostedLaunchStore
       return "cancelled";
     }
     if (!launch.admitted && !this.#admit(launch)) return "closed";
-    // Detached Bun stages retain their original parent attempt and lease.
+    // Runner-owned branches stay attached to their original parent and keep their leases.
     if (launch.runId)
       this.events.append(
         this.interruptRuns(
           launch.runId,
           "Worker attempt interrupted. Recovery uses the execution journal.",
           this.now(),
-          "root"
+          activeStageRunIds
         )
       );
     this.storage.sql.exec(
@@ -791,14 +795,14 @@ export class SqliteHostedLaunchStore
       );
   }
 
-  /** Close open runs, children before parents. */
+  /** Close open runs, children before parents, except independently owned branches. */
   interruptRuns(
     rootRunId: string,
     message: string,
     nowMs: number,
-    scope: "root" | "subtree" = "subtree"
+    excludedBranches: readonly string[] = []
   ): PipelineTraceEvent[] {
-    const { sql, params } = openRunStartsQuery(rootRunId, scope);
+    const { sql, params } = openRunStartsQuery(rootRunId, excludedBranches);
     // SAFETY: SELECT * over the owned pipeline_run_events table returns RunEventRecord rows.
     const rows = this.storage.sql.exec(sql, ...params).toArray() as unknown as RunEventRecord[];
     const closed = new Set<string>();

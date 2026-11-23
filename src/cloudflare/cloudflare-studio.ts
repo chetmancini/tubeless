@@ -267,7 +267,11 @@ export class StudioObjectCore implements StudioIngest {
   admit(launchId: string, generation?: number) {
     if (generation === undefined) return this.#ingest.admit(launchId);
     return this.deps.storage.transaction(async () => {
-      const state = this.#store.admitRecovery(launchId, generation);
+      const state = this.#store.admitRecovery(
+        launchId,
+        generation,
+        this.#runners.activeStageRunIds(launchId)
+      );
       if (state === "cancelled") {
         this.#runners.clearFinishedLaunch(launchId);
         await this.#scheduleReconcile();
