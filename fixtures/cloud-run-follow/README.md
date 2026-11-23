@@ -4,6 +4,8 @@
 `chetmancini/tubeless-cloud@f24d690939ff661ebda458d4532dfa8cd9c6adc5`
 ([Cloud PR #161](https://github.com/chetmancini/tubeless-cloud/pull/161)).
 The matching contract lives in `docs/cloud/run-following.md` at that commit.
+The native CLI path was also checked against source at
+`ca1bfdff29f5d2ced6d2923b4c24078252b35eb6`, which uses the same fixtures.
 
 `bun run pack:verify` drives the installed CLI against these exchanges. The
 packed test also drops a connection mid-record, replays an output position,

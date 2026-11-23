@@ -215,7 +215,13 @@ export async function readFollowStream(
           return invalidStream();
         }
         const event = parseEvent(value, workspace, runId);
-        if (++count > MAX_STREAM_EVENTS || (count === 1) !== (event.type === "snapshot"))
+        // Cloud can close observation during the first disclosure check.
+        if (
+          ++count > MAX_STREAM_EVENTS ||
+          (count === 1
+            ? event.type !== "snapshot" && event.type !== "end"
+            : event.type === "snapshot")
+        )
           return invalidStream();
         await consume(event);
         if (event.type === "terminal" || event.type === "end") return event;

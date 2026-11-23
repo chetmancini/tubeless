@@ -132,4 +132,20 @@ describe("Cloud observation recovery", () => {
     expect(request).toHaveBeenCalledTimes(3);
     expect(cancel).toHaveBeenCalledTimes(3);
   });
+
+  it("reports lost authority before the first snapshot is disclosed", async () => {
+    const { follow, io, request } = follower();
+    const end = {
+      ...JSON.parse(snapshot),
+      type: "end",
+      payload: { reason: "authorization_lost", resumable: false },
+    };
+    request.mockResolvedValueOnce(response(`${JSON.stringify(end)}\n`));
+    expect(await follow()).toBe(2);
+    expect(JSON.parse(io.errors.join(""))).toMatchObject({
+      error: { code: "authorization_lost" },
+      recovery: { workspaceId: workspace, runId, cursor: "opaque-live-0" },
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
 });
