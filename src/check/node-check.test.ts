@@ -20,6 +20,19 @@ async function fixture() {
   });
   return cwd;
 }
+
+function stubBunVersion(version: string) {
+  // Keep fixture installs and checks native while controlling toolchain admission.
+  const runNativeProcess = checkProcess.runCheckProcess;
+  return vi.spyOn(checkProcess, "runCheckProcess").mockImplementation((argv, timeout, context) => {
+    if (argv[0] === "bun" && argv[1] === "--version") {
+      context.log.log(version);
+      return Promise.resolve({ status: "exited", exitCode: 0, signal: null, outputComplete: true });
+    }
+    return runNativeProcess(argv, timeout, context);
+  });
+}
+
 describe("native recipe execution", () => {
   it("rejects Windows before launching a recipe or a native process", async () => {
     const descriptor = Object.getOwnPropertyDescriptor(process, "platform")!;
@@ -91,12 +104,13 @@ describe("native recipe execution", () => {
     async () => {
       const cwd = await fixture();
       const plan = await readNodeCheckPlan(cwd);
+      stubBunVersion(plan.toolchain.bun);
       const mutablePlan = structuredClone(plan);
       const pending = runNodeCheck(mutablePlan, { cwd, log });
       mutablePlan.commands[0].argv = ["/must-not-launch-mutated-plan"];
       mutablePlan.commands[1].dependsOn.push("changed-after-admission");
       const pass = await pending;
-      expect(pass.run.status).toBe("completed");
+      expect(pass.run.status, JSON.stringify(pass.run.errors)).toBe("completed");
       expect(pass.reports[0].result).toMatchObject({
         state: "available",
         report: { completeness: "complete", tests: [{ outcome: "passed" }] },
@@ -140,8 +154,10 @@ describe("native recipe execution", () => {
       const manifest = JSON.parse(await readFile(join(cwd, "package.json"), "utf8"));
       manifest.scripts.types = `node -e "console.log('check-ready');setTimeout(()=>{},30000)"`;
       await writeFile(join(cwd, "package.json"), JSON.stringify(manifest));
+      const plan = await readNodeCheckPlan(cwd);
+      stubBunVersion(plan.toolchain.bun);
       const controller = new AbortController();
-      const result = await runNodeCheck(await readNodeCheckPlan(cwd), {
+      const result = await runNodeCheck(plan, {
         cwd,
         signal: controller.signal,
         log: {
@@ -151,7 +167,7 @@ describe("native recipe execution", () => {
           },
         },
       });
-      expect(result.run.status).toBe("cancelled");
+      expect(result.run.status, JSON.stringify(result.run.errors)).toBe("cancelled");
       expect(result.commands.find((command) => command.id === "types")?.process.status).toBe(
         "cancelled"
       );
@@ -200,6 +216,23 @@ describe("native recipe execution", () => {
     }
   );
   it.runIf(process.versions.node.startsWith("24."))(
+    "rejects a different Bun version before installing dependencies",
+    async () => {
+      const cwd = await fixture();
+      const probe = stubBunVersion("1.4.5");
+      const result = await runNodeCheck(await readNodeCheckPlan(cwd), { cwd, log });
+
+      expect(result.run.status).toBe("failed");
+      expect(result.run.errors[0]?.message).toContain("requires Bun 1.4.4");
+      expect(result.commands).toEqual([]);
+      expect(probe).toHaveBeenCalledExactlyOnceWith(
+        ["bun", "--version"],
+        expect.any(Number),
+        expect.anything()
+      );
+    }
+  );
+  it.runIf(process.versions.node.startsWith("24."))(
     "preserves cancellation during the Bun version probe",
     async () => {
       const cwd = await fixture();
@@ -227,9 +260,13 @@ describe("native recipe execution", () => {
       manifest.scripts.types = "node -e 'process.exit(9)'";
       await writeFile(join(cwd, "package.json"), JSON.stringify(manifest));
       const plan = await readNodeCheckPlan(cwd);
+      stubBunVersion(plan.toolchain.bun);
       const failure = await runNodeCheck(plan, { cwd, log });
       expect(failure.run.status).toBe("failed");
-      expect(failure.commands.find((c) => c.id === "types")?.process).toMatchObject({
+      expect(
+        failure.commands.find((c) => c.id === "types")?.process,
+        JSON.stringify(failure.run.errors)
+      ).toMatchObject({
         status: "exited",
         exitCode: 9,
       });
