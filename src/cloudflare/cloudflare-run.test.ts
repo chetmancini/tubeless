@@ -14,6 +14,35 @@ afterEach(() => {
 });
 
 describe("run object", () => {
+  it("fences a changed definition within the same recovery deployment before executing it", async () => {
+    sideEffect.mockClear();
+    const storage = createFakeDurableStorage();
+    const { studio, batches } = ingest();
+    const reportFailure = vi.spyOn(studio, "reportFailure");
+    const core = new RunObjectCore({
+      storage,
+      commands,
+      ingest: () => studio,
+      deploymentId: "release-1",
+    });
+    await core.start({
+      ...job({ name: "Ada" }),
+      commandId: "effect",
+      deploymentId: "release-1",
+      recoveryDefinitionId: "earlier-definition",
+    });
+    await core.alarm();
+    expect(sideEffect).not.toHaveBeenCalled();
+    expect(batches).toEqual([]);
+    expect(reportFailure).toHaveBeenCalledWith(
+      "l1",
+      expect.stringContaining("definition no longer matches"),
+      "deployment_unavailable",
+      1
+    );
+    expect(await storage.get("job")).toBeUndefined();
+  });
+
   it("refuses a pending job after the deployment changes", async () => {
     sideEffect.mockClear();
     const storage = createFakeDurableStorage();

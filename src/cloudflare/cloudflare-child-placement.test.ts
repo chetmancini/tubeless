@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
 import { placeCloudflareChild, type RunnerStageStore } from "./cloudflare-child-placement.js";
 
-async function fixture(readStage: RunnerStageStore["readStage"]) {
+async function fixture(readStage: RunnerStageStore["readStage"], generation?: number) {
   const pipeline = definePipeline({
     id: "child",
     implementationVersion: "test",
@@ -17,6 +17,7 @@ async function fixture(readStage: RunnerStageStore["readStage"]) {
     definitions: new Map([[pipeline.id, plan.definition!.identity.definitionId]]),
     launchId: "launch",
     deploymentId: "test",
+    generation,
     deadlineAtMs: Date.now() + 5_000,
     flush: async () => {},
     store,
@@ -35,6 +36,7 @@ async function fixture(readStage: RunnerStageStore["readStage"]) {
         controls: {},
         context,
         stepId: "stage",
+        journalPath: generation === undefined ? undefined : ["v1", "execution", "launch", "stage"],
         reportProgress() {},
       })!,
     report: await pipeline.run({}, undefined, context),
@@ -42,6 +44,21 @@ async function fixture(readStage: RunnerStageStore["readStage"]) {
 }
 
 afterEach(() => vi.useRealTimers());
+
+it("retries an unconfirmed stage dispatch using the same ID and generation", async () => {
+  const readStage = vi.fn<RunnerStageStore["readStage"]>();
+  const { enqueueStage, run, report, store } = await fixture(readStage, 2);
+  enqueueStage.mockRejectedValueOnce(
+    Object.assign(new Error("Studio restarted"), { retryable: true })
+  );
+  readStage.mockResolvedValue({ events: [], result: { report } });
+
+  await expect(run()).resolves.toEqual(report);
+  expect(enqueueStage).toHaveBeenCalledTimes(2);
+  expect(enqueueStage.mock.calls[1]).toEqual(enqueueStage.mock.calls[0]);
+  expect(enqueueStage.mock.calls[0][1]).toBe(2);
+  expect(store).toHaveBeenCalledTimes(3);
+});
 
 it("recreates the Studio stub for a retryable read and queues the child once", async () => {
   vi.useFakeTimers();
@@ -82,7 +99,7 @@ it("interrupts a stalled result read on parent abort and cancels through a fresh
   signal.abort(new DOMException("Parent stopped", "AbortError"));
   await failure;
   expect(enqueueStage).toHaveBeenCalledOnce();
-  expect(cancelStage).toHaveBeenCalledWith("launch", enqueueStage.mock.calls[0][0].id);
+  expect(cancelStage).toHaveBeenCalledWith("launch", enqueueStage.mock.calls[0][0].id, undefined);
   expect(store).toHaveBeenCalledTimes(3);
 });
 

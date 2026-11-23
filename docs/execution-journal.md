@@ -6,6 +6,10 @@ supplies a `PipelineExecutionJournal` from `tubeless`. Adapt the
 [host example](../examples/host-embedding.ts); correlation IDs, history recording
 and `context.checkpoint` alone do not resume pipeline steps.
 
+For trusted Worker-root launches in self-hosted Cloudflare, set
+`recoverInterruptedRuns: true` to use the built-in journal and recover across
+Worker attempts. See [Worker recovery](./deploy-cloudflare.md#recover-an-interrupted-worker-execution).
+
 The prototype is `chetmancini/tubeless-cloud`'s `docs/interactive-execution.md`,
 `patches/tubeless@0.4.0.patch`, `src/worker/run-journal.ts` and
 `src/worker/runner-interactive.ts`, inspected on 2026-11-15. The 0.4.0 port is

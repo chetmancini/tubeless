@@ -1,7 +1,7 @@
 import { createSteps, definePipeline, type StandardSchemaV1 } from "tubeless";
 import { defineProject } from "tubeless/project";
 
-export const deploymentId = "runner-placement-v1";
+export const deploymentId = "runner-placement-v2";
 export const runnerServiceId = "replace-with-runner-client-id.access";
 export const transformId = "normalize-on-bun";
 
@@ -88,6 +88,7 @@ export function runnerProject(handlers: {
   });
   const pipeline = definePipeline({
     id: "fetch-transform-publish",
+    implementationVersion: deploymentId,
     steps: [fetchInput, stage, publishOutput],
     finalize: stage,
   });

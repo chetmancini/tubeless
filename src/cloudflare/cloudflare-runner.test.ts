@@ -1,4 +1,3 @@
-import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,14 +10,9 @@ import {
   runnerServiceId,
 } from "../../examples/cloudflare/runner-placement/project.js";
 import runnerProject from "../../examples/cloudflare/runner-placement/runner.project.js";
-import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
 import { manifestModules } from "./cloudflare-workerd.test-support.js";
-import { StudioObjectCore } from "./cloudflare-studio.js";
 import { runRemote } from "../workbench/workbench-remote.js";
-import { hostedProjectCommands } from "../hosting/hosting-commands.js";
-import { RUNNER_LEASE_MS, RUNNER_PATH, runnerProjectHeader } from "../hosting/runner-protocol.js";
-import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt-batch.js";
-import type { PipelineTraceEvent } from "../tracing/tracing.js";
+import { RUNNER_PATH, runnerProjectHeader } from "../hosting/runner-protocol.js";
 
 const projectId = "runner-placement";
 const example = (file: string) =>
@@ -26,6 +20,8 @@ const example = (file: string) =>
 const AUD = "b".repeat(64);
 const ISSUER = "https://runner-test.cloudflareaccess.com";
 let runtime: Miniflare;
+let recreateRuntime: () => Miniflare;
+const holdStageResults = new Set<string>();
 let temp: string;
 let access: { runner: string; user: string };
 const definitionId = runnerProject.pipelines[1].plan().definition!.identity.definitionId;
@@ -75,7 +71,22 @@ beforeAll(async () => {
     runner: await sign(keys.privateKey, { sub: "", common_name: runnerServiceId }),
     user: await sign(keys.privateKey, { sub: "user" }),
   };
-  const source = (await compile("worker.ts")).replace("export default {", "const worker = {");
+  const source = (await compile("worker.ts"))
+    .replace("export default {", "const worker = {")
+    .replace(
+      "export const { TubelessStudio, TubelessRun } = app.durableObjects;",
+      `
+      const { TubelessStudio: BaseStudio, TubelessRun } = app.durableObjects;
+      export { TubelessRun };
+      export class TubelessStudio extends BaseStudio {
+        async readStage(launchId, id, afterId) {
+          const observation = await super.readStage(launchId, id, afterId);
+          if (!observation.result) return observation;
+          const gate = await fetch("https://fixture.test/stage-result?launch=" + launchId);
+          return gate.status === 423 ? { events: observation.events } : observation;
+        }
+      }`
+    );
   const entry =
     source +
     String.raw`
@@ -93,50 +104,62 @@ beforeAll(async () => {
       }
       return worker.fetch(request, env);
     } };`;
-  runtime = new Miniflare({
-    telemetry: { enabled: false },
-    log: new NoOpLog(),
-    workers: [
-      {
-        config: {
-          name: "runner-test",
-          compatibilityDate: "2026-10-01",
-          manifest: {
-            mainModule: "worker.js",
-            modules: manifestModules(entry, { "runner-project.js": await compile("project.ts") }),
-          },
-          env: {
-            TUBELESS_STUDIO: {
-              type: "durable-object",
-              worker: "runner-test",
-              exportName: "TubelessStudio",
-            },
-            TUBELESS_RUN: {
-              type: "durable-object",
-              worker: "runner-test",
-              exportName: "TubelessRun",
-            },
-            TUBELESS_BUCKET: { type: "r2", name: "runner-test" },
-            ACCESS_TEAM_DOMAIN: { type: "text", value: "runner-test.cloudflareaccess.com" },
-            ACCESS_AUD: { type: "text", value: AUD },
-          },
-          exports: {
-            TubelessStudio: { type: "durable-object", storage: "sqlite" },
-            TubelessRun: { type: "durable-object", storage: "sqlite" },
-          },
-        },
-        dev: {
-          outboundService: {
-            type: "fetcher",
-            handler: async (request: Request) =>
-              request.url === `${ISSUER}/cdn-cgi/access/certs`
-                ? Response.json({ keys: [publicKey] })
-                : new Response("Unexpected outbound request.", { status: 502 }),
-          },
-        },
-      },
-    ],
+  const fixtureModules = manifestModules(entry, {
+    "runner-project.js": await compile("project.ts"),
   });
+  recreateRuntime = () =>
+    new Miniflare({
+      resourcePersistencePath: join(temp, "workerd"),
+      telemetry: { enabled: false },
+      log: new NoOpLog(),
+      workers: [
+        {
+          config: {
+            name: "runner-test",
+            compatibilityDate: "2026-10-01",
+            manifest: {
+              mainModule: "worker.js",
+              modules: fixtureModules,
+            },
+            env: {
+              TUBELESS_STUDIO: {
+                type: "durable-object",
+                worker: "runner-test",
+                exportName: "TubelessStudio",
+              },
+              TUBELESS_RUN: {
+                type: "durable-object",
+                worker: "runner-test",
+                exportName: "TubelessRun",
+              },
+              TUBELESS_BUCKET: { type: "r2", name: "runner-test" },
+              ACCESS_TEAM_DOMAIN: { type: "text", value: "runner-test.cloudflareaccess.com" },
+              ACCESS_AUD: { type: "text", value: AUD },
+            },
+            exports: {
+              TubelessStudio: { type: "durable-object", storage: "sqlite" },
+              TubelessRun: { type: "durable-object", storage: "sqlite" },
+            },
+          },
+          dev: {
+            outboundService: {
+              type: "fetcher",
+              handler: async (request: Request) => {
+                if (request.url === `${ISSUER}/cdn-cgi/access/certs`)
+                  return Response.json({ keys: [publicKey] });
+                const url = new URL(request.url);
+                if (url.hostname === "fixture.test" && url.pathname === "/stage-result")
+                  return new Response(null, {
+                    status: holdStageResults.has(url.searchParams.get("launch")!) ? 423 : 200,
+                  });
+                return new Response("Unexpected outbound request.", { status: 502 });
+              },
+            },
+          },
+        },
+      ],
+    });
+  runtime = recreateRuntime();
 }, 30_000);
 
 afterAll(async () => {
@@ -342,6 +365,8 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
     expect(JSON.stringify(stageDetail)).toContain("Local file transformed");
     expect(JSON.stringify(stageDetail)).toContain("Local file ready");
 
+    const auditFile = join(temp, "normalize-writes.ndjson");
+    const writesBeforeDryRun = await readFile(auditFile, "utf8");
     await call("/_test/seed");
     await rm(join(temp, "normalized.txt"));
     const dry = await launch("dry", "fetch-transform-publish", {
@@ -355,6 +380,7 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
     await expect(readFile(join(temp, "normalized.txt"), "utf8")).rejects.toMatchObject({
       code: "ENOENT",
     });
+    expect(await readFile(auditFile, "utf8")).toBe(writesBeforeDryRun);
     expect(await (await call("/_test/published")).text()).toBe("");
   } catch (error) {
     throw new Error(`${String(error)}\nRunner output:\n${err.join("")}`, { cause: error });
@@ -455,202 +481,173 @@ it("refuses an invalid result at the owning schema and propagates active cancell
   }
 }, 30_000);
 
-it("fences duplicate claims and an expired attempt, cancels queued work, and rejects invalid stage results", async () => {
-  const storage = createFakeDurableStorage();
-  const commands = new Map(
-    hostedProjectCommands(runnerProject).map((entry) => [entry.descriptor.id, entry])
+function runnerIo(signal?: AbortSignal) {
+  return { cwd: temp, signal, stdout: { write() {} }, stderr: { write() {} } };
+}
+
+const writeCount = async (text: string) =>
+  (await readFile(join(temp, "normalize-writes.ndjson"), "utf8"))
+    .trim()
+    .split("\n")
+    .filter((line) => JSON.parse(line) === text).length;
+
+async function startFaultRunner(
+  intercept: (reply: () => Promise<Response>, url: URL, init?: RequestInit) => Promise<Response>
+) {
+  const projectFile = join(temp, "fault-runner.ts");
+  await writeFile(
+    projectFile,
+    `export { default } from ${JSON.stringify(example("runner.project.ts").href)};\n`
   );
-  const localPipelines = new Map(Object.entries(manifest));
-  let now = 1000;
-  const studio = new StudioObjectCore({
-    storage,
-    commands,
-    localPipelines,
-    clientScript: "",
-    projectId,
-    deploymentId,
-    maxRunDurationMs: RUNNER_LEASE_MS * 3,
-    now: () => now,
-    runStub: () => ({ start: async () => {}, cancel: () => true }),
-  });
-  const local = async (id: string, commandId = transformId) => {
-    const receipt = await studio.launch({
-      idempotencyKey: id,
-      projectId,
-      deploymentId,
-      commandId,
-      values: { text: id },
-    });
-    if (!receipt.accepted) throw new Error(JSON.stringify(receipt));
-    return receipt.launchId;
-  };
-  const request = (op: string, body: unknown, lease?: string) =>
-    studio.serveRunner(
-      new Request(`${http}${RUNNER_PATH}/${op}`, {
-        method: "POST",
-        body: body instanceof Uint8Array ? (body as BodyInit) : JSON.stringify(body),
-        headers: {
-          "x-tubeless-project": runnerProjectHeader(projectId),
-          "x-tubeless-deployment": deploymentId,
-          ...(lease ? { "x-tubeless-lease": lease } : {}),
-        },
-      })
-    );
-  const stopped = await local("cancel-queued");
-  await studio.cancelExecution(stopped);
-  expect(studio.getExecution(stopped)).toMatchObject({ state: "cancelled" });
-
-  const id = await local("claim-once");
-  const attempts = await Promise.all([
-    request("claim", { manifest }),
-    request("claim", { manifest }),
-  ]);
-  const claims = (await Promise.all(attempts.map((response) => response.json()))).flatMap(
-    (result) => result.claim ?? []
-  );
-  expect(claims).toHaveLength(1);
-  const lease = { id, token: claims[0].token };
-  expect(claims[0].job.run.values.text).toBe("claim-once");
-  const [claimed] = storage.sql
-    .exec("SELECT job_json FROM tubeless_runner_queue WHERE id = ?", id)
-    .toArray();
-  expect(String(claimed.job_json)).not.toContain("claim-once");
-  now += RUNNER_LEASE_MS - 1;
-  const cancel = await studio.cancelExecution(id);
-  expect(cancel).toMatchObject({ cancellationRequested: true });
-  expect(await (await request("heartbeat", lease)).json()).toEqual({
-    active: true,
-    cancelled: true,
-  });
-  now += 2;
-  expect(await (await request("heartbeat", lease)).json()).toMatchObject({ active: true });
-  now += RUNNER_LEASE_MS + 1;
-  expect(await (await request("finish", { ...lease, result: null })).json()).toEqual({
-    accepted: false,
-  });
-  await studio.alarm();
-  expect(studio.getExecution(id)).toMatchObject({
-    state: "outcome_unknown",
-    reason: "runner_interrupted",
-  });
-  expect(await (await request("claim", { manifest })).json()).toEqual({});
-
-  const parent = await local("parent", "fetch-transform-publish");
-  expect(await studio.admit(parent)).toEqual({ admitted: true });
-  const root: PipelineTraceEvent = {
-    name: "pipeline.started",
-    version: PIPELINE_TRACE_VERSION,
-    runId: "parent",
-    pipelineId: "fetch-transform-publish",
-    timestampMs: now,
-    payload: { stepCount: 3, dryRun: false, planOk: true, targetIds: [] },
-  };
-  await studio.appendEvents(parent, 0, [root]);
-  const stage = {
-    parentRunId: "parent",
-    stepId: "transform-locally",
-    input: { text: "child" },
-    controls: {},
-  };
-  await studio.enqueueStage({
-    kind: "stage",
-    id: "stage",
-    launchId: parent,
-    deploymentId,
-    pipelineId: transformId,
-    definitionId,
-    deadlineAtMs: now + 10_000,
-    stage,
-  });
-  const stageClaim = (await (await request("claim", { manifest })).json()).claim;
-  const unrelated: PipelineTraceEvent = { ...root, runId: "forged", pipelineId: transformId };
-  expect(
-    (await request("events", encodeAttemptBatches("stage", 0, [unrelated])[0], stageClaim.token))
-      .status
-  ).toBe(409);
-  expect(
-    (await request("finish", { id: "stage", token: stageClaim.token, result: { value: "forged" } }))
-      .status
-  ).toBe(400);
-  expect(studio.readStage(parent, "stage", -1).result).toBeUndefined();
-  await studio.cancelStage(parent, "stage");
-  expect(
-    await (await request("heartbeat", { id: "stage", token: stageClaim.token })).json()
-  ).toEqual({ active: true, cancelled: true });
-  await request("finish", { id: "stage", token: stageClaim.token, result: "cancelled" });
-  expect(studio.readStage(parent, "stage", -1).result).toEqual({
-    error: "The remote stage was cancelled.",
-  });
-
-  await studio.enqueueStage({
-    kind: "stage",
-    id: "complete-stage",
-    launchId: parent,
-    deploymentId,
-    pipelineId: transformId,
-    definitionId,
-    deadlineAtMs: now + 45_000,
-    stage: { ...stage, controls: { dryRun: true } },
-  });
-  const completionClaim = (await (await request("claim", { manifest })).json()).claim;
-  const token = completionClaim.token;
-  const events: PipelineTraceEvent[] = [];
-  const report = await runnerProject.pipelines[1].run(
-    { text: "actual report" },
-    { dryRun: true },
+  const controller = new AbortController();
+  const runner = inWorkerd("runner");
+  const running = runRemote(
+    ["runner", "--host", http, "--project", projectFile, "--deployment-id", deploymentId],
+    runnerIo(controller.signal),
     {
-      parentRunId: root.runId,
-      tracing: {
-        parentStep: { runId: root.runId, stepId: stage.stepId },
-        exporter: {
-          export(event) {
-            events.push(event);
-          },
-        },
+      fetch: (url, init) => intercept(() => runner(url, init), new URL(String(url)), init),
+      sleep: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
       },
     }
   );
-  const terminal = events.pop()!;
-  expect(terminal.name).toBe("pipeline.completed");
-  const progress = encodeAttemptBatches("complete-stage", 0, events)[0];
-  expect(await (await request("events", progress, token)).json()).toEqual({ accepted: true });
-  const statusOfStage = () =>
-    storage.sql
-      .exec(
-        "SELECT COUNT(*) AS completions FROM pipeline_run_events WHERE run_id = ? AND event_name = 'pipeline.completed'",
-        report.runId
-      )
-      .toArray()[0].completions;
-  const terminalWithoutReport = encodeAttemptBatches("complete-stage", 1, [terminal])[0];
-  expect((await request("events", terminalWithoutReport, token)).status).toBe(400);
-  expect(
-    (
-      await request(
-        "events",
-        encodeRunnerCompletion("complete-stage", 1, terminal, {
-          ...report,
-          dryRun: false,
-        }),
-        token
-      )
-    ).status
-  ).toBe(400);
-  expect(studio.readStage(parent, "complete-stage", -1).result).toBeUndefined();
-  expect(statusOfStage()).toBe(0);
+  return async () => {
+    controller.abort();
+    expect(await running).toBe(0);
+  };
+}
 
-  const completion = encodeRunnerCompletion("complete-stage", 1, terminal, report);
-  expect(await (await request("events", completion, token)).json()).toEqual({ accepted: true });
-  expect(studio.readStage(parent, "complete-stage", -1).result).toMatchObject({
-    report: { value: "ACTUAL REPORT", status: "completed" },
+function isTerminalBatch(url: URL, init?: RequestInit): boolean {
+  return (
+    url.pathname.endsWith("/events") &&
+    init?.body instanceof Uint8Array &&
+    Object.hasOwn(JSON.parse(new TextDecoder().decode(init.body)), "report")
+  );
+}
+
+it("recreates workerd and the Bun runner after a committed stage loses its response", async () => {
+  await call("/_test/seed?text=recovery%20committed");
+  const id = await launch("recover-committed", "fetch-transform-publish", { text: "source.txt" });
+  holdStageResults.add(id);
+  let committed = false;
+  const stop = await startFaultRunner(async (reply, url, init) => {
+    if (!isTerminalBatch(url, init)) return reply();
+    if (!committed) {
+      expect(await (await reply()).json()).toEqual({ accepted: true });
+      committed = true;
+    }
+    throw new Error("Drop completion response after Studio commits");
   });
-  expect(statusOfStage()).toBe(1);
-  await studio.reportFailure(parent, "Fixture parent done.");
-  expect(studio.readStage(parent, "complete-stage", -1).result).toBeUndefined();
-  now += RUNNER_LEASE_MS + 1;
-  expect(await (await request("events", completion, "wrong-token")).json()).toEqual({
-    accepted: false,
+  try {
+    await vi.waitFor(() => expect(committed).toBe(true), { timeout: 10_000 });
+  } finally {
+    await stop();
+  }
+  const before = await getExecution(id);
+  expect(before).toMatchObject({ state: "running", runId: expect.any(String) });
+  expect(await (await call("/_test/published")).text()).toBe("");
+  expect(await writeCount("RECOVERY COMMITTED")).toBe(1);
+
+  await runtime.dispose();
+  holdStageResults.delete(id);
+  runtime = recreateRuntime();
+  let duplicateOffers = 0;
+  const stopRecreated = await startFaultRunner(async (reply, url) => {
+    const response = await reply();
+    if (url.pathname.endsWith("/claim") && (await response.clone().json()).claim) duplicateOffers++;
+    return response;
   });
-  expect((await request("events", terminalWithoutReport, token)).status).toBe(409);
-  expect(await (await request("events", completion, token)).json()).toEqual({ accepted: true });
-  expect(statusOfStage()).toBe(1);
-});
+  try {
+    expect(
+      await launch("recover-committed", "fetch-transform-publish", { text: "source.txt" })
+    ).toBe(id);
+    await vi.waitFor(
+      async () => expect(await getExecution(id)).toMatchObject({ state: "completed" }),
+      { timeout: 12_000 }
+    );
+    const after = await getExecution(id);
+    expect(after.runId).not.toBe(before.runId);
+    expect(await (await call("/_test/published")).text()).toBe("RECOVERY COMMITTED");
+    expect(await writeCount("RECOVERY COMMITTED")).toBe(1);
+    expect(duplicateOffers).toBe(0);
+    const current = await (await call(`/api/runs/${after.runId}`)).json();
+    expect(current.launch).toMatchObject({
+      launchId: id,
+      recoveryRunIds: [after.runId, before.runId],
+    });
+    const original = await (await call(`/api/runs/${before.runId}`)).json();
+    expect(original.children).toEqual([
+      expect.objectContaining({ status: "completed", pipelineId: transformId }),
+    ]);
+  } finally {
+    await stopRecreated();
+  }
+}, 30_000);
+
+it("surfaces an unknown stage after the runner writes and loses its lease before completion", async () => {
+  await call("/_test/seed?text=recovery%20uncertain");
+  const input = { text: "source.txt" };
+  const result: string[] = [];
+  expect(
+    await runRemote(
+      [
+        "run",
+        "fetch-transform-publish",
+        "--input-file",
+        "-",
+        "--idempotency-key",
+        "recover-unknown",
+        "--host",
+        http,
+        "--detach",
+      ],
+      {
+        ...runnerIo(),
+        stdout: {
+          write: (text) => {
+            result.push(text);
+          },
+        },
+      },
+      { fetch: inWorkerd("user"), readStdin: async () => JSON.stringify(input) }
+    )
+  ).toBe(0);
+  const id = result.join("").trim();
+  expect(await launch("recover-unknown", "fetch-transform-publish", input)).toBe(id);
+  let lost: { url: string; init?: RequestInit } | undefined;
+  const stop = await startFaultRunner(async (reply, url, init) => {
+    if (!isTerminalBatch(url, init)) return reply();
+    lost = { url: url.href, init };
+    throw new Error("Drop terminal delivery after the filesystem write");
+  });
+  try {
+    await vi.waitFor(() => expect(lost).toBeDefined(), { timeout: 10_000 });
+  } finally {
+    await stop();
+  }
+  await runtime.dispose();
+  runtime = recreateRuntime();
+  const stopRecreated = await startFaultRunner((reply) => reply());
+  try {
+    await vi.waitFor(
+      async () =>
+        expect(await getExecution(id)).toMatchObject({
+          state: "outcome_unknown",
+          reason: "journal_outcome_unknown",
+        }),
+      { timeout: 22_000 }
+    );
+    expect(await writeCount("RECOVERY UNCERTAIN")).toBe(1);
+    expect(await (await call("/_test/published")).text()).toBe("");
+    const stale = lost!;
+    expect(await (await inWorkerd("runner")(stale.url, stale.init)).json()).toEqual({
+      accepted: false,
+    });
+    const { runId } = await getExecution(id);
+    const detail = await (await call(`/api/runs/${runId}`)).json();
+    expect(JSON.stringify(detail)).toContain(`Execution ${id}, stage `);
+    expect(JSON.stringify(detail)).toContain("TUBELESS_JOURNAL_OUTCOME_UNKNOWN");
+  } finally {
+    await stopRecreated();
+  }
+}, 40_000);

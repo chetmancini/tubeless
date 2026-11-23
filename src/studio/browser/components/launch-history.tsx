@@ -78,6 +78,20 @@ export function LaunchHistory({
             </dd>
           </>
         ))}
+        {launch.recoveryRunIds && launch.recoveryRunIds.length > 1 && (
+          <>
+            <dt>Execution attempts</dt>
+            <dd>
+              <ul>
+                {launch.recoveryRunIds.map((runId) => (
+                  <li key={runId}>
+                    <a href={`?run=${encodeURIComponent(runId)}`}>{runId}</a>
+                  </li>
+                ))}
+              </ul>
+            </dd>
+          </>
+        )}
       </dl>
       <p class="field-hint">
         {launch.inputs.omitted.length

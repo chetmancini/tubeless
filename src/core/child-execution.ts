@@ -328,7 +328,7 @@ async function runChildPipeline(
   hooks: PipelineHooks,
   messagePrefix: string,
   plan: PipelinePlan,
-  placement?: Pick<Parameters<ChildPlacement>[0], "stepId" | "reportProgress">
+  placement?: Pick<Parameters<ChildPlacement>[0], "stepId" | "reportProgress" | "journalPath">
 ): Promise<PipelineRun<unknown>> {
   if (!plan.ok) {
     const firstError = plan.errors[0];
@@ -343,7 +343,7 @@ async function runChildPipeline(
   }
 
   const placed =
-    placement && !context.executionJournal
+    placement && (!context.executionJournal || placement.journalPath !== undefined)
       ? childPlacement(context)?.({
           pipeline,
           plan,
@@ -353,11 +353,9 @@ async function runChildPipeline(
           ...placement,
         })
       : undefined;
-  const result = await (placed ??
-    executeCompiledChild(pipeline, plan, domainOptions, controls, {
-      ...context,
-      hooks,
-    }));
+  const result = placed
+    ? await placed
+    : await executeCompiledChild(pipeline, plan, domainOptions, controls, { ...context, hooks });
   if (result.status !== "completed") {
     const { failureLocation, message } = firstChildFailure(result);
     throw new PipelineExecutionError(
@@ -406,7 +404,11 @@ export function createSingleChildRunner<TParentOptions extends object>(
       `Child pipeline ${config.pipeline.id} `,
       childPlan,
       config.iterationIndex === undefined
-        ? { stepId: config.stepId, reportProgress: context.reportProgress }
+        ? {
+            stepId: config.stepId,
+            reportProgress: context.reportProgress,
+            journalPath: context.executionJournalPath,
+          }
         : undefined
     );
 

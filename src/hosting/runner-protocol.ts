@@ -68,7 +68,7 @@ export type RunnerClaim = {
 
 export type RunnerStageResult =
   | { readonly report: PipelineRun<unknown> }
-  | { readonly error: string };
+  | { readonly error: string; readonly interrupted?: true };
 
 /** Encode an authored project ID as a safe HTTP header value. */
 export function runnerProjectHeader(projectId: string): string {

@@ -146,14 +146,17 @@ const RUN_TREE_CTE = `WITH RECURSIVE run_tree(run_id) AS (
     )`;
 
 /**
- * Start events of runs in a subtree that have no completion. Latest start first: a nested run
- * starts after its parent, so every child precedes its parent and the root comes last.
+ * Start events without a completion, newest first so descendants precede their parent.
  */
-export function openSubtreeStartsQuery(rootRunId: string): { sql: string; params: unknown[] } {
+export function openRunStartsQuery(
+  rootRunId: string,
+  scope: "root" | "subtree"
+): { sql: string; params: unknown[] } {
+  const subtree = scope === "subtree";
   return {
-    sql: `${RUN_TREE_CTE} SELECT * FROM pipeline_run_events AS started
+    sql: `${subtree ? RUN_TREE_CTE : ""} SELECT * FROM pipeline_run_events AS started
       WHERE started.event_name = 'pipeline.started'
-        AND started.run_id IN (SELECT run_id FROM run_tree)
+        AND started.run_id ${subtree ? "IN (SELECT run_id FROM run_tree)" : "= ?"}
         AND NOT EXISTS (
           SELECT 1 FROM pipeline_run_events AS done
           WHERE done.run_id = started.run_id AND done.event_name = 'pipeline.completed'

@@ -162,7 +162,9 @@ Optional capabilities:
 - Cloudflare hosting: `tubeless init cloudflare` and `docs/deploy-cloudflare.md`;
   use `tubeless remote runner` with a separate Bun project for pipelines placed
   on a local runner. See the runner placement recipe for matched definitions.
-  runs are limited to 14 minutes and secrets stay out of config text bindings.
+  Set `recoverInterruptedRuns` for versioned Worker-root launches that should
+  restore acknowledged outputs after a restart. Runs are limited to 14 minutes
+  and secrets stay out of config text bindings.
   Set `deploymentId` for trusted `app.launch` and `tubeless remote run` submissions.
   Follow or request cancellation by the execution ID.
 - Host engines (Airflow, Temporal, Inngest, Dagster, Step Functions): read the

@@ -23,6 +23,7 @@ import type {
   PipelineTracingOptions,
 } from "./tracing-contracts.js";
 import {
+  JOURNAL_OUTCOME_UNKNOWN,
   PIPELINE_TRACE_DETAIL_BYTE_LIMIT,
   PIPELINE_TRACE_LIST_LIMIT,
   PIPELINE_TRACE_STRING_LIMIT,
@@ -322,7 +323,10 @@ export function createPipelineTraceEmitter(
           stepCount: result.steps.length,
         },
         durationMs: elapsedMs(result),
-        error: toTraceError(result.errors[0]),
+        error: toTraceError(
+          result.errors.find(({ sourceCode }) => sourceCode === JOURNAL_OUTCOME_UNKNOWN) ??
+            result.errors[0]
+        ),
         pipelineId,
       }),
     stepStatus: (event) => {

@@ -1,11 +1,13 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runnerProject } from "./project.js";
 
 export default runnerProject({
   async writeLocal(cwd, text, signal) {
     const file = join(cwd, "normalized.txt");
+    signal?.throwIfAborted();
     await writeFile(file, text, { encoding: "utf8", signal });
+    await appendFile(join(cwd, "normalize-writes.ndjson"), JSON.stringify(text) + "\n", "utf8");
     return readFile(file, { encoding: "utf8", signal });
   },
 });

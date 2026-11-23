@@ -22,6 +22,7 @@ const project = runnerProject({
 
 const app = createCloudflareApp(project, {
   deploymentId,
+  recoverInterruptedRuns: true,
   localRunner: { serviceId: runnerServiceId, pipelines: [transformId] },
 });
 export default {
