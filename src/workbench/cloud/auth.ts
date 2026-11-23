@@ -18,7 +18,7 @@ import { cloudErrorExit, cloudSleep, type CloudCommandDependencies } from "./sha
 
 const AUTH_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.auth);
 
-async function openBrowser(url: string): Promise<void> {
+export async function openBrowser(url: string): Promise<void> {
   const command =
     process.platform === "darwin" ? "open" : process.platform === "win32" ? "rundll32" : "xdg-open";
   const args = process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];

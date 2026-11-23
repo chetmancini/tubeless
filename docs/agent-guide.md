@@ -234,7 +234,11 @@ For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node
 
 ## Cloudflare
 
-- Host Studio and a project with `tubeless init cloudflare` and the
+- Create or connect a named remote with `tubeless remote create` or
+  `tubeless remote connect`. Both support Tubeless Cloud and self-hosted
+  Cloudflare. Use `--remote <name>` to target a saved deployment. See
+  [named remotes](./cli.md#named-remotes).
+- For manual setup, host Studio and a project with `tubeless init cloudflare` and the
   [deploy guide](./deploy-cloudflare.md); do not hand-write the Worker or its
   configuration. Keep the scaffold's `vite.config.ts` and install the exact versions
   it prints.

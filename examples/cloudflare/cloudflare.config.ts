@@ -29,6 +29,7 @@ export default defineConfig(() => {
           exportName: "TubelessRun",
         }),
         TUBELESS_BUCKET: bindings.r2({ name: "cloudflare-artifacts" }),
+        TUBELESS_VERSION: bindings.versionMetadata(),
         // After enabling Cloudflare Access: "<team>.cloudflareaccess.com" and the application AUD tag.
         ACCESS_TEAM_DOMAIN: bindings.text(""),
         ACCESS_AUD: bindings.text(""),

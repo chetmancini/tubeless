@@ -159,7 +159,10 @@ Optional capabilities:
   `dryRun: "skip"`). Trace exporters are implemented in the application against
   `PipelineTraceExporter` (`examples/tracing.ts`). Keep storage and Studio optional
   (`docs/studio.md`).
-- Cloudflare hosting: `tubeless init cloudflare` and `docs/deploy-cloudflare.md`;
+- Hosted remotes: use `tubeless remote connect` or `tubeless remote create` for
+  Tubeless Cloud or self-hosted Cloudflare, then target a saved profile with
+  `--remote`. For manual Cloudflare setup use `tubeless init cloudflare` and
+  `docs/deploy-cloudflare.md`;
   use `tubeless remote runner` with a separate Bun project for pipelines placed
   on a local runner. See the runner placement recipe for matched definitions.
   Set `recoverInterruptedRuns` for versioned Worker-root launches that should

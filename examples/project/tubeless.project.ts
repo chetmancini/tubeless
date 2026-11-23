@@ -43,6 +43,7 @@ export default defineProject(
   "example-jobs",
   [
     // Read its result with run --json validated-import -- --source rows.txt.
+    // Use remote create from your own project root to deploy its pipeline catalog.
     // For Cloudflare cron and CLI launches with a durable ID, see ../cloudflare/scheduled-worker.ts.
     // For mixed Worker and Bun placement with recovery, see ../cloudflare/runner-placement/worker.ts.
     ValidatedPipeline,

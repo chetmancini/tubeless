@@ -87,7 +87,7 @@ describe("tubeless init", () => {
     expect(await init(io)).toBe(0);
     const worker = readFileSync(join(cwd, "cloudflare/worker.ts"), "utf8");
     expect(worker).toContain('import { initProject as project } from "../tubeless.project.mjs";');
-    expect(worker).toContain("const app = createCloudflareApp(project);");
+    expect(worker).toContain("deploymentId: TUBELESS_VERSION.id");
   });
 
   it("imports a named export called project without an alias", async () => {
@@ -186,13 +186,12 @@ describe("tubeless init", () => {
     expect(existsSync(join(cwd, "cloudflare.config.ts"))).toBe(false);
   });
 
-  it("reports files already created when a later write fails", async () => {
+  it("rejects a dangling symlink before writing any scaffold files", async () => {
     const { cwd, io, err } = workspace();
-    // A dangling symlink is not "occupied" for stat but still refuses an exclusive create.
     symlinkSync(join(cwd, "nowhere"), join(cwd, "cloudflare.config.ts"));
     expect(await init(io)).not.toBe(0);
-    expect(err.join("")).toContain("Could not write cloudflare.config.ts");
-    expect(err.join("")).toContain("Already created: cloudflare/worker.ts");
+    expect(err.join("")).toContain("Refusing to overwrite existing files: cloudflare.config.ts");
+    expect(existsSync(join(cwd, "cloudflare/worker.ts"))).toBe(false);
   });
 
   it("pins the Cloudflare scaffold to the toolchain this repository tests", () => {

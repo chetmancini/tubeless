@@ -11,7 +11,12 @@ import { resolveCloudCredential } from "./credentials.js";
 import { isFollowCursor } from "./follow-protocol.js";
 import { pollCloudRun, streamCloudRun, writeCloudLog, type ObservationContext } from "./follow.js";
 import { cloudOutput } from "./output.js";
-import { prepareRunInput, CloudRunUsageError, type PreparedCloudRunInput } from "./run-input.js";
+import {
+  prepareRunInput,
+  CloudRunUsageError,
+  type CloudRunInputArguments,
+  type PreparedCloudRunInput,
+} from "./run-input.js";
 import {
   CloudClientError,
   isCloudAutomationToken,
@@ -37,23 +42,21 @@ const parseArgs = (args: readonly string[]) => parseSubcommandArgs(args, CLOUD_S
 
 type ObservationMode = { kind: "stream"; cursor?: string } | { kind: "poll" };
 type PipelineSelector = { id: string } | { name: string };
-type CloudAction =
+type CloudAction<Input = PreparedCloudRunInput> =
   | { kind: "list" }
   | { kind: "logs"; runId: string; mode?: ObservationMode }
   | { kind: "follow"; runId: string; mode: ObservationMode }
   | {
       kind: "run";
       pipeline: PipelineSelector;
-      input: PreparedCloudRunInput;
+      input: Input;
       mode?: ObservationMode;
     };
 
-async function prepareAction(
-  { values, positionals }: ReturnType<typeof parseArgs>,
-  io: WorkbenchCliIo,
-  signal: AbortSignal,
-  readStdin: CloudCommandDependencies["readStdin"]
-): Promise<CloudAction> {
+function parseAction({
+  values,
+  positionals,
+}: ReturnType<typeof parseArgs>): CloudAction<CloudRunInputArguments> {
   const [command, selector] = positionals;
   if (!CLOUD_SPEC.subcommands.some((name) => name === command))
     throw new CloudRunUsageError("Pass list, run, follow, or logs.");
@@ -73,7 +76,7 @@ async function prepareAction(
     return {
       kind: "run",
       pipeline: values.id === undefined ? { name: selector } : { id: values.id },
-      input: await prepareRunInput(values, { cwd: io.cwd, signal, readStdin }),
+      input: values,
       mode: values.detach ? undefined : { kind: values.poll ? "poll" : "stream" },
     };
   }
@@ -295,48 +298,81 @@ export async function runCloud(
       spec: CLOUD_SPEC,
       parse: parseArgs,
       run: async (parsed) => {
-        const managed = manageRemoteSignal(io.signal);
-        const { signal } = managed;
-        let output = cloudOutput();
+        let action;
         try {
-          const action = await prepareAction(parsed, io, signal, dependencies.readStdin);
-          const host = resolveCloudHost(parsed.values.host);
-          const credential = await resolveCloudCredential(host, dependencies);
-          if (!credential)
-            throw new Error(
-              "No active Cloud credential. Run tubeless auth login or supply TUBELESS_TOKEN."
-            );
-          output = cloudOutput(credential.token);
-          if (parsed.values.cursor?.includes(credential.token))
-            throw new CloudRunUsageError("Pass a valid run-following cursor.");
-          const client = createCloudClient({
-            host,
-            token: credential.token,
-            fetch: dependencies.fetch,
-            signal,
-          });
-          return await executeAction(
-            {
-              client,
-              ...(await resolveWorkspace(client, credential.token, parsed.values.workspace)),
-              io,
-              output,
-              signal,
-              json: Boolean(parsed.values.json),
-              sleep: dependencies.sleep ?? cloudSleep,
-            },
-            action
-          );
+          action = parseAction(parsed);
         } catch (error) {
           if (error instanceof CloudRunUsageError)
             return writeUsageError(io, error.message, CLOUD_USAGE);
-          return cloudErrorExit(error, io, signal, output.text);
-        } finally {
-          managed.cleanup();
+          throw error;
         }
+        return runCloudCommand({ ...parsed.values, action }, io, dependencies);
       },
     },
     argv,
     io
   );
+}
+
+/** Execute a Cloud action from the Cloud CLI or a named remote. */
+export async function runCloudCommand(
+  request: {
+    host?: string;
+    workspace?: string;
+    json?: boolean;
+    action: CloudAction<CloudRunInputArguments>;
+  },
+  io: WorkbenchCliIo,
+  dependencies: CloudCommandDependencies
+): Promise<number> {
+  const managed = manageRemoteSignal(io.signal);
+  const { signal } = managed;
+  let output = cloudOutput();
+  try {
+    const { action } = request;
+    const prepared =
+      action.kind === "run"
+        ? {
+            ...action,
+            input: await prepareRunInput(action.input, {
+              cwd: io.cwd,
+              signal,
+              readStdin: dependencies.readStdin,
+            }),
+          }
+        : action;
+    const host = resolveCloudHost(request.host);
+    const credential = await resolveCloudCredential(host, dependencies);
+    if (!credential)
+      throw new Error(
+        "No active Cloud credential. Run tubeless auth login or supply TUBELESS_TOKEN."
+      );
+    output = cloudOutput(credential.token);
+    const mode = "mode" in action ? action.mode : undefined;
+    if (mode?.kind === "stream" && mode.cursor?.includes(credential.token))
+      throw new CloudRunUsageError("Pass a valid run-following cursor.");
+    const client = createCloudClient({
+      host,
+      token: credential.token,
+      fetch: dependencies.fetch,
+      signal,
+    });
+    return await executeAction(
+      {
+        client,
+        ...(await resolveWorkspace(client, credential.token, request.workspace)),
+        io,
+        output,
+        signal,
+        json: Boolean(request.json),
+        sleep: dependencies.sleep ?? cloudSleep,
+      },
+      prepared
+    );
+  } catch (error) {
+    if (error instanceof CloudRunUsageError) return writeUsageError(io, error.message, CLOUD_USAGE);
+    return cloudErrorExit(error, io, signal, output.text);
+  } finally {
+    managed.cleanup();
+  }
 }
