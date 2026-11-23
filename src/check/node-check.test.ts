@@ -181,6 +181,7 @@ describe("native recipe execution", () => {
     "collects an interrupted test's report before classifying cancellation",
     async () => {
       const cwd = await fixture();
+      const plan = await readNodeCheckPlan(cwd);
       const controller = new AbortController();
       const rawReport = await readFile(
         new URL("../../fixtures/diagnostics/vitest-json-v5.json", import.meta.url),
@@ -188,7 +189,7 @@ describe("native recipe execution", () => {
       );
       vi.spyOn(checkProcess, "runCheckProcess").mockImplementation(
         async (argv, _timeout, context) => {
-          if (argv[1] === "--version") context.log.log("1.4.4");
+          if (argv[0] === "bun" && argv[1] === "--version") context.log.log(plan.toolchain.bun);
           if (argv.some((arg) => arg.endsWith("vitest.mjs"))) {
             await writeFile(
               join(cwd, ".tubeless-reports/vitest.json"),
@@ -200,7 +201,7 @@ describe("native recipe execution", () => {
           return { status: "exited", exitCode: 0, signal: null, outputComplete: true };
         }
       );
-      const result = await runNodeCheck(await readNodeCheckPlan(cwd), {
+      const result = await runNodeCheck(plan, {
         cwd,
         log,
         signal: controller.signal,
@@ -216,14 +217,16 @@ describe("native recipe execution", () => {
     }
   );
   it.runIf(process.versions.node.startsWith("24."))(
-    "rejects a different Bun version before installing dependencies",
+    "rejects a newer Bun patch before installing dependencies",
     async () => {
       const cwd = await fixture();
-      const probe = stubBunVersion("1.4.5");
-      const result = await runNodeCheck(await readNodeCheckPlan(cwd), { cwd, log });
+      const plan = await readNodeCheckPlan(cwd);
+      const [major, minor, patch] = plan.toolchain.bun.split(".");
+      const probe = stubBunVersion(`${major}.${minor}.${Number(patch) + 1}`);
+      const result = await runNodeCheck(plan, { cwd, log });
 
       expect(result.run.status).toBe("failed");
-      expect(result.run.errors[0]?.message).toContain("requires Bun 1.4.4");
+      expect(result.run.errors[0]?.message).toContain(`requires Bun ${plan.toolchain.bun}`);
       expect(result.commands).toEqual([]);
       expect(probe).toHaveBeenCalledExactlyOnceWith(
         ["bun", "--version"],

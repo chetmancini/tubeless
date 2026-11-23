@@ -102,7 +102,7 @@ export async function runNodeCheck(
               probe.exitCode !== 0 ||
               version.trim() !== plan.toolchain.bun
             )
-              throw new TypeError("The node-check-v1 recipe requires Bun 1.4.4.");
+              throw new TypeError(`The node-check-v1 recipe requires Bun ${plan.toolchain.bun}.`);
           }
           const outcome = await runCheckProcess(command.argv, command.timeoutMs, ctx);
           commands.push({ id: command.id, process: outcome });
