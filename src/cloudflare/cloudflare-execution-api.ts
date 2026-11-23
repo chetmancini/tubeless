@@ -18,6 +18,7 @@ export async function serveExecutionRequest(
   request: Request,
   url: URL,
   app: {
+    deployment: { projectId: string; deploymentId: string };
     launch(commandId: string, values: HostedLaunchValues, key: string): Promise<HostedLaunchResult>;
     get(id: string): Promise<HostedExecutionStatus | undefined>;
     cancel(id: string): Promise<HostedExecutionStatus | undefined>;
@@ -38,6 +39,7 @@ export async function serveExecutionRequest(
     }
   }
   const path = url.pathname.slice(HOSTED_EXECUTIONS_PATH.length);
+  if (path === "" && request.method === "GET") return jsonResponse(app.deployment);
   if (path === "" && request.method === "POST") {
     if (
       request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==

@@ -314,6 +314,7 @@ export function createCloudflareApp<TEnv = unknown>(
               "Set deploymentId on createCloudflareApp and redeploy."
             );
           return await serveExecutionRequest(request, url, {
+            deployment: { projectId: project.id, deploymentId },
             launch: (commandId, values, idempotencyKey) =>
               submit(studio, commandId, values, { idempotencyKey, actor, trigger: "code" }),
             get: (id) => studio.getExecution(id),

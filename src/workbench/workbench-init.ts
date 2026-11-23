@@ -4,7 +4,7 @@ import {
   parseSubcommandArgs,
   runWorkbenchSubcommand,
 } from "./workbench-subcommand.js";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { cloudflareScaffold } from "./workbench-init-cloudflare.js";
 import { projectScaffold } from "./workbench-init-project.js";
@@ -61,9 +61,9 @@ const TARGETS = new Map<string, ProjectScaffold | DeployTargetScaffold>([
 const INIT_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.init);
 
 /** Anything but a clean "not found" (for example ENOTDIR) counts as occupied, so init never writes through it. */
-async function occupied(path: string): Promise<boolean> {
+export async function scaffoldPathOccupied(path: string): Promise<boolean> {
   try {
-    await stat(path);
+    await lstat(path);
     return true;
   } catch (error) {
     return (error as NodeJS.ErrnoException).code !== "ENOENT";
@@ -87,81 +87,91 @@ export async function runInit(argv: readonly string[], io: WorkbenchCliIo): Prom
             INIT_USAGE
           );
         }
-        let files: readonly ScaffoldFile[];
-        if (target.loadsProject) {
-          const loaded = await loadPipelineProjectFile(
-            parsed.values.project ?? DEFAULT_PIPELINE_PROJECT_FILE,
-            commandIo
+        const project = parsed.values.project;
+        if (target.loadsProject) return initDeployment(target, project, commandIo);
+        // Bare init accepts every option until the default target is known.
+        if (project !== undefined)
+          return writeUsageError(
+            commandIo,
+            `--project is not supported by init ${target.id}.`,
+            renderWorkbenchUsage(WORKBENCH_SPECS.init, target.id)
           );
-          if ("exitCode" in loaded) return loaded.exitCode;
-          for (const registration of loaded.registrations) {
-            const command = await registration.loadCommand(commandIo);
-            if ("exitCode" in command) return command.exitCode;
-          }
-          try {
-            files = target.files({
-              cwd: commandIo.cwd,
-              projectFile: loaded.filePath,
-              projectExport: loaded.exportName,
-            });
-          } catch (error) {
-            commandIo.stderr.write(`Error: ${errorMessage(error)}\n`);
-            return TUBELESS_WORKBENCH_EXIT_CODE.usage;
-          }
-        } else {
-          // Bare `init` accepts every option until the default target is known.
-          if (parsed.values.project !== undefined) {
-            return writeUsageError(
-              commandIo,
-              `--project is not supported by init ${target.id}.`,
-              renderWorkbenchUsage(WORKBENCH_SPECS.init, target.id)
-            );
-          }
-          files = target.files();
-        }
-        const conflicts: string[] = [];
-        for (const file of files)
-          if (await occupied(resolve(commandIo.cwd, file.path))) conflicts.push(file.path);
-        const related: string[] = [];
-        for (const { path, hint } of target.conflictsWith ?? [])
-          if (await occupied(resolve(commandIo.cwd, path)))
-            related.push(`${path} already exists. ${hint}`);
-        if (conflicts.length > 0 || related.length > 0) {
-          if (conflicts.length > 0)
-            commandIo.stderr.write(
-              `Error: Refusing to overwrite existing files: ${conflicts.join(", ")}\n`
-            );
-          for (const message of related) commandIo.stderr.write(`Error: ${message}\n`);
-          return TUBELESS_WORKBENCH_EXIT_CODE.usage;
-        }
-        const node = process.versions.bun === undefined ? process.versions.node : undefined;
-        if (target.minimumNode && node && !versionAtLeast(node, target.minimumNode.version)) {
-          commandIo.stderr.write(
-            `Warning: Node ${node} is older than ${target.minimumNode.version}; ${target.minimumNode.reason}.\n`
-          );
-        }
-        const created: string[] = [];
-        for (const file of files) {
-          const path = resolve(commandIo.cwd, file.path);
-          try {
-            await mkdir(dirname(path), { recursive: true });
-            await writeFile(path, file.contents, { flag: "wx" });
-          } catch (error) {
-            commandIo.stderr.write(`Error: Could not write ${file.path}: ${errorMessage(error)}\n`);
-            if (created.length > 0)
-              commandIo.stderr.write(`Already created: ${created.join(", ")}\n`);
-            return TUBELESS_WORKBENCH_EXIT_CODE.execution;
-          }
-          created.push(file.path);
-          commandIo.stdout.write(`Created ${file.path}\n`);
-        }
-        commandIo.stdout.write(
-          `\nNext steps:\n${target.nextSteps.map((step) => `  ${step}`).join("\n")}\n`
-        );
-        return TUBELESS_WORKBENCH_EXIT_CODE.success;
+        return initProject(commandIo);
       },
     },
     argv,
     io
   );
+}
+
+export function initProject(io: WorkbenchCliIo): Promise<number> {
+  return writeScaffold(projectScaffold, projectScaffold.files(), io);
+}
+
+export async function initDeployment(
+  target: DeployTargetScaffold,
+  projectFile: string | undefined,
+  io: WorkbenchCliIo
+): Promise<number> {
+  const loaded = await loadPipelineProjectFile(projectFile ?? DEFAULT_PIPELINE_PROJECT_FILE, io);
+  if ("exitCode" in loaded) return loaded.exitCode;
+  for (const registration of loaded.registrations) {
+    const command = await registration.loadCommand(io);
+    if ("exitCode" in command) return command.exitCode;
+  }
+  let files: readonly ScaffoldFile[];
+  try {
+    files = target.files({
+      cwd: io.cwd,
+      projectFile: loaded.filePath,
+      projectExport: loaded.exportName,
+    });
+  } catch (error) {
+    io.stderr.write(`Error: ${errorMessage(error)}\n`);
+    return TUBELESS_WORKBENCH_EXIT_CODE.usage;
+  }
+  return writeScaffold(target, files, io);
+}
+
+async function writeScaffold(
+  target: ScaffoldTarget,
+  files: readonly ScaffoldFile[],
+  io: WorkbenchCliIo
+): Promise<number> {
+  const conflicts: string[] = [];
+  for (const file of files)
+    if (await scaffoldPathOccupied(resolve(io.cwd, file.path))) conflicts.push(file.path);
+  const related: string[] = [];
+  for (const { path, hint } of target.conflictsWith ?? [])
+    if (await scaffoldPathOccupied(resolve(io.cwd, path)))
+      related.push(`${path} already exists. ${hint}`);
+  if (conflicts.length > 0 || related.length > 0) {
+    if (conflicts.length > 0)
+      io.stderr.write(`Error: Refusing to overwrite existing files: ${conflicts.join(", ")}\n`);
+    for (const message of related) io.stderr.write(`Error: ${message}\n`);
+    return TUBELESS_WORKBENCH_EXIT_CODE.usage;
+  }
+  const node = process.versions.bun === undefined ? process.versions.node : undefined;
+  if (target.minimumNode && node && !versionAtLeast(node, target.minimumNode.version)) {
+    io.stderr.write(
+      `Warning: Node ${node} is older than ${target.minimumNode.version}; ${target.minimumNode.reason}.\n`
+    );
+  }
+  const created: string[] = [];
+  for (const file of files) {
+    const path = resolve(io.cwd, file.path);
+    try {
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, file.contents, { flag: "wx" });
+    } catch (error) {
+      io.stderr.write(`Error: Could not write ${file.path}: ${errorMessage(error)}\n`);
+      if (created.length > 0) io.stderr.write(`Already created: ${created.join(", ")}\n`);
+      return TUBELESS_WORKBENCH_EXIT_CODE.execution;
+    }
+    created.push(file.path);
+    io.stdout.write(`Created ${file.path}\n`);
+  }
+  if (target.nextSteps.length > 0)
+    io.stdout.write(`\nNext steps:\n${target.nextSteps.map((step) => `  ${step}`).join("\n")}\n`);
+  return TUBELESS_WORKBENCH_EXIT_CODE.success;
 }

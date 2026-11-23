@@ -16,6 +16,29 @@ command. Pipelines run in the Worker runtime, so handlers must work on Workers. 
 
 ## Five-minute deploy
 
+## Set up a named remote
+
+```sh
+bunx tubeless remote create --provider cloudflare
+bunx tubeless remote run <command-id> --remote <name>
+```
+
+The wizard uses the Cloudflare CLI on Node.js and browser sign-in through
+`cloudflared`. Enable Zero Trust in the account before running it. Choose the
+Cloudflare account, Worker name, and email allowed to use Studio. Tubeless uses the
+existing Cloudflare scaffold, provisions the Worker and its storage, configures
+Worker-level Access, and saves the remote after verifying the authenticated
+execution API. Rerun the wizard in the same project to resume after an interrupted
+setup. It keeps its non-secret provisioning settings in `cloudflare/remote.json`.
+
+For an existing Worker, use `bunx tubeless remote connect` to discover deployments
+with Tubeless Durable Objects, or pass its Studio URL directly. Connect with browser sign-in
+through `cloudflared` or supply the existing Access service token via
+`CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`. Named remotes work from any
+directory. See [named remotes](./cli.md#named-remotes).
+
+## Set up Cloudflare manually
+
 You need a Cloudflare account and a project with a `tubeless.project.ts`
 (see the [project example](../examples/tubeless.project.ts)). From the project root:
 
@@ -162,7 +185,8 @@ steps after an interruption, [enable Worker execution recovery](#recover-an-inte
 
 ## Submit and follow from the CLI
 
-Set an immutable `deploymentId` on `createCloudflareApp`, as in the example above.
+Use the deployment ID from the scaffold's Worker version binding, or set an
+immutable `deploymentId` on a custom `createCloudflareApp` entry.
 Grant a [Cloudflare Access service token](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)
 access to the Worker through a **Service Auth** policy. Put its client ID and secret
 in the calling process's `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`

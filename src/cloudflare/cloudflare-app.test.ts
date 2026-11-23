@@ -308,6 +308,17 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
     expect((await call("/", {}, false)).status).toBe(403);
   });
 
+  it("describes the project and deployment only after authenticating remote discovery", async () => {
+    const path = "/api/executions/v1";
+    expect((await call(path, {}, false)).status).toBe(401);
+    const discovered = await call(path);
+    expect(discovered.headers.get("cache-control")).toBe("no-store");
+    expect(await discovered.json()).toMatchObject({
+      projectId: "worker-test",
+      deploymentId: "worker-test-v1",
+    });
+  });
+
   it("authenticates the execution API and records the verified service actor", async () => {
     const path = "/api/executions/v1";
     const body = {

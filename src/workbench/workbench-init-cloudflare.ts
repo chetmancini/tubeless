@@ -6,7 +6,7 @@ import type { DeployTargetScaffold } from "./workbench-init.js";
  * Worker names must be at most 63 characters and R2 bucket names 3-63 characters that start and end
  * with a letter or number. The bucket appends "-artifacts" (10 characters), so the base stops at 53.
  */
-function workerName(cwd: string): string {
+export function defaultCloudflareWorkerName(cwd: string): string {
   const base = basename(cwd)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -51,6 +51,16 @@ export const CLOUDFLARE_DEV_DEPENDENCIES = {
   "@cloudflare/vite-plugin": "2.0.0-rc.3",
 } as const;
 
+export const CLOUDFLARE_REMOTE_SETTINGS = "cloudflare/remote.json";
+export const CLOUDFLARE_MINIMUM_NODE = "22.12.0";
+
+export interface CloudflareRemoteSettings {
+  name: string;
+  accountId: string;
+  teamDomain: string;
+  audience: string;
+}
+
 const devDependencyInstall = Object.entries(CLOUDFLARE_DEV_DEPENDENCIES)
   .map(([name, version]) => `${name}@${version}`)
   .join(" ");
@@ -61,29 +71,34 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 export default defineConfig({ plugins: [cloudflare()] });
 `;
 
-export const cloudflareScaffold: DeployTargetScaffold = {
-  ...CLOUDFLARE_TARGET,
-  loadsProject: true,
-  files({ cwd, projectFile, projectExport }) {
-    const name = workerName(cwd);
-    const workerDirectory = join(cwd, "cloudflare");
-    const importProject = projectImport(projectExport, importPath(workerDirectory, projectFile));
-    return [
-      {
-        path: "cloudflare/worker.ts",
-        contents: `import { createCloudflareApp } from "tubeless/cloudflare";
+type CloudflareIdentity = Pick<CloudflareRemoteSettings, "name" | "accountId">;
+
+export function createCloudflareScaffold(remote?: CloudflareIdentity): DeployTargetScaffold {
+  return {
+    ...CLOUDFLARE_TARGET,
+    loadsProject: true,
+    files({ cwd, projectFile, projectExport }) {
+      const name = remote?.name ?? defaultCloudflareWorkerName(cwd);
+      const workerDirectory = join(cwd, "cloudflare");
+      const importProject = projectImport(projectExport, importPath(workerDirectory, projectFile));
+      return [
+        {
+          path: "cloudflare/worker.ts",
+          contents: `import { env } from "cloudflare:workers";
+import { createCloudflareApp } from "tubeless/cloudflare";
 ${importProject}
 
-const app = createCloudflareApp(project);
+const { TUBELESS_VERSION } = env as { TUBELESS_VERSION: { id: string } };
+const app = createCloudflareApp(project, { deploymentId: TUBELESS_VERSION.id });
 
 export default app.worker;
 export const { TubelessStudio, TubelessRun } = app.durableObjects;
 `,
-      },
-      {
-        path: "cloudflare.config.ts",
-        contents: `import { bindings, defineConfig, defineWorker, exports as workerExports } from "cf/config";
-import * as entrypoint from "./cloudflare/worker.ts" with { type: "cf-worker" };
+        },
+        {
+          path: "cloudflare.config.ts",
+          contents: `import { bindings, defineConfig, defineWorker, exports as workerExports } from "cf/config";
+import * as entrypoint from "./cloudflare/worker.ts" with { type: "cf-worker" };${remote ? `\nimport access from "./${CLOUDFLARE_REMOTE_SETTINGS}" with { type: "json" };` : ""}
 
 export default defineConfig(() => {
   const worker = defineWorker({
@@ -99,7 +114,7 @@ export default defineConfig(() => {
     },
   });
   return {
-    worker: {
+    ${remote ? "accountId: access.accountId,\n    " : ""}worker: {
       ...worker,
       workersDev: true,
       observability: { enabled: true, logs: { enabled: true } },
@@ -113,42 +128,57 @@ export default defineConfig(() => {
           exportName: "TubelessRun",
         }),
         TUBELESS_BUCKET: bindings.r2({ name: "${name}-artifacts" }),
+        TUBELESS_VERSION: bindings.versionMetadata(),
         // After enabling Cloudflare Access: "<team>.cloudflareaccess.com" and the application AUD tag.
-        ACCESS_TEAM_DOMAIN: bindings.text(""),
-        ACCESS_AUD: bindings.text(""),
+        ACCESS_TEAM_DOMAIN: bindings.text(${remote ? "access.teamDomain" : '""'}),
+        ACCESS_AUD: bindings.text(${remote ? "access.audience" : '""'}),
       },
     },
   };
 });
 `,
-      },
-      { path: "vite.config.ts", contents: VITE_CONFIG },
-    ];
-  },
-  // Vite loads exactly one of these names, so another config would shadow or be shadowed by ours.
-  conflictsWith: [
-    "vite.config.js",
-    "vite.config.mjs",
-    "vite.config.cjs",
-    "vite.config.mts",
-    "vite.config.cts",
-  ].map((path) => ({
-    path,
-    hint: "Vite loads only one config file: rename it, run init again, then add cloudflare() from @cloudflare/vite-plugin to your config (see the Cloudflare guide).",
-  })),
-  minimumNode: {
-    version: "22.12.0",
-    reason: "cf needs Node 22 or later and Vite 8 needs Node 22.12 or later",
-  },
-  nextSteps: [
-    "node --version   # cf and Vite 8 need Node 22.12 or later",
-    `bun add tubeless && bun add -d --exact ${devDependencyInstall}   # npm install -D -E … / pnpm add -D -E …`,
-    "grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\\n.cloudflare/\\n' >> .gitignore   # cf build output and generated types",
-    "npx cf auth login",
-    "npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)",
-    "npx cf deploy         # creates the Worker, Durable Objects and R2 bucket",
-    "Dashboard: Workers & Pages → your Worker → Settings → Domains & Routes → Enable Cloudflare Access",
-    "Set ACCESS_TEAM_DOMAIN and ACCESS_AUD in cloudflare.config.ts, then run npx cf deploy again",
-    "Guide: https://tubeless.io/docs/deploy-cloudflare",
-  ],
-};
+        },
+        { path: "vite.config.ts", contents: VITE_CONFIG },
+        ...(remote
+          ? [
+              {
+                path: CLOUDFLARE_REMOTE_SETTINGS,
+                contents:
+                  JSON.stringify({ ...remote, teamDomain: "", audience: "" }, null, 2) + "\n",
+              },
+            ]
+          : []),
+      ];
+    },
+    // Vite loads exactly one of these names, so another config would shadow or be shadowed by ours.
+    conflictsWith: [
+      "vite.config.js",
+      "vite.config.mjs",
+      "vite.config.cjs",
+      "vite.config.mts",
+      "vite.config.cts",
+    ].map((path) => ({
+      path,
+      hint: "Vite loads only one config file: rename it, run init again, then add cloudflare() from @cloudflare/vite-plugin to your config (see the Cloudflare guide).",
+    })),
+    minimumNode: {
+      version: CLOUDFLARE_MINIMUM_NODE,
+      reason: "cf needs Node 22 or later and Vite 8 needs Node 22.12 or later",
+    },
+    nextSteps: remote
+      ? []
+      : [
+          "node --version   # cf and Vite 8 need Node 22.12 or later",
+          `bun add tubeless && bun add -d --exact ${devDependencyInstall}   # npm install -D -E … / pnpm add -D -E …`,
+          "grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\\n.cloudflare/\\n' >> .gitignore   # cf build output and generated types",
+          "npx cf auth login",
+          "npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)",
+          "npx cf deploy         # creates the Worker, Durable Objects and R2 bucket",
+          "Dashboard: Workers & Pages → your Worker → Settings → Domains & Routes → Enable Cloudflare Access",
+          "Set ACCESS_TEAM_DOMAIN and ACCESS_AUD in cloudflare.config.ts, then run npx cf deploy again",
+          "Guide: https://tubeless.io/docs/deploy-cloudflare",
+        ],
+  };
+}
+
+export const cloudflareScaffold = createCloudflareScaffold();

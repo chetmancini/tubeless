@@ -587,6 +587,42 @@ Tubeless calls it per task. Pass `signal` into async setup, and forward `text` t
 the new user task on `context.turn === 1` and return a complete plain-data
 conversation to retain it. See [`agent-repl-model.ts`](../examples/agent-repl-model.ts).
 
+## Named remotes
+
+Use the same commands for a **Tubeless Cloud** workspace and a **self-hosted
+Cloudflare** deployment. Select a provider when prompted.
+
+```sh
+bunx tubeless remote connect
+bunx tubeless remote connect https://jobs.example.com --name production
+bunx tubeless remote create
+bunx tubeless remote list
+bunx tubeless remote run ingest --remote production --input-file input.json
+```
+
+`connect` discovers Tubeless Cloud workspaces after sign-in or Tubeless
+Workers in a selected Cloudflare account. A Studio URL also works for existing
+self-hosted deployments with the execution API, with Access credentials for that
+URL and no Cloudflare account management access needed.
+
+`create` reuses Tubeless Cloud sign-in and connects a workspace. Finish creating a
+workspace, connecting a GitHub repository, and loading pipelines in the dashboard
+when prompted. For Cloudflare, the wizard deploys the current project or initializes
+a starter project, configures Access for the selected email, and checks the
+deployed execution API before saving it. See the [Cloudflare wizard](./deploy-cloudflare.md#set-up-a-named-remote).
+
+Profiles live in `~/.config/tubeless/remotes/` (or under `XDG_CONFIG_HOME` when
+set). Each profile is a JSON file containing the remote destination and its
+authentication mode. Credentials stay in their provider's login store or the
+environment. Use `--remote <name>` to select a profile. Tubeless selects the sole
+saved remote automatically, and requires a choice when several are configured.
+For self-hosted execution, `--host <origin>` still works directly.
+
+Foreground runs and `remote status <run-id> --follow` stream logs and progress
+from Tubeless Cloud. Use `--poll` to follow on Cloud deployments without streaming
+support. Cancel a Cloud run from the dashboard link. Self-hosted remotes use the
+execution status and cancellation described below.
+
 ## Self-hosted Cloudflare executions
 
 Use `tubeless remote run <command-id> --host <origin>` to submit to a self-hosted

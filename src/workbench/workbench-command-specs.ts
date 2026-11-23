@@ -447,27 +447,73 @@ Set up and load pipelines in the Cloud dashboard.
   },
   remote: {
     name: "remote",
-    description: "Run and follow pipelines on a self-hosted Cloudflare deployment",
-    usage: `Usage: tubeless remote <run|status|cancel> <command-id|execution-id> --host <origin> [options]
-       tubeless remote runner --host <origin> --deployment-id <id> [--project <file>]
+    description: "Connect, create, and run pipelines on named remotes",
+    usage: `Usage: tubeless remote connect [studio-url] [--provider <provider>] [--name <name>]
+       tubeless remote create [--provider <provider>] [--name <name>]
+       tubeless remote list [--json]
+       tubeless remote <run|status|cancel> <command-id|execution-id> [--remote <name> | --host <origin>]
+       tubeless remote runner --deployment-id <id> [--remote <name> | --host <origin>] [--project <file>]
 
-Submit a registered command and follow its execution, inspect an existing execution,
-or request cancellation. Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET for Access.
+Use a saved Tubeless Cloud or Cloudflare remote from any directory. For direct
+Cloudflare Access service authentication set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET.
 `,
-    subcommands: ["run", "status", "cancel", "runner"],
+    subcommands: ["connect", "create", "list", "run", "status", "cancel", "runner"],
     options: {
       host: {
         type: "string",
-        description: "Self-hosted Worker origin",
+        description: "Explicit remote origin",
         valueName: "origin",
         completion: "text",
+        commands: ["connect", "create", "run", "status", "cancel", "runner"],
+      },
+      remote: {
+        type: "string",
+        description: "Use a saved remote",
+        valueName: "name",
+        commands: ["run", "status", "cancel", "runner"],
+      },
+      name: {
+        type: "string",
+        description: "Save as this remote name",
+        valueName: "name",
+        commands: ["connect", "create"],
+      },
+      provider: {
+        type: "string",
+        description: "Choose the hosting provider",
+        valueName: "provider",
+        completion: ["tubeless-cloud", "cloudflare"],
+        commands: ["connect", "create"],
+      },
+      account: {
+        type: "string",
+        description: "Cloudflare account ID",
+        valueName: "id",
+        commands: ["connect", "create"],
+      },
+      workspace: {
+        type: "string",
+        description: "Tubeless Cloud workspace ID",
+        valueName: "id",
+        commands: ["connect", "create"],
+      },
+      email: {
+        type: "string",
+        description: "Email allowed by new Cloudflare Access policy",
+        valueName: "email",
+        commands: ["create"],
+      },
+      yes: {
+        type: "boolean",
+        description: "Confirm the Cloudflare deployment",
+        commands: ["create"],
       },
       project: {
         type: "string",
-        description: "Bun runner project (defaults to tubeless.project.ts)",
+        description: "Project file (defaults to tubeless.project.ts)",
         valueName: "file",
         completion: "file",
-        commands: ["runner"],
+        commands: ["create", "runner"],
       },
       "deployment-id": {
         type: "string",
@@ -478,7 +524,7 @@ or request cancellation. Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET for
       json: {
         type: "boolean",
         description: "Emit one JSON receipt or status object",
-        commands: ["run", "status", "cancel"],
+        commands: ["run", "status", "cancel", "connect", "create", "list"],
       },
       "input-file": {
         type: "string",
@@ -496,6 +542,11 @@ or request cancellation. Set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET for
       },
       detach: { type: "boolean", description: "Return after durable admission", commands: ["run"] },
       follow: { type: "boolean", description: "Wait for a terminal status", commands: ["status"] },
+      poll: {
+        type: "boolean",
+        description: "Poll status on a Tubeless Cloud remote",
+        commands: ["run", "status"],
+      },
     },
   },
   ui: {
