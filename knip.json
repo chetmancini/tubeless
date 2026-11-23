@@ -21,7 +21,6 @@
     "examples/cloudflare/vite.config.ts"
   ],
   "project": ["src/**/*.{ts,tsx}", "scripts/**/*.{js,mjs,ts}", "!scripts/fixtures/**"],
-  "ignoreBinaries": ["mkfifo"],
   "ignoreExportsUsedInFile": {
     "interface": true,
     "type": true
