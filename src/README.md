@@ -207,6 +207,9 @@ Only boundaries that are not obvious from names are listed.
   durable admission to browser start acknowledgements. `execution-store-sqlite.ts`
   persists pending deliveries, cancellation intent, and terminal outcomes under the
   launch ID. Verified Access actors reach Studio via private Worker RPC.
+- For opt-in recovery, `execution-journal-sqlite.ts` owns fenced intent and result
+  records in each Cloudflare run object. Studio fences root history by generation,
+  and the runner queue reconciles journaled stage IDs with independently leased Bun attempts.
 - The collector (`collector-*`, `attempt-*`) is internal. Claim uncertainty never
   authorizes execution, and delivery failure never declares termination.
 - Cloudflare composes hosting, Studio and storage inside Durable Objects.

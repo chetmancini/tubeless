@@ -1,3 +1,4 @@
+import type { PipelineExecutionJournal } from "../core/pipeline-types.js";
 import {
   executeHostedCommand,
   hostedCommandContext,
@@ -111,20 +112,32 @@ export type HostedChildPlacement = (
   flush: () => Promise<void>
 ) => ChildPlacement;
 
-export async function runHostedJob(options: {
-  readonly job: RunJob;
-  readonly commands: ReadonlyMap<string, HostedCommand>;
-  readonly ingest: () => StudioIngest;
-  readonly controller: AbortController;
-  readonly output: HostedOutput;
-  /** Target policy for optional application destinations; receives the actual execution deadline. */
-  readonly wrapExporter?: (
-    exporter: PipelineTraceExporter,
-    deadlineAtMs: number
-  ) => PipelineTraceExporter;
-  readonly tracing?: PipelineTraceExporterOptions<HostedRunTraceContext>;
-  readonly placeChild?: HostedChildPlacement;
-}): Promise<void> {
+export type HostedJobOwnership =
+  | { readonly ingest: () => StudioIngest; readonly recovery?: undefined }
+  | {
+      readonly ingest: () => Omit<StudioIngest, "admit">;
+      /** The target has already admitted this attempt and owns the original deadline. */
+      readonly recovery: {
+        readonly journal: PipelineExecutionJournal;
+        readonly deadlineAtMs: number;
+      };
+    };
+
+export async function runHostedJob(
+  options: HostedJobOwnership & {
+    readonly job: RunJob;
+    readonly commands: ReadonlyMap<string, HostedCommand>;
+    readonly controller: AbortController;
+    readonly output: HostedOutput;
+    /** Target policy for optional application destinations; receives the actual execution deadline. */
+    readonly wrapExporter?: (
+      exporter: PipelineTraceExporter,
+      deadlineAtMs: number
+    ) => PipelineTraceExporter;
+    readonly tracing?: PipelineTraceExporterOptions<HostedRunTraceContext>;
+    readonly placeChild?: HostedChildPlacement;
+  }
+): Promise<void | "unconfirmed"> {
   const { job, ingest, controller, wrapExporter } = options;
   const entry = options.commands.get(job.commandId);
   if (!entry) {
@@ -145,7 +158,7 @@ export async function runHostedJob(options: {
   }
   // Core does not await exporters, so a refused batch could arrive after a step's side effects.
   // Admission precedes command execution; a refused launch was already closed by Studio.
-  if (!(await admitted(ingest(), job.launchId))) return;
+  if (!options.recovery && !(await admitted(options.ingest(), job.launchId))) return;
   const batches = new BatchingTraceExporter(
     async (sequence, events) => {
       const { accepted } = await withRetry(
@@ -172,7 +185,10 @@ export async function runHostedJob(options: {
     wrapExporter,
     tracing: options.tracing,
     placeChild: options.placeChild,
+    recovery: options.recovery,
   });
+  if (options.recovery && (history.status === "unconfirmed" || history.status === "partial"))
+    return "unconfirmed";
   if (history.status === "unconfirmed") {
     // The run may be fully recorded locally yet unknown to Studio; tell it, best effort.
     const { error } = history;
@@ -210,9 +226,10 @@ export async function executeHostedRun(options: {
   ) => PipelineTraceExporter;
   readonly tracing?: PipelineTraceExporterOptions<HostedRunTraceContext>;
   readonly placeChild?: HostedChildPlacement;
+  readonly recovery?: { readonly journal: PipelineExecutionJournal; readonly deadlineAtMs: number };
 }): Promise<{ exitCode: number; history: HostedRunHistory }> {
   const { job, entry, controller, output, wrapExporter } = options;
-  const deadlineAtMs = Date.now() + job.maxRunDurationMs;
+  const deadlineAtMs = options.recovery?.deadlineAtMs ?? Date.now() + job.maxRunDurationMs;
   let rootRunId: string | undefined;
   let history: HostedRunHistory = { status: "absent" };
   const exporter: PipelineTraceExporter = {
@@ -252,6 +269,8 @@ export async function executeHostedRun(options: {
     });
     const context = {
       tracing: launchTracing.prepare(),
+      executionJournal: options.recovery?.journal,
+      correlationId: options.recovery ? job.launchId : undefined,
       [CHILD_PLACEMENT]: options.placeChild?.(job, deadlineAtMs, async () =>
         options.exporter.flush()
       ),

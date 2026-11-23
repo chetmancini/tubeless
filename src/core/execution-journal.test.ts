@@ -8,6 +8,8 @@ import {
 } from "./pipeline.js";
 import { createPipelineTestRuntime, overrideStep } from "../testing/testing.js";
 import { retainedJournal } from "./execution-journal.test-support.js";
+import { JOURNAL_OUTCOME_UNKNOWN } from "../tracing/tracing-constants.js";
+import type { PipelineTraceEvent } from "../tracing/tracing.js";
 
 const context = (executionJournal: PipelineExecutionJournal, signal?: AbortSignal) => ({
   executionJournal,
@@ -114,6 +116,51 @@ it("blocks an incomplete intent before executing an effect, even when begin's re
   const result = await pipeline.run({}, {}, context(retainedJournal(records)));
   expect(result.errors[0]?.sourceCode).toBe("TUBELESS_JOURNAL_OUTCOME_UNKNOWN");
   expect(run).not.toHaveBeenCalled();
+});
+
+it("summarizes an uncertain effect even when an earlier step also failed", async () => {
+  const { step } = createSteps();
+  let startSibling!: () => void;
+  const siblingStarted = new Promise<void>((resolve) => {
+    startSibling = resolve;
+  });
+  const uncertainEffect = vi.fn();
+  const pipeline = definePipeline({
+    id: "concurrent-errors",
+    ...version,
+    steps: [
+      step("fail", {
+        run() {
+          startSibling();
+          throw new Error("Sibling failed.");
+        },
+      }),
+      step("uncertain", { run: uncertainEffect }),
+    ],
+  });
+  const host = retainedJournal();
+  const events: PipelineTraceEvent[] = [];
+  const result = await pipeline.run(
+    {},
+    { maxConcurrency: 2 },
+    {
+      ...context({
+        ...host,
+        async begin(path, ...args) {
+          if (path.at(-1) !== "uncertain") return host.begin(path, ...args);
+          await siblingStarted;
+          return { status: "incomplete" };
+        },
+      }),
+      tracing: { exporter: { export: (event) => void events.push(event) } },
+    }
+  );
+  expect(result.errors.map(({ stepId }) => stepId)).toEqual(["fail", "uncertain"]);
+  expect(events.at(-1)).toMatchObject({
+    name: "pipeline.completed",
+    error: { sourceCode: JOURNAL_OUTCOME_UNKNOWN },
+  });
+  expect(uncertainEffect).not.toHaveBeenCalled();
 });
 
 it("retains outputs independently of later application mutation", async () => {

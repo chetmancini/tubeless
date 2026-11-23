@@ -83,7 +83,11 @@ export class SqliteExecutionStore {
     return this.storage.sql
       .exec(
         `${TRUSTED_LAUNCHES}
-         SELECT launch.command_id, launch.state, launch.admitted, launch.run_id,
+         SELECT launch.command_id, launch.state, launch.admitted,
+           COALESCE(launch.run_id, (
+             SELECT run_id FROM tubeless_recovery_runs
+             WHERE launch_id = launch.launch_id ORDER BY rowid DESC LIMIT 1
+           )) AS run_id,
            execution.outcome, execution.reason, execution.cancel_requested, execution.target
          FROM trusted_launches AS launch
          LEFT JOIN tubeless_executions AS execution ON execution.launch_id = launch.launch_id

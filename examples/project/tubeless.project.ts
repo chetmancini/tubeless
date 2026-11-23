@@ -44,7 +44,7 @@ export default defineProject(
   [
     // Read its result with run --json validated-import -- --source rows.txt.
     // For Cloudflare cron and CLI launches with a durable ID, see ../cloudflare/scheduled-worker.ts.
-    // For mixed Worker and Bun placement, see ../cloudflare/runner-placement/project.ts.
+    // For mixed Worker and Bun placement with recovery, see ../cloudflare/runner-placement/worker.ts.
     ValidatedPipeline,
     // Its app exporters are configured by TracingExampleProject when launched separately.
     ...TracingExampleProject.commands,

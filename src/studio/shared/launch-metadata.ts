@@ -73,6 +73,7 @@ export const studioLaunchMetadataSchema = wireObject({
   commandId: wireString(),
   deploymentId: wireOptional(text),
   target: wireOptional(wireEnum(["local"])),
+  recoveryRunIds: wireOptional(wireArray(wireString(), { maxItems: 64 })),
   definitionId: wireOptional(text),
   actor: wireOptional(launchActorSchema),
   trigger: launchTriggerSchema,

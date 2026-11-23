@@ -13,6 +13,7 @@ export interface RunJob {
   /** When supplied, the target must refuse execution under another deployment. */
   readonly deploymentId?: string;
   readonly target?: "local";
+  readonly recoveryDefinitionId?: string;
   /** Target-approved cooperative budget, starting after admission is confirmed. */
   readonly maxRunDurationMs: number;
 }

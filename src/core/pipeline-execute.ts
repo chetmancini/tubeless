@@ -1,5 +1,6 @@
 import { type PreparedOptions, validatePipelineOptions } from "./prepared-options.js";
 import { abortableSleep, throwIfAborted as throwIfSignalAborted } from "../utilities/abort.js";
+import { JOURNAL_OUTCOME_UNKNOWN } from "../tracing/tracing-constants.js";
 import { createPipelineLifecycleObserver } from "./lifecycle.js";
 import { createRunId } from "./pipeline-ids.js";
 import {
@@ -377,9 +378,15 @@ export async function executePlannedRun<
       journalFailure(executionContext) !== undefined,
   });
   const fatalJournalError = journalFailure(executionContext);
-  if (fatalJournalError && !stopError) {
-    stopError = stepExecutionError(fatalJournalError, runtime);
-    state.recordRunErrors([stopError]);
+  if (
+    fatalJournalError &&
+    (!stopError ||
+      (fatalJournalError.code === JOURNAL_OUTCOME_UNKNOWN &&
+        !state.errors.some(({ sourceCode }) => sourceCode === JOURNAL_OUTCOME_UNKNOWN)))
+  ) {
+    const diagnostic = stepExecutionError(fatalJournalError, runtime);
+    stopError ??= diagnostic;
+    state.recordRunErrors([diagnostic]);
   }
   if (unstarted.length > 0 && runtime.signal?.aborted) {
     // An external abort takes precedence for work that never started, even

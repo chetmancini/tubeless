@@ -17,6 +17,7 @@ export type ChildPlacement = (input: {
   controls: PipelineRunControls;
   context: PipelineContext;
   stepId: string;
+  journalPath?: readonly string[];
   reportProgress: PipelineStepContext<object>["reportProgress"];
 }) => Promise<PipelineRun<unknown>> | undefined;
 

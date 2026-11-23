@@ -1,5 +1,5 @@
 import { isAuthoredPipelineId } from "../core/pipeline-ids.js";
-import type { HostedFailureReason, RunJob, StudioIngest } from "../hosting/run-contract.js";
+import type { HostedFailureReason, RunJob } from "../hosting/run-contract.js";
 import { DurableObject } from "cloudflare:workers";
 import type { AnyProjectPipeline, PipelineProject } from "../project/pipeline-project.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
@@ -8,7 +8,11 @@ import type { PipelineTraceEvent, PipelineTraceExporterOptions } from "../tracin
 import { createAccessAuthenticator, parseAccessConfig } from "./cloudflare-access.js";
 import { MAX_RUN_DURATION_MS, type CloudflareRunTraceContext } from "./cloudflare-run-contract.js";
 import { RunObjectCore } from "./cloudflare-run.js";
-import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
+import {
+  StudioObjectCore,
+  type CloudflareStudioIngest,
+  type RunStubLike,
+} from "./cloudflare-studio.js";
 import type {
   HostedLaunchRequest,
   HostedLaunchResult as CloudflareLaunchResult,
@@ -81,6 +85,8 @@ export interface CloudflareAppOptions<TEnv = unknown> {
   readonly deploymentId?: string;
   /** Input values saved in Studio history, by command id and parameter key. Defaults to none. */
   readonly recordInputs?: LaunchInputPolicy;
+  /** Recover interrupted versioned Worker pipelines under their original execution ID. */
+  readonly recoverInterruptedRuns?: boolean;
   /** Registered pipelines that run on the enrolled local Bun runner. Others run on the Worker. */
   readonly localRunner?: {
     /** Client ID of the Access service token enrolled for local work. */
@@ -135,7 +141,7 @@ interface NamespaceLike<T> {
   getByName(name: string): T;
 }
 
-interface StudioStub extends StudioIngest, RunnerStageStore {
+interface StudioStub extends CloudflareStudioIngest, RunnerStageStore {
   serveRunner(request: Request): Promise<Response>;
   serve(request: Request, actor?: LaunchActor): Promise<Response>;
   launch(request: HostedLaunchRequest): Promise<CloudflareLaunchResult>;
@@ -198,6 +204,8 @@ export function createCloudflareApp<TEnv = unknown>(
     throw new Error(
       "deploymentId must contain 1–200 letters, digits, periods, underscores, colons or hyphens."
     );
+  if (options.recoverInterruptedRuns && !deploymentId)
+    throw new Error("Run recovery requires deploymentId.");
   const commands = new Map(
     hostedProjectCommands(project).map((entry) => [entry.descriptor.id, entry])
   );
@@ -337,6 +345,7 @@ export function createCloudflareApp<TEnv = unknown>(
         deploymentId,
         inputPolicy,
         localPipelines,
+        recoverInterruptedRuns: options.recoverInterruptedRuns,
         runStub: (launchId) => env.TUBELESS_RUN.getByName(launchId),
       });
     }
@@ -366,32 +375,38 @@ export function createCloudflareApp<TEnv = unknown>(
       return this.#core.serveRunner(request);
     }
 
-    enqueueStage(job: RunnerJob & { kind: "stage" }) {
-      return this.#core.enqueueStage(job);
+    enqueueStage(job: RunnerJob & { kind: "stage" }, generation?: number) {
+      return this.#core.enqueueStage(job, generation);
     }
 
     readStage(launchId: string, id: string, afterId: number) {
       return this.#core.readStage(launchId, id, afterId);
     }
 
-    cancelStage(launchId: string, id: string) {
-      return this.#core.cancelStage(launchId, id);
+    cancelStage(launchId: string, id: string, generation?: number) {
+      return this.#core.cancelStage(launchId, id, generation);
     }
 
-    admit(launchId: string): Promise<{ admitted: boolean }> {
-      return this.#core.admit(launchId);
+    admit(launchId: string, generation?: number): Promise<{ admitted: boolean }> {
+      return this.#core.admit(launchId, generation);
     }
 
     appendEvents(
       launchId: string,
       sequence: number,
-      events: PipelineTraceEvent[]
+      events: PipelineTraceEvent[],
+      generation?: number
     ): Promise<{ accepted: boolean }> {
-      return this.#core.appendEvents(launchId, sequence, events);
+      return this.#core.appendEvents(launchId, sequence, events, generation);
     }
 
-    reportFailure(launchId: string, message: string, reason?: HostedFailureReason): Promise<void> {
-      return this.#core.reportFailure(launchId, message, reason);
+    reportFailure(
+      launchId: string,
+      message: string,
+      reason?: HostedFailureReason,
+      generation?: number
+    ): Promise<void> {
+      return this.#core.reportFailure(launchId, message, reason, generation);
     }
 
     appendTranscript(record: AgentTranscriptRecord): Promise<{ accepted: boolean }> {
@@ -416,13 +431,14 @@ export function createCloudflareApp<TEnv = unknown>(
         ingest: () => studioBinding(env),
         placeChild:
           localPipelines && deploymentId
-            ? (job, deadlineAtMs, flush) =>
+            ? (job, deadlineAtMs, flush, generation) =>
                 placeCloudflareChild({
                   definitions: localPipelines,
                   launchId: job.launchId,
                   deploymentId,
                   deadlineAtMs,
                   flush,
+                  generation,
                   store: () => studioBinding(env),
                 })
             : undefined,

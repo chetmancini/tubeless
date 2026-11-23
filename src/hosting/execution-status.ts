@@ -21,6 +21,7 @@ export const HOSTED_EXECUTION_REASONS = [
   ...HOSTED_FAILURE_REASONS,
   "start_unconfirmed",
   "history_unavailable",
+  "journal_outcome_unknown",
   "runner_waiting",
   "runner_incompatible",
 ] as const;

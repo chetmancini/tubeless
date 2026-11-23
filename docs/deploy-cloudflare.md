@@ -156,9 +156,9 @@ produce a failed run.
 
 If a dispatch reply is lost, Studio reoffers the same job using the original launch
 ID. The run object remembers accepted jobs and Studio grants permission to execute
-once. A queued job from an older deployment fails before user code runs. Use a new
-key only to deliberately request another run. Once work has started, an interruption
-can leave its outcome unknown. Tubeless does not replay the pipeline automatically.
+once by default. A queued job from an older deployment fails before user code runs.
+Use a new key only to deliberately request another run. To resume acknowledged
+steps after an interruption, [enable Worker execution recovery](#recover-an-interrupted-worker-execution).
 
 ## Submit and follow from the CLI
 
@@ -293,8 +293,73 @@ stage to see its runner attempt, logs, and progress.
 
 A lost active lease closes the attempt as interrupted. Root executions show
 `outcome_unknown` with `runner_interrupted` when no terminal trace was confirmed.
-A waiting parent fails if its child loses the lease. Inspect external effects
-before starting a new run. Automatic restart recovery is tracked in [issue #352](https://github.com/chetmancini/tubeless/issues/352).
+A waiting parent with recovery disabled fails if its child loses the lease.
+
+## Recover an interrupted Worker execution
+
+Set `recoverInterruptedRuns: true` on `createCloudflareApp` to journal trusted
+launches whose root runs on the Worker. Use an immutable `deploymentId` and set
+`implementationVersion` on the root and its child pipelines. Submit with the same
+CLI, Studio, or `app.launch` entry points. Repeating a submission with the same
+idempotency key and parameters returns the original execution ID.
+
+```ts
+const app = createCloudflareApp(project, {
+  deploymentId: "release-42",
+  recoverInterruptedRuns: true,
+  localRunner: {
+    serviceId: "your-runner-client-id.access",
+    pipelines: ["normalize-on-bun"],
+  },
+});
+```
+
+After a Worker restart, Tubeless starts a fresh attempt under the same execution
+ID and restores acknowledged step outputs. An explicit `fromPipeline` handoff
+on Bun rejoins its original dispatch. If the stage result committed before the
+reply was lost, the Worker uses that result and continues to the next step. Each
+attempt shares the original Worker deadline. Studio's Launch panel links the
+Worker attempts, and the original parent step links its Bun stage run.
+
+If a claimed Bun stage loses its lease before acknowledging a result, or a Worker
+effect has a saved intent without a completion, the execution stops at that step
+with `outcome_unknown` and reason `journal_outcome_unknown`. Use the execution ID,
+the failed step in Studio, and the stage dispatch ID in the Bun error to reconcile
+external effects before submitting under a new key. Tubeless keeps downstream steps
+blocked and honors a recorded cancellation after restart.
+
+The Worker journal accepts plain data with no shared or circular references,
+including explicit `undefined` and negative zero. Each encoded binding or result
+is limited to 64 KiB. The Bun handoff retains its JSON value limits. Put effects
+in step handlers and keep option mapping and finalizers free of effects because
+orchestration can re-enter them. Dry runs skip the journal. Bun-owned top-level
+commands continue to use runner lease semantics. See the
+[execution journal contract](./execution-journal.md).
+
+### Smoke test a deployed Worker and Bun runner
+
+1. Deploy the [mixed-runner example](../examples/cloudflare/runner-placement/worker.ts)
+   with its `TUBELESS_BUCKET` binding and the Access setup above. Upload unique
+   text to `source.txt` in that bucket. Use the same release for the Worker and Bun.
+2. Start `tubeless remote runner` on the Bun machine with the dedicated runner
+   credential. Use the separate launch credential in the shell below. Give the
+   smoke test a fresh key, and keep `input.json` containing `{"text":"source.txt"}`.
+
+   ```sh
+   tubeless remote run fetch-transform-publish --host https://studio.example.com \
+     --input-file input.json --idempotency-key recovery-smoke.42 --detach --json
+   tubeless remote status <execution-id> --host https://studio.example.com --follow
+   ```
+
+3. After the Bun stage completes, restart the runner with the same release. Confirm
+   `status` reaches `completed`, `published.txt` in R2 contains the normalized text,
+   and `normalize-writes.ndjson` beside the Bun project contains one entry for that
+   input. Repeat `remote run` with the same key and confirm it returns the same
+   execution ID without adding an entry. You can also start a separate execution
+   through the example's Worker schedule using a distinct input marker.
+
+The workerd fault-injection tests cover a lost reply after stage completion
+commits and a lost lease after a write without a committed result.
 
 ## Application trace exporters
 

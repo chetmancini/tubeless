@@ -15,7 +15,7 @@ export function createProcessHostedExecutor(options: {
   ingest(): StudioIngest;
 }): HostedExecutor & { drain(): Promise<void>; close(): Promise<void> } {
   const started = new Set<string>();
-  const active = new Map<string, { controller: AbortController; done: Promise<void> }>();
+  const active = new Map<string, { controller: AbortController; done: Promise<unknown> }>();
   let closed = false;
   const drain = async () => {
     while (active.size > 0) await Promise.all([...active.values()].map((run) => run.done));

@@ -116,6 +116,7 @@ export function createHostedLaunchAdmission(input: {
   readonly store: HostedLaunchAdmissionStore;
   readonly maxRunDurationMs: number;
   readonly now?: () => number;
+  readonly recoverInterruptedRuns?: boolean;
   readonly localPipelines?: ReadonlyMap<string, string>;
   readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
 }): (request: HostedLaunchRequest) => Promise<HostedLaunchDecision> {
@@ -165,6 +166,14 @@ export function createHostedLaunchAdmission(input: {
       ]);
     const target = input.localPipelines?.has(commandId) ? "local" : undefined;
     const normalized = normalizedValues(resolved.values);
+    const recovery =
+      input.recoverInterruptedRuns && target === undefined && normalized.dryRun !== true;
+    const identity = recovery
+      ? commands.get(commandId)?.command.plan().definition?.identity
+      : undefined;
+    if (recovery && !identity?.implementationVersion)
+      return invalid(["Recovery requires a versioned pipeline definition."]);
+    const recoveryDefinitionId = identity?.definitionId;
     const bytes = new TextEncoder().encode(
       JSON.stringify(
         canonicalJsonValue({
@@ -173,6 +182,7 @@ export function createHostedLaunchAdmission(input: {
           values: normalized,
           maxRunDurationMs,
           ...(target === undefined ? {} : { target }),
+          ...(recoveryDefinitionId === undefined ? {} : { recoveryDefinitionId }),
         })
       )
     );
@@ -190,6 +200,7 @@ export function createHostedLaunchAdmission(input: {
       values: normalized,
       deploymentId,
       target,
+      recoveryDefinitionId,
       maxRunDurationMs,
     };
     const reservation = previous

@@ -32,11 +32,11 @@ import { createSqliteLaunchMetadataStore } from "./launch-metadata-sqlite.js";
 import type { StudioLaunchMetadata } from "../studio/shared/launch-metadata.js";
 import type { PipelineRunEventQuery, PipelineRunEventReader } from "../run-store/run-store.js";
 import {
-  openSubtreeStartsQuery,
+  openRunStartsQuery,
   storedRunEvent,
   type RunEventRecord,
 } from "../run-store/run-store-sql.js";
-import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
+import { JOURNAL_OUTCOME_UNKNOWN, PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { HostedFailureReason } from "./run-contract.js";
 import { SqliteExecutionStore, TRUSTED_LAUNCHES } from "./execution-store-sqlite.js";
@@ -68,6 +68,7 @@ interface LaunchRecord {
   /** The executor was cleared to execute user code; a start failure must not close it. */
   readonly admitted: boolean;
   readonly lastBatch: number;
+  readonly recoveryGeneration?: number;
 }
 
 const TERMINAL: ReadonlySet<LaunchState> = new Set(["finished", "failed"]);
@@ -124,8 +125,16 @@ export class SqliteHostedLaunchStore
       state TEXT NOT NULL,
       admitted INTEGER NOT NULL DEFAULT 0,
       last_batch INTEGER NOT NULL DEFAULT -1,
+      recovery_generation INTEGER,
       created_at_ms INTEGER NOT NULL
     )`);
+    if (
+      !storage.sql
+        .exec("PRAGMA table_info(tubeless_launches)")
+        .toArray()
+        .some(({ name }) => name === "recovery_generation")
+    )
+      storage.sql.exec("ALTER TABLE tubeless_launches ADD COLUMN recovery_generation INTEGER");
     storage.sql.exec(
       "CREATE INDEX IF NOT EXISTS tubeless_launches_run_id_idx ON tubeless_launches(run_id)"
     );
@@ -164,7 +173,13 @@ export class SqliteHostedLaunchStore
     this.admissions = createSqliteLaunchAdmissionStore(
       storage,
       ({ job, createdAtMs, metadata }) => {
-        this.#create(job.launchId, job.commandId, createdAtMs, metadata);
+        this.#create(
+          job.launchId,
+          job.commandId,
+          createdAtMs,
+          metadata,
+          job.recoveryDefinitionId !== undefined ? 0 : null
+        );
         if (job.deploymentId !== undefined) this.executions.enqueue(job, createdAtMs);
       }
     );
@@ -198,13 +213,15 @@ export class SqliteHostedLaunchStore
     launchId: string,
     commandId: string,
     nowMs: number,
-    metadata?: StudioLaunchMetadata
+    metadata?: StudioLaunchMetadata,
+    recoveryGeneration: 0 | null = null
   ): void {
     this.storage.sql.exec(
-      "INSERT INTO tubeless_launches (launch_id, command_id, state, created_at_ms) VALUES (?, ?, 'starting', ?)",
+      "INSERT INTO tubeless_launches (launch_id, command_id, state, created_at_ms, recovery_generation) VALUES (?, ?, 'starting', ?, ?)",
       launchId,
       commandId,
-      nowMs
+      nowMs,
+      recoveryGeneration
     );
     if (metadata) this.metadata.record(metadata);
   }
@@ -231,20 +248,88 @@ export class SqliteHostedLaunchStore
       ownership: row.attempt_id === null ? "trusted" : "attempt",
       admitted: Number(row.admitted) === 1,
       lastBatch: Number(row.last_batch),
+      ...(typeof row.recovery_generation === "number"
+        ? { recoveryGeneration: row.recovery_generation }
+        : {}),
     };
+  }
+
+  #admit(launch: LaunchRecord): boolean {
+    if (!this.executions.claim(launch.launchId, launch.admitted)) return false;
+    this.storage.sql.exec(
+      "UPDATE tubeless_launches SET admitted = 1 WHERE launch_id = ?",
+      launch.launchId
+    );
+    return true;
+  }
+
+  /** Verify the generation before changing history or settling the execution. */
+  ownsRecovery(launchId: string, generation?: number): boolean {
+    const value = this.storage.sql
+      .exec("SELECT recovery_generation FROM tubeless_launches WHERE launch_id = ?", launchId)
+      .toArray()[0]?.recovery_generation;
+    return (typeof value === "number" ? value : undefined) === generation;
+  }
+
+  /** Caller owns this transaction together with cancellation cleanup. */
+  admitRecovery(
+    launchId: string,
+    generation: number,
+    activeStageRunIds: readonly string[]
+  ): "admitted" | "closed" | "cancelled" {
+    const launch = this.#get(launchId);
+    if (
+      !launch ||
+      launch.ownership !== "trusted" ||
+      TERMINAL.has(launch.state) ||
+      launch.recoveryGeneration === undefined ||
+      generation <= launch.recoveryGeneration
+    )
+      return "closed";
+
+    if (this.executions.status(launchId)?.cancellationRequested) {
+      if (launch.runId)
+        this.events.append(
+          this.interruptRuns(launch.runId, "Execution cancelled during recovery.", this.now())
+        );
+      this.storage.sql.exec(
+        "UPDATE tubeless_launches SET state = 'failed' WHERE launch_id = ?",
+        launchId
+      );
+      this.executions.settle(launchId, "cancelled");
+      return "cancelled";
+    }
+    if (!launch.admitted && !this.#admit(launch)) return "closed";
+    // Runner-owned branches stay attached to their original parent and keep their leases.
+    if (launch.runId)
+      this.events.append(
+        this.interruptRuns(
+          launch.runId,
+          "Worker attempt interrupted. Recovery uses the execution journal.",
+          this.now(),
+          activeStageRunIds
+        )
+      );
+    this.storage.sql.exec(
+      "UPDATE tubeless_launches SET recovery_generation = ?, run_id = NULL, state = 'starting', last_batch = -1 WHERE launch_id = ?",
+      generation,
+      launchId
+    );
+    return "admitted";
   }
 
   /** Clear an open launch to execute; a closed or unknown launch must never run user code. */
   async admit(launchId: string): Promise<boolean> {
     return this.storage.transactionSync(() => {
       const launch = this.#get(launchId);
-      if (!launch || TERMINAL.has(launch.state) || launch.ownership === "attempt") return false;
-      if (!this.executions.claim(launchId, launch.admitted)) return false;
-      this.storage.sql.exec(
-        "UPDATE tubeless_launches SET admitted = 1 WHERE launch_id = ?",
-        launchId
-      );
-      return true;
+      if (
+        !launch ||
+        TERMINAL.has(launch.state) ||
+        launch.ownership === "attempt" ||
+        launch.recoveryGeneration !== undefined
+      )
+        return false;
+      return this.#admit(launch);
     });
   }
 
@@ -293,14 +378,28 @@ export class SqliteHostedLaunchStore
         dryRun = event.payload.dryRun;
         stepCount = event.payload.stepCount;
         state = "running";
+        if (launch.recoveryGeneration !== undefined)
+          this.storage.sql.exec(
+            "INSERT INTO tubeless_recovery_runs (run_id, launch_id) VALUES (?, ?)",
+            runId,
+            launch.launchId
+          );
       } else if (
         runId !== undefined &&
         event.name === "pipeline.completed" &&
         event.runId === runId
       ) {
         state = "finished";
-        if (launch.ownership === "trusted")
-          this.executions.settle(launch.launchId, event.payload.status);
+        if (launch.ownership === "trusted") {
+          const uncertain =
+            event.error?.sourceCode === JOURNAL_OUTCOME_UNKNOWN &&
+            launch.recoveryGeneration !== undefined;
+          this.executions.settle(
+            launch.launchId,
+            uncertain ? "outcome_unknown" : event.payload.status,
+            uncertain ? "journal_outcome_unknown" : undefined
+          );
+        }
       }
     }
     this.storage.sql.exec(
@@ -681,7 +780,7 @@ export class SqliteHostedLaunchStore
 
   #fail(launch: LaunchRecord, message: string, nowMs: number, reason?: HostedFailureReason): void {
     if (TERMINAL.has(launch.state)) return;
-    if (launch.runId) this.events.append(this.interruptSubtree(launch.runId, message, nowMs));
+    if (launch.runId) this.events.append(this.interruptRuns(launch.runId, message, nowMs));
     this.storage.sql.exec(
       "UPDATE tubeless_launches SET state = 'failed' WHERE launch_id = ?",
       launch.launchId
@@ -696,9 +795,14 @@ export class SqliteHostedLaunchStore
       );
   }
 
-  /** Close the bound run and every nested run it left open, children before parents. */
-  interruptSubtree(rootRunId: string, message: string, nowMs: number): PipelineTraceEvent[] {
-    const { sql, params } = openSubtreeStartsQuery(rootRunId);
+  /** Close open runs, children before parents, except independently owned branches. */
+  interruptRuns(
+    rootRunId: string,
+    message: string,
+    nowMs: number,
+    excludedBranches: readonly string[] = []
+  ): PipelineTraceEvent[] {
+    const { sql, params } = openRunStartsQuery(rootRunId, excludedBranches);
     // SAFETY: SELECT * over the owned pipeline_run_events table returns RunEventRecord rows.
     const rows = this.storage.sql.exec(sql, ...params).toArray() as unknown as RunEventRecord[];
     const closed = new Set<string>();

@@ -1,3 +1,4 @@
+import { digestCollectorBody } from "../hosting/collector-protocol.js";
 import type { HostedFailureReason, RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js";
 import { createStudioHost, type StudioHost } from "../hosting/hosting-studio.js";
@@ -44,9 +45,15 @@ export interface StudioObjectDependencies {
   readonly startTimeoutMs?: number;
   readonly projectId: string;
   readonly deploymentId?: string;
+  readonly recoverInterruptedRuns?: boolean;
   readonly localPipelines?: ReadonlyMap<string, string>;
   readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
 }
+
+export type CloudflareStudioIngest = Pick<
+  StudioObjectCore,
+  "admit" | "appendEvents" | "reportFailure"
+>;
 
 export class StudioObjectCore implements StudioIngest {
   readonly #store: SqliteHostedLaunchStore;
@@ -124,6 +131,7 @@ export class StudioObjectCore implements StudioIngest {
       now: this.#now,
       inputPolicy: deps.inputPolicy,
       localPipelines: deps.localPipelines,
+      recoverInterruptedRuns: deps.recoverInterruptedRuns,
     });
   }
 
@@ -178,17 +186,34 @@ export class StudioObjectCore implements StudioIngest {
     return serveRunnerRequest(request, this.#runners, projectId, deploymentId, localPipelines);
   }
 
-  enqueueStage(job: RunnerJob & { kind: "stage" }): Promise<void> {
+  async enqueueStage(job: RunnerJob & { kind: "stage" }, generation?: number): Promise<void> {
+    const {
+      launchId,
+      deploymentId,
+      pipelineId,
+      definitionId,
+      stage: { parentRunId: _parent, ...stage },
+    } = job;
+    // Tracing parents and the remaining wall-clock budget change when orchestration is recreated.
+    const binding =
+      generation === undefined
+        ? undefined
+        : await digestCollectorBody(
+            new TextEncoder().encode(
+              JSON.stringify([launchId, deploymentId, pipelineId, definitionId, stage])
+            )
+          );
     return this.deps.storage.transaction(async () => {
-      const status = this.getExecution(job.launchId);
+      const status = this.getExecution(launchId);
       if (
         status?.state !== "running" ||
         status.cancellationRequested ||
-        job.deploymentId !== this.deps.deploymentId ||
-        job.definitionId !== this.deps.localPipelines?.get(job.pipelineId)
+        !this.#store.ownsRecovery(launchId, generation) ||
+        deploymentId !== this.deps.deploymentId ||
+        definitionId !== this.deps.localPipelines?.get(pipelineId)
       )
         throw new Error("The execution cannot queue this stage.");
-      this.#runners.enqueue(job);
+      this.#runners.enqueue(job, binding);
       await this.#scheduleReconcile();
     });
   }
@@ -197,8 +222,9 @@ export class StudioObjectCore implements StudioIngest {
     return this.#runners.readStage(launchId, id, afterId);
   }
 
-  cancelStage(launchId: string, id: string): Promise<void> {
+  cancelStage(launchId: string, id: string, generation?: number): Promise<void> {
     return this.deps.storage.transaction(async () => {
+      if (!this.#store.ownsRecovery(launchId, generation)) return;
       this.#runners.cancel(launchId, id);
       await this.#scheduleReconcile();
     });
@@ -238,11 +264,29 @@ export class StudioObjectCore implements StudioIngest {
     return { accepted: this.#events.appendTranscript(record) };
   }
 
-  admit(launchId: string) {
-    return this.#ingest.admit(launchId);
-  }
-  appendEvents(launchId: string, sequence: number, events: PipelineTraceEvent[]) {
+  admit(launchId: string, generation?: number) {
+    if (generation === undefined) return this.#ingest.admit(launchId);
     return this.deps.storage.transaction(async () => {
+      const state = this.#store.admitRecovery(
+        launchId,
+        generation,
+        this.#runners.activeStageRunIds(launchId)
+      );
+      if (state === "cancelled") {
+        this.#runners.clearFinishedLaunch(launchId);
+        await this.#scheduleReconcile();
+      }
+      return { admitted: state === "admitted" };
+    });
+  }
+  appendEvents(
+    launchId: string,
+    sequence: number,
+    events: PipelineTraceEvent[],
+    generation?: number
+  ) {
+    return this.deps.storage.transaction(async () => {
+      if (!this.#store.ownsRecovery(launchId, generation)) return { accepted: false };
       const result = await this.#ingest.appendEvents(launchId, sequence, events);
       if (
         result.accepted &&
@@ -254,18 +298,34 @@ export class StudioObjectCore implements StudioIngest {
       return result;
     });
   }
-  reportFailure(launchId: string, message: string, reason?: HostedFailureReason) {
+  reportFailure(
+    launchId: string,
+    message: string,
+    reason?: HostedFailureReason,
+    generation?: number
+  ) {
     return this.deps.storage.transaction(async () => {
-      await this.#ingest.reportFailure(launchId, message, reason);
-      this.#runners.clearFinishedLaunch(launchId);
+      if (!this.#store.ownsRecovery(launchId, generation)) return;
+      await this.#closeFailed(launchId, message, reason);
     });
+  }
+
+  async #closeFailed(
+    launchId: string,
+    message: string,
+    reason?: HostedFailureReason
+  ): Promise<void> {
+    await this.#ingest.reportFailure(launchId, message, reason);
+    this.#runners.clearFinishedLaunch(launchId);
   }
 
   async alarm(): Promise<void> {
     const now = this.#now();
     const executions = this.#store.executions;
     for (const id of executions.stale(now, this.deps.maxRunDurationMs, RECONCILE_GRACE_MS)) {
-      await this.reportFailure(id, HOST_TERMINATED, "host_terminated");
+      await this.deps.storage.transaction(() =>
+        this.#closeFailed(id, HOST_TERMINATED, "host_terminated")
+      );
     }
     // Commit the delivery snapshot and its next alarm before crossing RPC.
     const actions = await this.deps.storage.transaction(async () => {

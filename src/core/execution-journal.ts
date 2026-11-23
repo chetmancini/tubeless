@@ -1,4 +1,5 @@
 import { throwIfAborted } from "../utilities/abort.js";
+import { JOURNAL_OUTCOME_UNKNOWN } from "../tracing/tracing-constants.js";
 import {
   STEP_AGENT,
   STEP_INPUT,
@@ -48,7 +49,7 @@ function scope(context: object): JournalScope | undefined {
   return runtime.executionJournal ? runtime[JOURNAL_SCOPE] : undefined;
 }
 
-export function journalFailure(context: object): Error | undefined {
+export function journalFailure(context: object): JournalFailure | undefined {
   return scope(context)?.session.failure;
 }
 
@@ -59,15 +60,20 @@ export function assertJournalHealthy(context: object): void {
 
 /** Include native checkpoint decoding and compatibility checks in the host failure boundary. */
 export async function withExecutionJournal<T>(context: object, work: () => Promise<T>): Promise<T> {
-  const current = scope(context);
-  if (!current) return work();
   try {
     return await work();
   } catch (error) {
-    const failure = error instanceof JournalFailure ? error : new JournalFailure(error);
-    current.session.failure ??= failure;
-    throw failure;
+    failExecutionJournal(context, error);
   }
+}
+
+/** Mark the entire journal session as failed when an external boundary cannot confirm an effect. */
+export function failExecutionJournal(context: object, cause: unknown): never {
+  const current = scope(context);
+  if (!current) throw cause;
+  const failure = cause instanceof JournalFailure ? cause : new JournalFailure(cause);
+  current.session.failure ??= failure;
+  throw failure;
 }
 
 /** Each root invocation owns fresh failure state; children share it and extend only their path. */
@@ -201,7 +207,7 @@ export async function executeWithJournal<TOptions extends object>(
             );
           if (saved.status === "incomplete" && boundary === "effect")
             throw journalError(
-              "TUBELESS_JOURNAL_OUTCOME_UNKNOWN",
+              JOURNAL_OUTCOME_UNKNOWN,
               "An ordinary step was interrupted before completion acknowledgement; reconcile its effects before continuing"
             );
           return saved;

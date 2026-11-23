@@ -35,7 +35,7 @@ type QueueRow = {
 
 const lost = { active: false } as const;
 const cancelled = { error: "The remote stage was cancelled." } as const;
-const expired = { error: RUNNER_INTERRUPTED } as const;
+const expired = { error: RUNNER_INTERRUPTED, interrupted: true } as const;
 const digestLease = (token: string) => digestCollectorBody(new TextEncoder().encode(token));
 function claimedJob(job: RunnerJob): ClaimedJob {
   if (job.kind === "root") {
@@ -72,8 +72,16 @@ export class CloudflareRunnerQueue {
       lease_digest TEXT,
       cancelled INTEGER NOT NULL DEFAULT 0,
       incompatible INTEGER NOT NULL DEFAULT 0,
-      result_json TEXT
+      result_json TEXT,
+      recovery_binding TEXT
     )`);
+    if (
+      !deps.storage.sql
+        .exec("PRAGMA table_info(tubeless_runner_queue)")
+        .toArray()
+        .some(({ name }) => name === "recovery_binding")
+    )
+      deps.storage.sql.exec("ALTER TABLE tubeless_runner_queue ADD COLUMN recovery_binding TEXT");
     deps.storage.sql.exec(
       `CREATE INDEX IF NOT EXISTS tubeless_runner_launch ON tubeless_runner_queue(launch_id)`
     );
@@ -85,18 +93,29 @@ export class CloudflareRunnerQueue {
     return this.deps.storage.sql;
   }
 
-  enqueue(job: RunnerJob): void {
+  enqueue(job: RunnerJob, binding?: string): void {
+    if (binding !== undefined) {
+      const [saved] = this.#sql
+        .exec("SELECT recovery_binding FROM tubeless_runner_queue WHERE id = ?", job.id)
+        .toArray();
+      if (saved) {
+        if (saved.recovery_binding !== binding)
+          throw new Error("Recovered stage differs from its admitted input, version, or controls.");
+        return;
+      }
+    }
     this.#sql.exec(
       `INSERT INTO tubeless_runner_queue
-        (id, launch_id, deployment_id, pipeline_id, definition_id, job_json, deadline_at_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        (id, launch_id, deployment_id, pipeline_id, definition_id, job_json, deadline_at_ms, recovery_binding)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       job.id,
       job.launchId,
       job.deploymentId,
       job.pipelineId,
       job.definitionId,
       JSON.stringify(job),
-      job.kind === "stage" ? job.deadlineAtMs : null
+      job.kind === "stage" ? job.deadlineAtMs : null,
+      binding ?? null
     );
   }
 
@@ -368,10 +387,14 @@ export class CloudflareRunnerQueue {
   #interruptStage(id: string, message: string): void {
     const runId = this.deps.store.attemptLedger.latest(id)?.runId;
     if (runId !== undefined)
-      this.deps.events.append(this.deps.store.interruptSubtree(runId, message, this.deps.now()));
+      this.deps.events.append(this.deps.store.interruptRuns(runId, message, this.deps.now()));
   }
 
-  #failStage(launchId: string, id: string, result: { readonly error: string }): void {
+  #failStage(
+    launchId: string,
+    id: string,
+    result: Extract<RunnerStageResult, { error: string }>
+  ): void {
     this.#interruptStage(id, result.error);
     this.#close(
       id,
@@ -411,6 +434,21 @@ export class CloudflareRunnerQueue {
     };
   }
 
+  activeStageRunIds(launchId: string): string[] {
+    return this.#sql
+      .exec(
+        `SELECT (
+          SELECT batch.run_id FROM tubeless_attempt_batches AS batch
+          WHERE batch.attempt_id = stage.id ORDER BY batch.sequence DESC LIMIT 1
+        ) AS run_id FROM tubeless_runner_queue AS stage
+        WHERE stage.launch_id = ? AND stage.id <> stage.launch_id
+          AND stage.job_json IS NOT NULL AND stage.lease_digest IS NOT NULL`,
+        launchId
+      )
+      .toArray()
+      .flatMap(({ run_id }) => (typeof run_id === "string" ? [run_id] : []));
+  }
+
   cancel(launchId: string, stageId?: string): void {
     this.#sql.exec(
       `UPDATE tubeless_runner_queue SET cancelled = 1,
@@ -439,7 +477,7 @@ export class CloudflareRunnerQueue {
         "The parent execution ended before the local stage confirmed completion."
       );
     this.#sql.exec(
-      "UPDATE tubeless_runner_queue SET result_json = NULL WHERE launch_id = ? AND id <> launch_id AND job_json IS NULL AND lease_digest IS NOT NULL",
+      "UPDATE tubeless_runner_queue SET result_json = NULL, recovery_binding = NULL WHERE launch_id = ? AND id <> launch_id AND job_json IS NULL AND lease_digest IS NOT NULL",
       launchId
     );
     this.#sql.exec(
