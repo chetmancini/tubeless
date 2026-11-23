@@ -39,6 +39,7 @@ export interface CliSession {
   user: { id: string; login: string; name: string; email: string; avatar: string };
   expiresAt: number;
   workspaces: CliWorkspace[];
+  runFollowing?: unknown;
 }
 
 export interface CliPipeline {
@@ -139,6 +140,8 @@ export type CliErrorCode =
   | "rate_limited"
   | "quota_exceeded"
   | "unavailable"
+  | "cursor_expired"
+  | "unsupported_capability"
   | "internal_error";
 
 export class CloudClientError extends Error {
@@ -153,7 +156,7 @@ export class CloudClientError extends Error {
   }
 }
 
-const RUN_STATUSES = ["queued", "running", "waiting", "completed", "failed", "cancelled"];
+const RUN_STATUSES = ["queued", "running", "waiting", "completed", "failed", "cancelled"] as const;
 const ERROR_CODES = [
   "unauthenticated",
   "forbidden",
@@ -163,6 +166,8 @@ const ERROR_CODES = [
   "rate_limited",
   "quota_exceeded",
   "unavailable",
+  "cursor_expired",
+  "unsupported_capability",
   "internal_error",
 ];
 
@@ -223,6 +228,10 @@ function hasTexts(value: Record<string, unknown>, fields: readonly string[]): bo
 
 function oneOf(value: unknown, allowed: readonly string[]): boolean {
   return typeof value === "string" && allowed.includes(value);
+}
+
+export function isCloudRunStatus(value: unknown): value is CloudRunStatus {
+  return oneOf(value, RUN_STATUSES);
 }
 
 export function isCloudToken(value: unknown): value is string {
@@ -368,7 +377,7 @@ export function parseCliRun(value: unknown): CliRun {
     ["id", "pipelineId", "pipelineName", "commit", "branch", "actor"].every((field) =>
       text(value[field])
     ) &&
-    oneOf(value.status, RUN_STATUSES) &&
+    isCloudRunStatus(value.status) &&
     oneOf(value.trigger, ["manual", "push", "rerun", "schedule"]) &&
     timestamp(value.createdAt) &&
     number(value.durationMs) &&

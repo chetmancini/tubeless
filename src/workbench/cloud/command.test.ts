@@ -40,7 +40,7 @@ describe("Cloud command", () => {
     );
     const io = captureIo(root);
     const dependencies = service();
-    expect(await runCloud(["run", pipeline.name, "--json"], io, dependencies)).toBe(0);
+    expect(await runCloud(["run", pipeline.name, "--poll", "--json"], io, dependencies)).toBe(0);
     await expect(access(marker)).rejects.toThrow();
     expect(dependencies.calls.map((call) => `${call.method} ${call.url}`)).toEqual([
       "GET /api/v1/session",
@@ -98,7 +98,7 @@ describe("Cloud command", () => {
     expect(JSON.parse(machine.output.join(""))).toEqual([unsafe]);
   });
 
-  it.each([[], ["--follow"]])(
+  it.each([[], ["--follow", "--poll"]])(
     "sanitizes retained and followed logs while preserving JSON %j",
     async (...flags) => {
       const remote = "before\u001b]8;;https://evil.example\u0007link\u009b31m\u202e\nafter";
@@ -132,7 +132,7 @@ describe("Cloud command", () => {
       const io = captureIo(await fixture());
       expect(
         await runCloud(
-          ["run", pipeline.name, ...(json ? ["--json"] : [])],
+          ["run", pipeline.name, "--poll", ...(json ? ["--json"] : [])],
           io,
           service({ admission: run })
         )
@@ -142,7 +142,7 @@ describe("Cloud command", () => {
       expect(human).toContain("Run remote [2J   spoof: remote [2J   spoof\n");
       expect(human).toContain("Source commit: remote [2J   spoof\n");
       if (json) expect(JSON.parse(io.output.join(""))).toEqual(run);
-      else expect(io.errors.join("")).toBe("remote [2J   spoof\n");
+      else expect(io.errors.join("")).toContain("remote [2J   spoof\n");
     }
   });
 
@@ -167,7 +167,7 @@ describe("Cloud command", () => {
         ? original(url, init)
         : Response.json({ error: { code: "not_found", message: remote } }, { status: 404 });
     const failed = captureIo(await fixture());
-    expect(await runCloud(["run", pipeline.name], failed, dependencies)).toBe(2);
+    expect(await runCloud(["run", pipeline.name, "--poll"], failed, dependencies)).toBe(2);
     expect(failed.errors.join("")).not.toMatch(/[\u001b\u009b\u202e]/);
     expect(failed.errors.join("")).toContain("Run remote [2J   spoof\n");
   });
@@ -181,7 +181,7 @@ describe("Cloud command", () => {
       ],
     });
     const io = captureIo(root);
-    expect(await runCloud(["logs", "run-1", "--follow"], io, dependencies)).toBe(0);
+    expect(await runCloud(["logs", "run-1", "--follow", "--poll"], io, dependencies)).toBe(0);
     expect(io.output.join("").match(/repeated/g)).toHaveLength(2);
   });
   it.each([
@@ -191,13 +191,16 @@ describe("Cloud command", () => {
   ] as const)("maps remote %s to %i", async (status, exit) => {
     const root = await fixture();
     const dependencies = service({ runs: [{ ...baseRun, status }] });
-    expect(await runCloud(["run", pipeline.name, "--json"], captureIo(root), dependencies)).toBe(
-      exit
-    );
+    expect(
+      await runCloud(["run", pipeline.name, "--poll", "--json"], captureIo(root), dependencies)
+    ).toBe(exit);
   });
 
   describe.each(["run", "logs"] as const)("%s waiting follower", (command) => {
-    const args = command === "run" ? ["run", pipeline.name] : ["logs", baseRun.id, "--follow"];
+    const args =
+      command === "run"
+        ? ["run", pipeline.name, "--poll"]
+        : ["logs", baseRun.id, "--follow", "--poll"];
 
     it.each([
       { statuses: ["running", "waiting", "running", "completed"], exit: 0 },
@@ -271,8 +274,9 @@ describe("Cloud command", () => {
       const io = { ...captureIo(await fixture()), signal: controller.signal };
       expect(await runCloud([...args, "--json"], io, dependencies)).toBe(7);
       expect(io.output.join("")).toBe("");
-      expect(io.errors.join("")).toContain("Run run-1");
-      expect(io.errors.join("")).toContain("/app/runs/run-1?workspace=workspace");
+      expect(io.errors.join("")).toContain(
+        '"recovery":{"host":"https://cloud.tubeless.io","workspaceId":"workspace","runId":"run-1"}'
+      );
       expect(io.errors.join("")).toContain("Remote work continues");
       expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(
         command === "run" ? 1 : 0
@@ -307,7 +311,7 @@ describe("Cloud command", () => {
       },
     };
     const io = { ...captureIo(root), signal: controller.signal };
-    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(7);
+    expect(await runCloud(["run", pipeline.name, "--poll"], io, dependencies)).toBe(7);
     expect(io.errors.join("")).toContain("Run run-1");
     expect(dependencies.calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
@@ -320,7 +324,7 @@ describe("Cloud command", () => {
       return original(url, init);
     };
     const io = captureIo(root);
-    expect(await runCloud(["run", pipeline.name], io, dependencies)).toBe(2);
+    expect(await runCloud(["run", pipeline.name, "--poll"], io, dependencies)).toBe(2);
     expect(io.errors.join("")).toContain("Run run-1");
     expect(io.errors.join("")).toContain("/app/runs/run-1?workspace=workspace");
   });
@@ -341,10 +345,12 @@ describe("Cloud command", () => {
       return original(url, init);
     };
     const io = captureIo(root);
-    expect(await runCloud(["logs", "run-1", "--follow", "--json"], io, dependencies)).toBe(2);
+    expect(
+      await runCloud(["logs", "run-1", "--follow", "--poll", "--json"], io, dependencies)
+    ).toBe(2);
     expect(reads).toBe(2);
     expect(io.output.join("")).toBe("");
-    expect(io.errors.join("")).toContain("Run run-1");
+    expect(io.errors.join("")).toContain('"runId":"run-1"');
   });
   it("lists slugs, names and IDs before deployment availability", async () => {
     const io = captureIo(await fixture());
@@ -392,7 +398,7 @@ describe("Cloud command", () => {
       }
     }
   });
-  it("runs by slug and watches retained logs by default", async () => {
+  it("runs by slug and watches retained logs with --poll", async () => {
     const dependencies = service({
       runs: [
         {
@@ -403,7 +409,7 @@ describe("Cloud command", () => {
       ],
     });
     const io = captureIo(await fixture());
-    expect(await runCloud(["run", pipeline.slug], io, dependencies)).toBe(0);
+    expect(await runCloud(["run", pipeline.slug, "--poll"], io, dependencies)).toBe(0);
     expect(io.output.join("")).toContain("info: synced");
     expect(dependencies.calls.find((call) => call.method === "POST")!.body).toEqual({
       pipelineId: pipeline.id,
@@ -484,6 +490,11 @@ describe("Cloud command", () => {
     ["list", "--input-file", "input.json"],
     ["list", "--source", "source.json"],
     ["logs", "run-1", "--idempotency-key", "key"],
+    ["logs", "run-1", "--cursor", "cursor"],
+    ["logs", "run-1", "--poll"],
+    ["follow", "run-1", "--poll", "--cursor", "cursor"],
+    ["follow", "run-1", "--cursor="],
+    ["run", "--id", pipeline.id, "--detach", "--poll"],
     ["run", "--id", pipeline.id, "--source", ""],
     ["run", "--id", pipeline.id, "--source", "@"],
     ["run", "--id", pipeline.id, "--ref", "main", "--source", '{"kind":"ref","ref":"main"}'],

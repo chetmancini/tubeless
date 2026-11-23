@@ -1,0 +1,2 @@
+{"version":1,"workspaceId":"fixture-workspace","runId":"revoked-run","cursor":"opaque-revoked-0","type":"snapshot","payload":{"run":{"id":"revoked-run","pipelineId":"check","pipelineName":"Check","status":"running","createdAt":1730000000000,"durationMs":0}}}
+{"version":1,"workspaceId":"fixture-workspace","runId":"revoked-run","cursor":"opaque-revoked-0","type":"end","payload":{"reason":"authorization_lost","resumable":false}}

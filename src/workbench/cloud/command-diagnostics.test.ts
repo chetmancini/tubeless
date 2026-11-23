@@ -117,9 +117,9 @@ describe("Cloud structured failure handling", () => {
     };
     expect(parseCliRun(JSON.parse(JSON.stringify(run)))).toEqual(run);
     const io = captureIo(await fixture());
-    expect(await runCloud(["run", pipeline.slug, "--json"], io, service({ admission: run }))).toBe(
-      6
-    );
+    expect(
+      await runCloud(["run", pipeline.slug, "--poll", "--json"], io, service({ admission: run }))
+    ).toBe(6);
     const output = JSON.parse(io.output.join(""));
     expect(output.diagnostics).toEqual(run.diagnostics);
     expect(output.steps[0].structuredError).toEqual(framework);

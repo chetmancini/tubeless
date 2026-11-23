@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "workspaceId": "fixture-workspace",
+  "discovery": {
+    "standalone": {
+      "method": "GET",
+      "path": "/api/v1/capabilities",
+      "status": 200,
+      "contentType": "application/json",
+      "body": { "runFollowing": { "version": 1, "transport": "ndjson" } }
+    },
+    "interactive": {
+      "method": "GET",
+      "path": "/api/v1/session",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "user": {
+          "id": "u1",
+          "login": "owner",
+          "name": "Owner",
+          "email": "owner@example.com",
+          "avatar": ""
+        },
+        "expiresAt": 1730086400000,
+        "runFollowing": { "version": 1, "transport": "ndjson" },
+        "workspaces": [
+          {
+            "id": "fixture-workspace",
+            "name": "Fixture",
+            "slug": "fixture",
+            "role": "owner"
+          }
+        ]
+      }
+    },
+    "automation": {
+      "method": "GET",
+      "path": "/api/v1/workspaces/fixture-workspace/automation",
+      "status": 200,
+      "contentType": "application/json",
+      "body": {
+        "workspaceId": "fixture-workspace",
+        "principalId": "a1",
+        "budgetOwnerId": "a1",
+        "canDelegate": false,
+        "scopes": ["read"],
+        "expiresAt": 1730086400000,
+        "runtime": {
+          "capMs": null,
+          "usedMs": 0,
+          "reservedMs": 0,
+          "remainingMs": null,
+          "period": "2024-10"
+        },
+        "runFollowing": { "version": 1, "transport": "ndjson" }
+      }
+    },
+    "legacy": "Omit runFollowing from the matching successful introspection body.",
+    "unsupportedVersion": {
+      "runFollowing": { "version": 2, "transport": "ndjson" }
+    }
+  },
+  "stream": {
+    "method": "GET",
+    "pathTemplate": "/api/v1/workspaces/{workspaceId}/runs/{runId}/events",
+    "accept": "application/x-ndjson",
+    "status": 200,
+    "contentType": "application/x-ndjson",
+    "cacheControl": "no-store, no-transform",
+    "exchanges": [
+      { "runId": "worker-live", "bodyFile": "worker-live.ndjson" },
+      { "runId": "native-check", "bodyFile": "native-failure.ndjson" },
+      { "runId": "run-cancelled", "bodyFile": "cancelled.ndjson" },
+      { "runId": "run-interrupted", "bodyFile": "interrupted.ndjson" },
+      { "runId": "worker-backlog", "bodyFile": "backpressure.ndjson" },
+      {
+        "runId": "worker-backlog",
+        "cursor": "opaque-backlog-1",
+        "bodyFile": "resume.ndjson"
+      },
+      { "runId": "revoked-run", "bodyFile": "authorization-lost.ndjson" },
+      { "runId": "waiting-run", "bodyFile": "deadline.ndjson" }
+    ]
+  },
+  "errors": {
+    "contentType": "application/json",
+    "invalidCursor": {
+      "status": 400,
+      "body": {
+        "error": {
+          "code": "invalid_request",
+          "message": "Invalid run following cursor."
+        }
+      }
+    },
+    "expiredCursor": {
+      "status": 410,
+      "body": {
+        "error": {
+          "code": "cursor_expired",
+          "message": "Run following cursor expired."
+        }
+      }
+    },
+    "unsupportedMediaType": {
+      "status": 406,
+      "body": {
+        "error": {
+          "code": "unsupported_capability",
+          "message": "Run following version 1 uses application/x-ndjson."
+        }
+      }
+    },
+    "unauthenticated": {
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "unauthenticated",
+          "message": "Run tubeless auth login to continue."
+        }
+      }
+    },
+    "forbidden": {
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "forbidden",
+          "message": "This credential cannot access this pipeline."
+        }
+      }
+    },
+    "missingRun": {
+      "status": 404,
+      "body": { "error": { "code": "not_found", "message": "Run not found." } }
+    }
+  },
+  "mcp": {
+    "method": "POST",
+    "path": "/mcp",
+    "status": 200,
+    "contentType": "application/json",
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "wait_run",
+        "arguments": { "runId": "waiting-run", "timeoutMs": 1000 }
+      }
+    },
+    "structuredContentEventsFile": "deadline.ndjson"
+  }
+}

@@ -28,7 +28,7 @@ or later without Bun.
 | `tubeless ui`         | An optional project file         | Serves the local run studio; see [studio](./studio.md)              |
 | `tubeless agent`      | An optional agent ID or file     | Prompts a workspace agent; see [agent](#prompt-a-workspace-agent)   |
 | `tubeless auth`       | `login`, `status`, `logout`      | Manages Tubeless Cloud sessions                                     |
-| `tubeless cloud`      | `list`, `run`, `logs`            | Runs deployed Cloud pipelines; see [Cloud](#tubeless-cloud)         |
+| `tubeless cloud`      | `list`, `run`, `follow`, `logs`  | Runs and follows [Cloud pipelines](#tubeless-cloud)                 |
 | `tubeless completion` | `bash`, `zsh`, or `fish`         | Prints a shell completion script                                    |
 | `tubeless init`       | An optional target               | Scaffolds a project or deployment files; see [init](#init)          |
 
@@ -614,6 +614,7 @@ tubeless auth login
 tubeless cloud list
 tubeless cloud run orders-sync --input-file input.json
 tubeless cloud run orders-sync --detach --json
+tubeless cloud follow <run-id> --workspace <workspace-id> --json
 tubeless cloud logs <run-id> --follow
 tubeless auth logout
 ```
@@ -707,22 +708,54 @@ retry an uncertain admission.
 
 ### Follow and read results
 
-Foreground runs poll status and logs every two seconds. `waiting` means human input is
-needed and is not terminal: answer in the dashboard (there is no CLI answer command)
-and the CLI keeps following until `completed`, `failed` or `cancelled`. `--detach`
-prints the run ID after confirmed admission. Ctrl-C stops following without
-cancelling the remote run; cancel from the dashboard. Run logs keep a bounded prefix
-of at most 400 entries, and retention follows the workspace plan (7/30/90 days for
-Free/Team/Scale).
+Foreground `cloud run`, `cloud follow <run-id>`, and `cloud logs <run-id> --follow`
+stream progress and output from the same Cloud run. `waiting` keeps the
+observation open while the run waits for human input in the dashboard. The CLI
+reconnects from the last processed cursor and reads the complete retained run
+once after the terminal event. Ctrl-C stops local observation and leaves the Cloud
+run active. Use the dashboard to cancel the run.
 
-`cloud list --json`, `auth status --json`, `cloud run --json`, and `cloud logs --json`
-write one JSON value to stdout and diagnostics to stderr. Foreground run JSON is the
-final run, detached JSON is the admission snapshot, and `logs --follow --json` returns
-its terminal retained snapshot. Use `--detach --json` and read `.id` in scripts.
-Human output neutralizes terminal control characters in remote text; JSON preserves
-the original fields.
+Use `--detach --json` to return the admission and read its `.id` in scripts. If
+observation stops after admission, attach to that ID under the same host,
+workspace, and principal. Supply the last cursor when available.
 
-Cloud exit codes: `0` success or detached admission, `1` usage, `2`
-credentials, workspace selection or transport, `4` invalid JSON or request
-validation, `6` rejected admission or failed execution, `7` cancelled execution or
-local interruption.
+```sh
+tubeless cloud follow <run-id> --host <origin> --workspace <workspace-id> \
+  --cursor <cursor> --json
+```
+
+With `--json`, a stopped observation writes a `cloud_follow_error` JSON line to
+stderr with `error.code` and `recovery` fields `host`, `workspaceId`, `runId`, and
+`cursor` when available. Each cursor is scoped to its workspace and run, expires
+after 24 hours, and requires a separately authorized credential. After
+`cursor_expired`, omit `--cursor` to start from the available retained output.
+`unauthenticated` and `authorization_lost` indicate lost observation authority.
+`transport_error` indicates a lost connection after bounded retries and
+`observation_timeout` indicates the request deadline elapsed. Cloud's normal
+stream rotation reconnects automatically.
+
+Source truncation and gaps in retained output produce `cloud_follow_gap` JSON
+lines on stderr. The run can still finish successfully. `cloud logs` without
+`--follow` reads the retained snapshot, which has at most 400 log entries.
+Retention follows the workspace plan.
+
+Streaming requires Cloud to advertise run following v1 over NDJSON. For older
+services, use `cloud follow <run-id> --poll` or `cloud logs <run-id> --follow --poll`.
+`cloud run --poll` opts into polling for a new submission. Polling reads retained
+status and logs every two seconds while the run is active and takes no cursor.
+If foreground admission succeeded before the capability error, use the returned
+run ID to attach.
+
+`--json` writes one value to stdout on a terminal result and leaves stdout empty
+when observation fails. Foreground `cloud run` and `cloud follow` return the full
+terminal run including retained structured diagnostics. `logs --follow --json`
+keeps its `{id, pipelineId, status, logs}` shape. Human output neutralizes terminal
+controls in remote text. JSON retains remote data with the active bearer redacted
+from output.
+
+Cloud exit codes are `0` for success or detached admission, `1` for usage,
+`2` for credentials, workspace selection or observation errors, `4` for invalid
+JSON or requests, `6` for rejected admission or failed execution, and `7` for
+remote cancellation or local interruption. A remotely interrupted run keeps
+`status: "failed"` and its diagnostic. In JSON mode, stderr also reports
+`{"type":"cloud_follow_terminal","outcome":"interrupted"}`.

@@ -18,12 +18,17 @@ export async function cloudSleep(milliseconds: number, signal?: AbortSignal): Pr
   await delay(milliseconds, undefined, { signal });
 }
 
-export function cloudErrorExit(error: unknown, io: WorkbenchCliIo, signal: AbortSignal): number {
+export function cloudErrorExit(
+  error: unknown,
+  io: WorkbenchCliIo,
+  signal: AbortSignal,
+  report = true
+): number {
   if (signal.aborted) {
-    io.stderr.write("Stopped following Cloud activity. Remote work continues.\n");
+    if (report) io.stderr.write("Stopped following Cloud activity. Remote work continues.\n");
     return 7;
   }
-  io.stderr.write(`Error: ${terminalSafeText(errorMessage(error))}\n`);
+  if (report) io.stderr.write(`Error: ${terminalSafeText(errorMessage(error))}\n`);
   if (error instanceof CloudClientError) {
     if (error.code === "invalid_request") return 4;
     if (["conflict", "quota_exceeded", "unavailable", "rate_limited"].includes(error.code))

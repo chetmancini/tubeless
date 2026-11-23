@@ -1,0 +1,5 @@
+{"version":1,"workspaceId":"fixture-workspace","runId":"worker-backlog","cursor":"opaque-backlog-1","type":"snapshot","payload":{"run":{"id":"worker-backlog","pipelineId":"check","pipelineName":"Check","status":"completed","createdAt":1730000000000,"durationMs":0},"truncatedFields":["result"]}}
+{"version":1,"workspaceId":"fixture-workspace","runId":"worker-backlog","cursor":"opaque-backlog-1","type":"gap","payload":{"reason":"source_truncated"}}
+{"version":1,"workspaceId":"fixture-workspace","runId":"worker-backlog","cursor":"opaque-backlog-4","type":"gap","payload":{"reason":"retention","from":2,"through":4}}
+{"version":1,"workspaceId":"fixture-workspace","runId":"worker-backlog","cursor":"opaque-backlog-5","type":"log","payload":{"position":5,"level":"warn","message":"Clipped prefix","truncated":true}}
+{"version":1,"workspaceId":"fixture-workspace","runId":"worker-backlog","cursor":"opaque-backlog-5","type":"terminal","payload":{"run":{"id":"worker-backlog","pipelineId":"check","pipelineName":"Check","status":"completed","createdAt":1730000000000,"durationMs":0},"truncatedFields":["result"],"outcome":"completed"}}
