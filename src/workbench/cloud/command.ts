@@ -5,35 +5,151 @@ import {
   parseSubcommandArgs,
   runWorkbenchSubcommand,
 } from "../workbench-subcommand.js";
-import { createCloudClient, isCloudTransportError } from "./client.js";
+import { createCloudClient, isCloudTransportError, type CloudClient } from "./client.js";
 import { resolveCloudHost } from "./config.js";
 import { resolveCloudCredential } from "./credentials.js";
 import { isFollowCursor } from "./follow-protocol.js";
 import { pollCloudRun, streamCloudRun, writeCloudLog } from "./follow.js";
-import { prepareRunInput, CloudRunUsageError } from "./run-input.js";
+import { cloudOutput } from "./output.js";
+import { prepareRunInput, CloudRunUsageError, type PreparedCloudRunInput } from "./run-input.js";
 import {
   CloudClientError,
   isCloudAutomationToken,
   type CliRun,
   type CliSession,
 } from "./protocol.js";
-
 import {
   type WorkbenchCliIo,
   writeUsageError,
   errorMessage,
   terminalSafeText,
 } from "../workbench-shared.js";
-import { cloudErrorExit, cloudSleep, type CloudCommandDependencies } from "./shared.js";
+import {
+  cloudErrorCode,
+  cloudErrorExit,
+  cloudSleep,
+  type CloudCommandDependencies,
+} from "./shared.js";
 
-const CLOUD_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.cloud);
-function runUrl(host: string, workspace: string, id: string): string {
-  const url = new URL(`/app/runs/${encodeURIComponent(id)}`, host);
-  url.searchParams.set("workspace", workspace);
-  return url.href;
+const CLOUD_SPEC = WORKBENCH_SPECS.cloud;
+const CLOUD_USAGE = renderWorkbenchUsage(CLOUD_SPEC);
+const parseArgs = (args: readonly string[]) => parseSubcommandArgs(args, CLOUD_SPEC.options);
+
+type ObservationMode = { kind: "stream"; cursor?: string } | { kind: "poll" };
+type PipelineSelector = { id: string } | { name: string };
+type CloudAction =
+  | { kind: "list" }
+  | { kind: "logs"; runId: string }
+  | { kind: "follow"; runId: string; mode: ObservationMode; format: "run" | "logs" }
+  | {
+      kind: "run";
+      pipeline: PipelineSelector;
+      input: PreparedCloudRunInput;
+      mode?: ObservationMode;
+    };
+
+async function prepareAction(
+  { values, positionals }: ReturnType<typeof parseArgs>,
+  io: WorkbenchCliIo,
+  signal: AbortSignal,
+  readStdin: CloudCommandDependencies["readStdin"]
+): Promise<CloudAction> {
+  const [command, selector] = positionals;
+  if (!CLOUD_SPEC.subcommands.some((name) => name === command))
+    throw new CloudRunUsageError("Pass list, run, follow, or logs.");
+  const wanted =
+    command === "logs" || command === "follow" || (command === "run" && !values.id) ? 2 : 1;
+  if (positionals.length !== wanted)
+    throw new CloudRunUsageError("Pass exactly the required command arguments.");
+  if (values.workspace !== undefined && !values.workspace.trim())
+    throw new CloudRunUsageError("Pass a nonempty workspace ID.");
+
+  if (command === "list") return { kind: "list" };
+  if (command === "run") {
+    if (values.id !== undefined && !values.id.trim())
+      throw new CloudRunUsageError("Pass a nonempty pipeline ID.");
+    if (values.poll && values.detach)
+      throw new CloudRunUsageError("--poll cannot be combined with --detach or --cursor.");
+    return {
+      kind: "run",
+      pipeline: values.id === undefined ? { name: selector } : { id: values.id },
+      input: await prepareRunInput(values, { cwd: io.cwd, signal, readStdin }),
+      mode: values.detach ? undefined : { kind: values.poll ? "poll" : "stream" },
+    };
+  }
+
+  if (!selector.trim()) throw new CloudRunUsageError("Pass a nonempty run ID.");
+  if (command === "logs" && !values.follow) {
+    if (values.poll || values.cursor !== undefined)
+      throw new CloudRunUsageError("Pass --follow to observe an existing run with cloud logs.");
+    return { kind: "logs", runId: selector };
+  }
+  if (values.cursor !== undefined) {
+    if (values.poll)
+      throw new CloudRunUsageError("--poll cannot be combined with --detach or --cursor.");
+    if (!isFollowCursor(values.cursor))
+      throw new CloudRunUsageError("Pass a valid nonempty run-following cursor.");
+  }
+  return {
+    kind: "follow",
+    runId: selector,
+    mode: values.poll ? { kind: "poll" } : { kind: "stream", cursor: values.cursor },
+    format: command === "follow" ? "run" : "logs",
+  };
 }
-function runExit(run: CliRun): number {
-  return run.status === "completed" ? 0 : run.status === "cancelled" ? 7 : 6;
+
+type CloudOutput = ReturnType<typeof cloudOutput>;
+interface CloudContext {
+  client: CloudClient;
+  workspace: string;
+  session?: CliSession;
+  io: WorkbenchCliIo;
+  output: CloudOutput;
+  signal: AbortSignal;
+  sleep: typeof cloudSleep;
+  json: boolean;
+}
+
+async function resolveWorkspace(
+  client: CloudClient,
+  token: string,
+  workspace?: string
+): Promise<{ workspace: string; session?: CliSession }> {
+  if (workspace) return { workspace };
+  if (isCloudAutomationToken(token))
+    throw new Error(
+      "Automation credentials require --workspace <id>; session workspace discovery is unavailable."
+    );
+  const session = await client.session();
+  if (session.workspaces.length === 0)
+    throw new Error(
+      "No Cloud workspaces are available. Create or join a workspace in the Cloud dashboard, then try again."
+    );
+  if (session.workspaces.length !== 1)
+    throw new Error(
+      `Choose a workspace with --workspace <id>:\n${session.workspaces.map((item) => `${item.name} (${item.id})`).join("\n")}`
+    );
+  return { workspace: session.workspaces[0].id, session };
+}
+
+async function selectPipeline(
+  { client, workspace }: CloudContext,
+  selector: PipelineSelector
+): Promise<string> {
+  if ("id" in selector) return selector.id;
+  const pipelines = await client.pipelines(workspace);
+  const matches = pipelines.filter(
+    (item) => item.name === selector.name || item.slug === selector.name
+  );
+  if (matches.length === 0)
+    throw new Error(
+      "Cloud pipeline not found in this workspace. Use tubeless cloud list or the Cloud dashboard to select a loaded pipeline."
+    );
+  if (matches.length !== 1)
+    throw new Error(
+      `Multiple pipelines match ${JSON.stringify(selector.name)}. Choose --id <id>:\n${matches.map((item) => `${item.slug}: ${item.name} (${item.id})`).join("\n")}`
+    );
+  return matches[0].id;
 }
 
 function admissionUncertain(error: unknown): boolean {
@@ -42,11 +158,42 @@ function admissionUncertain(error: unknown): boolean {
   return error.status === undefined || error.status < 400 || error.status >= 500;
 }
 
-interface RunRecovery {
-  host: string;
-  workspaceId: string;
-  runId: string;
-  cursor?: string;
+async function admitRun(
+  { client, workspace, io, output, signal }: CloudContext,
+  pipelineId: string,
+  { input, source, idempotencyKey: key }: PreparedCloudRunInput
+): Promise<CliRun> {
+  if (signal.aborted) throw new Error("Run admission interrupted.");
+  const request = { pipelineId, input, source };
+  try {
+    return await client.run(workspace, request, key).catch((error: unknown) => {
+      if (!isCloudTransportError(error) || signal.aborted) throw error;
+      return client.run(workspace, request, key);
+    });
+  } catch (error) {
+    // An unusable or interrupted POST response can follow successful admission.
+    if (admissionUncertain(error))
+      io.stderr.write(
+        `Admission could not be confirmed. Workspace: ${output.text(workspace)}; idempotency key: ${output.text(key)}. Host: ${output.text(client.host)}; pipeline ID: ${output.text(pipelineId)}. Retry with --idempotency-key ${output.text(key)}, the same --id, --host and --workspace, and identical input and source selection (--ref or --source) under the same principal. Do not start a fresh run.\n`
+      );
+    throw error;
+  }
+}
+
+function printResult(context: CloudContext, run: CliRun, format: "run" | "logs"): void {
+  const { client, workspace, io, json, output } = context;
+  if (json) {
+    const { id, pipelineId, status, logs } = run;
+    io.stdout.write(`${output.json(format === "logs" ? { id, pipelineId, status, logs } : run)}\n`);
+    return;
+  }
+  io.stdout.write(`Run ${output.text(run.id)}: ${run.status}\n`);
+  if (format === "logs") {
+    io.stdout.write(`${output.runUrl(client.host, workspace, run.id)}\n`);
+    return;
+  }
+  if (run.result !== undefined) io.stdout.write(`${terminalSafeText(output.json(run.result))}\n`);
+  if (run.error) io.stderr.write(`${output.text(run.error)}\n`);
 }
 
 function observationError(error: unknown, signal: AbortSignal): CloudClientError {
@@ -55,12 +202,106 @@ function observationError(error: unknown, signal: AbortSignal): CloudClientError
       "Stopped following Cloud activity. Remote work continues.",
       "observation_interrupted"
     );
-  if (error instanceof CloudClientError) {
-    if (error.code === "timeout")
-      return new CloudClientError("Cloud observation timed out.", "observation_timeout");
-    return error;
+  if (!(error instanceof CloudClientError))
+    return new CloudClientError(errorMessage(error), "observation_error");
+  return error.code === "timeout"
+    ? new CloudClientError("Cloud observation timed out.", "observation_timeout")
+    : error;
+}
+
+async function observeRun(
+  context: CloudContext,
+  runId: string,
+  mode: ObservationMode,
+  format: "run" | "logs",
+  admission?: CliRun
+): Promise<number> {
+  const { client, workspace, io, json, output, signal, session, sleep } = context;
+  const recovery = {
+    host: client.host,
+    workspaceId: workspace,
+    runId,
+    cursor: mode.kind === "stream" ? mode.cursor : undefined,
+  };
+  try {
+    const observation = {
+      client,
+      workspace,
+      runId,
+      initial: admission,
+      io,
+      json,
+      safeText: output.text,
+      signal,
+      sleep,
+    };
+    if (mode.kind === "stream") await client.requireRunFollowing(workspace, session);
+    const run = await (mode.kind === "poll"
+      ? pollCloudRun(observation)
+      : streamCloudRun(observation, recovery));
+    printResult(context, run, format);
+    return run.status === "completed" ? 0 : run.status === "cancelled" ? 7 : 6;
+  } catch (error) {
+    const failure = observationError(error, signal);
+    const detail =
+      admission && failure.code === "forbidden"
+        ? " The run was admitted. Following requires read scope. Use --detach for run-only credentials."
+        : "";
+    if (json) {
+      io.stderr.write(
+        `${output.json({
+          type: "cloud_follow_error",
+          error: { code: failure.code, message: failure.message + detail, status: failure.status },
+          recovery,
+        })}\n`
+      );
+    } else {
+      io.stderr.write(
+        `Run ${output.text(runId)}\n${output.runUrl(client.host, workspace, runId)}\n`
+      );
+      if (recovery.cursor)
+        io.stderr.write(`Resume with cloud follow and --cursor ${output.text(recovery.cursor)}.\n`);
+      io.stderr.write(`Error: ${output.text(failure.message + detail)}\n`);
+    }
+    return cloudErrorCode(failure, signal);
   }
-  return new CloudClientError(errorMessage(error), "observation_error");
+}
+
+async function executeAction(context: CloudContext, action: CloudAction): Promise<number> {
+  const { client, workspace, io, json, output, signal } = context;
+  switch (action.kind) {
+    case "list": {
+      const pipelines = await client.pipelines(workspace);
+      if (json) io.stdout.write(`${output.json(pipelines)}\n`);
+      else
+        for (const pipeline of pipelines)
+          io.stdout.write(
+            `${output.text(pipeline.slug)}: ${output.text(pipeline.name)} (${output.text(pipeline.id)}) ${pipeline.available ? "available" : "unavailable"} commit=${output.text(pipeline.commit)} branch=${output.text(pipeline.branch)}\n`
+          );
+      return 0;
+    }
+    case "logs": {
+      const run = await client.getRun(workspace, action.runId);
+      if (!json)
+        for (const log of run.logs) await writeCloudLog(io.stdout, log, output.text, signal);
+      printResult(context, run, "logs");
+      return 0;
+    }
+    case "follow":
+      return observeRun(context, action.runId, action.mode, action.format);
+    case "run": {
+      const pipelineId = await selectPipeline(context, action.pipeline);
+      const run = await admitRun(context, pipelineId, action.input);
+      const progress = json ? io.stderr : io.stdout;
+      const { source } = action.input;
+      progress.write(
+        `Run ${output.text(run.id)}: ${output.text(run.pipelineName)}\nWorkspace: ${output.text(workspace)}\nSource commit: ${output.text(run.commit)}\n${output.runUrl(client.host, workspace, run.id)}\nLocal changes are not used.\n${source ? `Requested source: ${terminalSafeText(output.json(source))}\n` : ""}`
+      );
+      if (action.mode) return observeRun(context, run.id, action.mode, "run", run);
+      if (json) io.stdout.write(`${output.json(run)}\n`);
+      return 0;
+    }
+  }
 }
 
 export async function runCloud(
@@ -70,233 +311,49 @@ export async function runCloud(
 ): Promise<number> {
   return runWorkbenchSubcommand(
     {
-      spec: WORKBENCH_SPECS.cloud,
-      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.cloud.options),
-      run: async ({ values, positionals }) => {
-        const [command, selector] = positionals;
-        if (!command || !WORKBENCH_SPECS.cloud.subcommands.some((name) => name === command))
-          return writeUsageError(io, "Pass list, run, follow, or logs.", CLOUD_USAGE);
-        const wanted =
-          command === "logs" || command === "follow" || (command === "run" && !values.id) ? 2 : 1;
-        if (positionals.length !== wanted)
-          return writeUsageError(io, "Pass exactly the required command arguments.", CLOUD_USAGE);
-        if (values.id && selector)
-          return writeUsageError(io, "--id cannot be combined with a pipeline name.", CLOUD_USAGE);
-        if (values.workspace !== undefined && !values.workspace.trim())
-          return writeUsageError(io, "Pass a nonempty workspace ID.", CLOUD_USAGE);
-        if (values.id !== undefined && !values.id.trim())
-          return writeUsageError(io, "Pass a nonempty pipeline ID.", CLOUD_USAGE);
-        if ((command === "logs" || command === "follow") && !selector.trim())
-          return writeUsageError(io, "Pass a nonempty run ID.", CLOUD_USAGE);
-        if ((values.poll || values.cursor !== undefined) && command === "logs" && !values.follow)
-          return writeUsageError(
-            io,
-            "Pass --follow to observe an existing run with cloud logs.",
-            CLOUD_USAGE
-          );
-        if (values.poll && (values.detach || values.cursor !== undefined))
-          return writeUsageError(
-            io,
-            "--poll cannot be combined with --detach or --cursor.",
-            CLOUD_USAGE
-          );
-        if (values.cursor !== undefined && !isFollowCursor(values.cursor))
-          return writeUsageError(io, "Pass a valid nonempty run-following cursor.", CLOUD_USAGE);
+      spec: CLOUD_SPEC,
+      parse: parseArgs,
+      run: async (parsed) => {
         const managed = manageRemoteSignal(io.signal);
-        let recovery: RunRecovery | undefined;
-        let redact = (value: string) => value;
-        const safeText = (value: string) => terminalSafeText(redact(value));
-        const jsonText = (value: unknown) =>
-          JSON.stringify(value, (_key, item: unknown) =>
-            typeof item === "string" ? redact(item) : item
-          );
+        const { signal } = managed;
+        let output = cloudOutput();
         try {
-          const intent =
-            command === "run"
-              ? await prepareRunInput(values, {
-                  cwd: io.cwd,
-                  signal: managed.signal,
-                  readStdin: dependencies.readStdin,
-                })
-              : undefined;
-          const host = resolveCloudHost(values.host);
-          const credential = await resolveCloudCredential(host, {
-            store: dependencies.store,
-            env: dependencies.env,
-            now: dependencies.now,
-          });
+          const action = await prepareAction(parsed, io, signal, dependencies.readStdin);
+          const host = resolveCloudHost(parsed.values.host);
+          const credential = await resolveCloudCredential(host, dependencies);
           if (!credential)
             throw new Error(
               "No active Cloud credential. Run tubeless auth login or supply TUBELESS_TOKEN."
             );
-          redact = (text) => text.replaceAll(credential.token, "[redacted]");
-          if (values.cursor?.includes(credential.token))
-            return writeUsageError(io, "Pass a valid run-following cursor.", CLOUD_USAGE);
+          output = cloudOutput(credential.token);
+          if (
+            action.kind === "follow" &&
+            action.mode.kind === "stream" &&
+            action.mode.cursor?.includes(credential.token)
+          )
+            throw new CloudRunUsageError("Pass a valid run-following cursor.");
           const client = createCloudClient({
             host,
             token: credential.token,
             fetch: dependencies.fetch,
-            signal: managed.signal,
+            signal,
           });
-          let workspace = values.workspace;
-          let session: CliSession | undefined;
-          if (!workspace) {
-            if (isCloudAutomationToken(credential.token))
-              throw new Error(
-                "Automation credentials require --workspace <id>; session workspace discovery is unavailable."
-              );
-            session = await client.session();
-            if (session.workspaces.length === 0)
-              throw new Error(
-                "No Cloud workspaces are available. Create or join a workspace in the Cloud dashboard, then try again."
-              );
-            if (session.workspaces.length !== 1)
-              throw new Error(
-                `Choose a workspace with --workspace <id>:\n${session.workspaces.map((item) => `${item.name} (${item.id})`).join("\n")}`
-              );
-            workspace = session.workspaces[0].id;
-          }
-          const follow = async (target: RunRecovery, initial?: CliRun) => {
-            const observation = {
+          return await executeAction(
+            {
               client,
-              workspace: target.workspaceId,
-              runId: target.runId,
-              initial,
+              ...(await resolveWorkspace(client, credential.token, parsed.values.workspace)),
               io,
-              safeText,
-              signal: managed.signal,
+              output,
+              signal,
+              json: Boolean(parsed.values.json),
               sleep: dependencies.sleep ?? cloudSleep,
-              json: Boolean(values.json),
-            };
-            if (values.poll) return pollCloudRun(observation);
-            await client.requireRunFollowing(target.workspaceId, session);
-            return streamCloudRun(observation, target);
-          };
-          const printRun = (run: CliRun) => {
-            if (values.json) io.stdout.write(`${jsonText(run)}\n`);
-            else {
-              io.stdout.write(`Run ${safeText(run.id)}: ${run.status}\n`);
-              if (run.result !== undefined)
-                io.stdout.write(`${terminalSafeText(jsonText(run.result))}\n`);
-              if (run.error) io.stderr.write(`${safeText(run.error)}\n`);
-            }
-            return runExit(run);
-          };
-          if (command === "list") {
-            const pipelines = await client.pipelines(workspace);
-            if (values.json) io.stdout.write(`${jsonText(pipelines)}\n`);
-            else
-              for (const pipeline of pipelines)
-                io.stdout.write(
-                  `${safeText(pipeline.slug)}: ${safeText(pipeline.name)} (${safeText(pipeline.id)}) ${pipeline.available ? "available" : "unavailable"} commit=${safeText(pipeline.commit)} branch=${safeText(pipeline.branch)}\n`
-                );
-            return 0;
-          }
-          if (command === "follow" || values.follow) {
-            recovery = { host, workspaceId: workspace, runId: selector, cursor: values.cursor };
-          }
-          if (command === "follow") return printRun(await follow(recovery!));
-          if (command === "logs") {
-            const run = recovery
-              ? await follow(recovery)
-              : await client.getRun(workspace, selector);
-            if (!recovery && !values.json)
-              for (const log of run.logs)
-                await writeCloudLog(io.stdout, log, safeText, managed.signal);
-            if (values.json)
-              io.stdout.write(
-                `${jsonText({ id: run.id, pipelineId: run.pipelineId, status: run.status, logs: run.logs })}\n`
-              );
-            else
-              io.stdout.write(
-                `Run ${safeText(run.id)}: ${run.status}\n${runUrl(host, redact(workspace), redact(run.id))}\n`
-              );
-            return values.follow ? runExit(run) : 0;
-          }
-          let pipelineId = values.id;
-          if (pipelineId === undefined) {
-            const pipelines = await client.pipelines(workspace);
-            const matches = pipelines.filter(
-              (item) => item.name === selector || item.slug === selector
-            );
-            if (matches.length === 0)
-              throw new Error(
-                "Cloud pipeline not found in this workspace. Use tubeless cloud list or the Cloud dashboard to select a loaded pipeline."
-              );
-            if (matches.length !== 1)
-              throw new Error(
-                `Multiple pipelines match ${JSON.stringify(selector)}. Choose --id <id>:\n${matches.map((item) => `${item.slug}: ${item.name} (${item.id})`).join("\n")}`
-              );
-            pipelineId = matches[0].id;
-          }
-          const { input, source, idempotencyKey: key } = intent!;
-          if (managed.signal.aborted) throw new Error("Run admission interrupted.");
-          const request = { pipelineId, input, ...(source ? { source } : {}) };
-          let run: CliRun;
-          try {
-            try {
-              run = await client.run(workspace, request, key);
-            } catch (error) {
-              if (!isCloudTransportError(error) || managed.signal.aborted) throw error;
-              run = await client.run(workspace, request, key);
-            }
-          } catch (error) {
-            // Local validation and explicit 4xx responses establish rejection.
-            // A 5xx, unusable response or interrupted POST can follow admission.
-            if (admissionUncertain(error)) {
-              io.stderr.write(
-                `Admission could not be confirmed. Workspace: ${safeText(workspace)}; idempotency key: ${safeText(key)}. Host: ${safeText(host)}; pipeline ID: ${safeText(pipelineId)}. Retry with --idempotency-key ${safeText(key)}, the same --id, --host and --workspace, and identical input and source selection (--ref or --source) under the same principal. Do not start a fresh run.\n`
-              );
-            }
-            throw error;
-          }
-          recovery = { host, workspaceId: workspace, runId: run.id };
-          const progress = values.json ? io.stderr : io.stdout;
-          progress.write(
-            `Run ${safeText(run.id)}: ${safeText(run.pipelineName)}\nWorkspace: ${safeText(workspace)}\nSource commit: ${safeText(run.commit)}\n${runUrl(host, redact(workspace), redact(run.id))}\nLocal changes are not used.\n${source ? `Requested source: ${safeText(JSON.stringify(source))}\n` : ""}`
+            },
+            action
           );
-          if (values.detach) {
-            if (values.json) io.stdout.write(`${jsonText(run)}\n`);
-            return 0;
-          }
-          return printRun(await follow(recovery, run));
         } catch (error) {
           if (error instanceof CloudRunUsageError)
             return writeUsageError(io, error.message, CLOUD_USAGE);
-          if (!recovery)
-            return cloudErrorExit(
-              error instanceof CloudClientError ? error : new Error(redact(errorMessage(error))),
-              io,
-              managed.signal
-            );
-          const failure = observationError(error, managed.signal);
-          const detail =
-            command === "run" && failure.code === "forbidden"
-              ? " The run was admitted. Following requires read scope. Use --detach for run-only credentials."
-              : "";
-          if (values.json)
-            io.stderr.write(
-              `${jsonText({
-                type: "cloud_follow_error",
-                error: {
-                  code: failure.code,
-                  message: failure.message + detail,
-                  status: failure.status,
-                },
-                recovery,
-              })}\n`
-            );
-          else {
-            io.stderr.write(
-              `Run ${safeText(recovery.runId)}\n${runUrl(recovery.host, redact(recovery.workspaceId), redact(recovery.runId))}\n`
-            );
-            if (recovery.cursor)
-              io.stderr.write(
-                `Resume with cloud follow and --cursor ${safeText(recovery.cursor)}.\n`
-              );
-            io.stderr.write(`Error: ${safeText(failure.message + detail)}\n`);
-          }
-          return cloudErrorExit(failure, io, managed.signal, false);
+          return cloudErrorExit(error, io, signal, output.text);
         } finally {
           managed.cleanup();
         }

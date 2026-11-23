@@ -1,6 +1,6 @@
 import { awaitWithAbort, throwIfAborted } from "../../utilities/abort.js";
 import { isJsonObject } from "../../utilities/canonical-json.js";
-import { CloudClientError, isCloudRunStatus, type CloudRunStatus } from "./protocol.js";
+import { CloudClientError, isCloudRunStatus, type CliLogLine, type CliRun } from "./protocol.js";
 
 export const FOLLOW_MEDIA_TYPE = "application/x-ndjson";
 const MAX_EVENT_BYTES = 32 * 1024;
@@ -11,7 +11,7 @@ export function isFollowCursor(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 2400;
 }
 
-export function requireRunFollowing(capability: unknown): void {
+export function assertRunFollowingCapability(capability: unknown): void {
   if (capability === undefined)
     throw new CloudClientError(
       "This Cloud service does not advertise run following. Attach with --poll to use retained status and logs.",
@@ -33,22 +33,22 @@ export function requireRunFollowing(capability: unknown): void {
     );
 }
 
-export type FollowOutcome = "completed" | "failed" | "cancelled" | "interrupted";
-type FollowProjection = { pipelineId: string; status: CloudRunStatus };
-type FollowLog = {
+type FollowOutcome = "completed" | "failed" | "cancelled" | "interrupted";
+type FollowProjection = Pick<CliRun, "pipelineId" | "status">;
+export type FollowLog = Omit<CliLogLine, "time"> & {
   position: number;
-  level: "info" | "warn" | "error";
-  message: string;
   time?: number;
   command?: string;
   channel?: "stdout" | "stderr";
   truncated?: boolean;
 };
-export type FollowGap = {
-  reason: "retention" | "source_truncated" | "output_unavailable";
-  from?: number;
-  through?: number;
-};
+export type FollowGap =
+  | { reason: "retention"; from: number; through: number }
+  | {
+      reason: "retention" | "source_truncated" | "output_unavailable";
+      from?: never;
+      through?: never;
+    };
 type ResumableEnd = "deadline" | "backpressure" | "unavailable";
 type FollowEnd =
   | { reason: ResumableEnd; resumable: true }

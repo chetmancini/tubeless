@@ -146,6 +146,30 @@ describe("Cloud command", () => {
     }
   });
 
+  it.each([false, true])(
+    "redacts bearer keys and values in terminal output (JSON=%s)",
+    async (json) => {
+      const token = service().env.TUBELESS_TOKEN;
+      const run: CliRun = {
+        ...baseRun,
+        status: "completed",
+        result: { "[redacted]": "existing", [token]: { [token]: token } },
+      };
+      const io = captureIo(await fixture());
+      const args = ["run", pipeline.name, "--poll", ...(json ? ["--json"] : [])];
+      expect(await runCloud(args, io, service({ admission: run }))).toBe(0);
+      const stdout = io.output.join("");
+      expect(stdout + io.errors.join("")).not.toContain(token);
+      const result = json
+        ? JSON.parse(stdout).result
+        : JSON.parse(stdout.trimEnd().split("\n").at(-1)!);
+      expect(result).toEqual({
+        "[redacted]": "existing",
+        "[redacted] (2)": { "[redacted]": "[redacted]" },
+      });
+    }
+  );
+
   it("sanitizes workspace choices and admitted run diagnostics", async () => {
     const remote = "remote\u001b[2J\u009b\u202e\nspoof";
     const choices = service({

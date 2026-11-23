@@ -1,3 +1,4 @@
+import { awaitWithAbort } from "../../utilities/abort.js";
 import { isJsonObject } from "../../utilities/canonical-json.js";
 import { normalizeCloudHost } from "./config.js";
 import {
@@ -25,12 +26,13 @@ import {
   type CloudDeviceSession,
 } from "./protocol.js";
 import { terminalSafeText } from "../workbench-shared.js";
+import { redactCloudText } from "./credentials.js";
 import { BodyLimitError, readBoundedBody } from "../../utilities/read-body.js";
 import {
   FOLLOW_MEDIA_TYPE,
   isFollowCursor,
   readFollowStream,
-  requireRunFollowing,
+  assertRunFollowingCapability,
   type FollowBoundary,
   type FollowEvent,
 } from "./follow-protocol.js";
@@ -75,8 +77,7 @@ export interface CloudClient {
 }
 
 function safeMessage(message: string, token?: string): string {
-  const redacted = token ? message.split(token).join("[redacted]") : message;
-  return terminalSafeText(redacted).slice(0, 1024);
+  return terminalSafeText(redactCloudText(message, token)).slice(0, 1024);
 }
 
 function abortFailure(timedOut: boolean): CloudClientError {
@@ -162,33 +163,36 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
     );
   }
 
+  interface RequestOptions {
+    accept?: string;
+    timeoutMs?: number;
+    body?: unknown;
+    nativeAuth?: boolean;
+    idempotencyKey?: string;
+    bodyLimit?: number;
+  }
+
   const request = async <T>(
-    pathname: string,
-    decoder:
-      | ((value: unknown) => T)
-      | { stream: (response: Response, signal: AbortSignal) => Promise<T> },
-    requestOptions: {
-      body?: unknown;
-      nativeAuth?: boolean;
-      devicePolling?: boolean;
-      idempotencyKey?: string;
-      bodyLimit?: number;
-    } = {}
+    path: string | URL,
+    read: (response: Response, signal: AbortSignal) => Promise<T>,
+    requestOptions: RequestOptions = {}
   ): Promise<T> => {
-    const streaming = typeof decoder !== "function";
-    const url = new URL(pathname, host);
-    if (url.origin !== host) {
+    const url = new URL(path, host);
+    if (url.origin !== host)
       throw new CloudClientError(
         "Cloud request must remain on the selected host.",
         "invalid_request"
       );
-    }
-    if (!requestOptions.nativeAuth && !options.token) {
+    if (!requestOptions.nativeAuth && !options.token)
       throw new CloudClientError(
         "No Cloud credential. Run tubeless auth login or set TUBELESS_TOKEN.",
         "unauthenticated"
       );
-    }
+
+    const headers = new Headers({ Accept: requestOptions.accept ?? "application/json" });
+    if (!requestOptions.nativeAuth) headers.set("Authorization", `Bearer ${options.token}`);
+    if (requestOptions.idempotencyKey !== undefined)
+      headers.set("Idempotency-Key", requestOptions.idempotencyKey);
     let body: string | undefined;
     if (requestOptions.body !== undefined) {
       try {
@@ -197,101 +201,49 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
         throw new CloudClientError("Cloud request must contain JSON data.", "invalid_request");
       }
       const bodyLimit = requestOptions.bodyLimit ?? CLOUD_INPUT_MAX_BYTES;
-      if (body === undefined || Buffer.byteLength(body, "utf8") > bodyLimit) {
+      if (body === undefined || Buffer.byteLength(body, "utf8") > bodyLimit)
         throw new CloudClientError(
           `Cloud request exceeds the ${bodyLimit / 1024} KB JSON limit.`,
           "invalid_request"
         );
-      }
+      headers.set("Content-Type", "application/json");
     }
-    const controller = new AbortController();
-    let timedOut = false;
-    const onAbort = () => controller.abort();
-    options.signal?.addEventListener("abort", onAbort, { once: true });
-    if (options.signal?.aborted) controller.abort();
-    const timer = setTimeout(
-      () => {
-        timedOut = true;
-        controller.abort();
-      },
-      streaming ? Math.max(FOLLOW_REQUEST_TIMEOUT_MS, timeoutMs) : timeoutMs
-    );
-    const headers = new Headers({
-      Accept: streaming ? FOLLOW_MEDIA_TYPE : "application/json",
-    });
-    if (!requestOptions.nativeAuth) headers.set("Authorization", `Bearer ${options.token}`);
-    if (body !== undefined) headers.set("Content-Type", "application/json");
-    if (requestOptions.idempotencyKey !== undefined) {
-      headers.set("Idempotency-Key", requestOptions.idempotencyKey);
-    }
-    let removeAbortListener = () => {};
-    const aborted = new Promise<never>((_resolve, reject) => {
-      const rejectAbort = () => reject(abortFailure(timedOut));
-      removeAbortListener = () => controller.signal.removeEventListener("abort", rejectAbort);
-      controller.signal.addEventListener("abort", rejectAbort, { once: true });
-      if (controller.signal.aborted) rejectAbort();
-    });
-    const send = async (): Promise<T> => {
-      if (controller.signal.aborted) throw abortFailure(timedOut);
+
+    const deadline = new AbortController();
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, deadline.signal])
+      : deadline.signal;
+    const timer = setTimeout(() => deadline.abort(), requestOptions.timeoutMs ?? timeoutMs);
+    const send = async () => {
       const response = await fetcher(url, {
         method: body === undefined ? "GET" : "POST",
         headers,
         body,
         redirect: "error",
         credentials: "omit",
-        signal: controller.signal,
+        signal,
       });
-      if (controller.signal.aborted) {
+      if (
+        signal.aborted ||
+        response.redirected ||
+        (response.status >= 300 && response.status < 400)
+      ) {
         void response.body?.cancel().catch(() => {});
-        throw abortFailure(timedOut);
-      }
-      if (response.redirected || (response.status >= 300 && response.status < 400)) {
-        void response.body?.cancel().catch(() => {});
+        signal.throwIfAborted();
         throw new CloudClientError(
           "Cloud redirects are rejected; select the service origin with --host.",
           "invalid_response",
           response.status
         );
       }
-      if (response.ok && streaming) return decoder.stream(response, controller.signal);
-      const value = await responseJson(response, controller.signal);
-      if (!response.ok) {
-        if (requestOptions.nativeAuth) {
-          const deviceError = parseCloudDeviceError(value);
-          if (deviceError) {
-            if (requestOptions.devicePolling && !streaming) return decoder(deviceError);
-            throw new CloudClientError(
-              safeMessage(deviceError.error_description ?? "Device authorization failed."),
-              deviceError.error,
-              response.status
-            );
-          }
-        }
-        const error = parseCliError(value);
-        throw new CloudClientError(
-          error
-            ? safeMessage(error.message, options.token)
-            : `Cloud request failed (HTTP ${response.status}).`,
-          error?.code ?? (response.status === 429 ? "rate_limited" : "invalid_response"),
-          response.status
-        );
-      }
-      try {
-        if (!streaming) return decoder(value);
-        throw new Error("Expected an event stream.");
-      } catch {
-        throw new CloudClientError(
-          "Cloud returned an invalid response shape.",
-          "invalid_response",
-          response.status
-        );
-      }
+      return read(response, signal);
     };
     try {
-      return await Promise.race([send(), aborted]);
+      signal.throwIfAborted();
+      return await awaitWithAbort(send(), signal, "Cloud request");
     } catch (error) {
+      if (signal.aborted) throw abortFailure(deadline.signal.aborted);
       if (error instanceof CloudClientError) throw error;
-      if (controller.signal.aborted) throw abortFailure(timedOut);
       // A fetch implementation's diagnostic may include credential headers.
       throw new CloudClientError(
         "Cloud request failed. Check the selected host and network connection.",
@@ -299,11 +251,52 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       );
     } finally {
       clearTimeout(timer);
-      options.signal?.removeEventListener("abort", onAbort);
-      removeAbortListener();
-      if (streaming) controller.abort();
+      deadline.abort();
     }
   };
+
+  function responseError(response: Response, value: unknown): CloudClientError {
+    const error = parseCliError(value);
+    return new CloudClientError(
+      error
+        ? safeMessage(error.message, options.token)
+        : `Cloud request failed (HTTP ${response.status}).`,
+      error?.code ?? (response.status === 429 ? "rate_limited" : "invalid_response"),
+      response.status
+    );
+  }
+
+  const requestJson = <T>(
+    path: string,
+    decode: (value: unknown) => T,
+    requestOptions: RequestOptions & { devicePolling?: boolean } = {}
+  ) =>
+    request(
+      path,
+      async (response, signal) => {
+        const value = await responseJson(response, signal);
+        if (!response.ok) {
+          const deviceError = requestOptions.nativeAuth ? parseCloudDeviceError(value) : undefined;
+          if (!deviceError) throw responseError(response, value);
+          if (requestOptions.devicePolling) return decode(deviceError);
+          throw new CloudClientError(
+            safeMessage(deviceError.error_description ?? "Device authorization failed."),
+            deviceError.error,
+            response.status
+          );
+        }
+        try {
+          return decode(value);
+        } catch {
+          throw new CloudClientError(
+            "Cloud returned an invalid response shape.",
+            "invalid_response",
+            response.status
+          );
+        }
+      },
+      requestOptions
+    );
 
   const segment = (id: string) => {
     if (!id || id === "." || id === ".." || (options.token && id.includes(options.token)))
@@ -313,26 +306,27 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
   const workspacePath = (workspace: string) => `/api/v1/workspaces/${segment(workspace)}`;
   const runPath = (workspace: string, runId: string) =>
     `${workspacePath(workspace)}/runs/${segment(runId)}`;
-  const session = () => request("/api/v1/session", parseCliSession);
+  const session = () => requestJson("/api/v1/session", parseCliSession);
   return {
     host,
     session,
     logout: () =>
-      request(
+      requestJson(
         "/api/v1/auth/logout",
         (value) => {
           if (!isJsonObject(value) || value.ok !== true) throw new Error("Invalid logout response");
         },
         { body: {} }
       ),
-    pipelines: (workspace) => request(`${workspacePath(workspace)}/pipelines`, parseCliPipelines),
+    pipelines: (workspace) =>
+      requestJson(`${workspacePath(workspace)}/pipelines`, parseCliPipelines),
     run: async (workspace, body, idempotencyKey) => {
       if (!isCloudIdempotencyKey(idempotencyKey)) {
         throw new CloudClientError("Invalid Cloud run idempotency key.", "invalid_request");
       }
       validateRunInput(body.input);
       const source = body.source === undefined ? undefined : parseCloudSource(body.source);
-      return request(
+      return requestJson(
         `${workspacePath(workspace)}/runs`,
         (value) => {
           const run = parseCliRun(value);
@@ -348,7 +342,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       );
     },
     getRun: async (workspace, runId) =>
-      request(runPath(workspace, runId), (value) => {
+      requestJson(runPath(workspace, runId), (value) => {
         const run = parseCliRun(value);
         if (run.id !== runId) throw new Error("Cloud returned a different run.");
         return run;
@@ -356,7 +350,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
     requireRunFollowing: async (workspace, discoveredSession) => {
       const capability =
         options.token && isCloudAutomationToken(options.token)
-          ? await request(`${workspacePath(workspace)}/automation`, (value) => {
+          ? await requestJson(`${workspacePath(workspace)}/automation`, (value) => {
               if (
                 !isJsonObject(value) ||
                 value.workspaceId !== workspace ||
@@ -369,7 +363,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
               return value.runFollowing;
             })
           : (discoveredSession ?? (await session())).runFollowing;
-      requireRunFollowing(capability);
+      assertRunFollowingCapability(capability);
     },
     followRun: async (workspace, runId, cursor, consume) => {
       const url = new URL(`${runPath(workspace, runId)}/events`, host);
@@ -378,11 +372,13 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
           throw new CloudClientError("Invalid Cloud run-following cursor.", "invalid_request");
         url.searchParams.set("cursor", cursor);
       }
-      return request<FollowBoundary>(url.href, {
-        stream: async (response, signal) => {
+      return request(
+        url,
+        async (response, signal) => {
+          if (!response.ok) throw responseError(response, await responseJson(response, signal));
           const mediaType = response.headers
             .get("content-type")
-            ?.split(";")[0]
+            ?.split(";", 1)[0]
             .trim()
             .toLowerCase();
           if (mediaType !== FOLLOW_MEDIA_TYPE || !response.body) {
@@ -399,18 +395,27 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
                 "Cloud returned an invalid run-following cursor.",
                 "invalid_response"
               );
-            await consume(event, signal);
+            try {
+              await consume(event, signal);
+            } catch (error) {
+              if (error instanceof CloudClientError || signal.aborted) throw error;
+              throw new CloudClientError(
+                "Could not write Cloud observation output.",
+                "observation_output_error"
+              );
+            }
           });
         },
-      });
+        { accept: FOLLOW_MEDIA_TYPE, timeoutMs: Math.max(FOLLOW_REQUEST_TIMEOUT_MS, timeoutMs) }
+      );
     },
     deviceCode: () =>
-      request("/api/auth/device/code", parseCloudDeviceCode, {
+      requestJson("/api/auth/device/code", parseCloudDeviceCode, {
         nativeAuth: true,
         body: { client_id: "tubeless-cli" },
       }),
     deviceToken: (deviceCode) =>
-      request(
+      requestJson(
         "/api/auth/device/token",
         (value) => parseCloudDeviceError(value) ?? parseCloudDeviceSession(value),
         {

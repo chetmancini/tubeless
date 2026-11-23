@@ -148,4 +148,42 @@ describe("Cloud observation recovery", () => {
     });
     expect(request).toHaveBeenCalledTimes(1);
   });
+
+  it("bounds consecutive server deadlines before the first snapshot", async () => {
+    const { follow, io, request } = follower();
+    const end = {
+      ...JSON.parse(snapshot),
+      type: "end",
+      payload: { reason: "deadline", resumable: true },
+    };
+    request.mockImplementation(async () => response(`${JSON.stringify(end)}\n`));
+    expect(await follow()).toBe(2);
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(io.errors.join(""))).toMatchObject({
+      error: { code: "observation_timeout" },
+      recovery: { cursor: "opaque-live-0" },
+    });
+  });
+
+  it("keeps the prior cursor if reporting a gap fails", async () => {
+    const { follow, io, request } = follower();
+    const write = io.stderr.write;
+    io.stderr.write = (chunk) => {
+      if (chunk.includes("cloud_follow_gap")) throw new Error("Pipe closed");
+      return write(chunk);
+    };
+    const gap = {
+      ...JSON.parse(snapshot),
+      cursor: "opaque-live-8",
+      type: "gap",
+      payload: { reason: "retention", from: 2, through: 8 },
+    };
+    request.mockResolvedValueOnce(response([snapshot, log, JSON.stringify(gap), ""].join("\n")));
+    expect(await follow()).toBe(2);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(io.errors.join(""))).toMatchObject({
+      error: { code: "observation_output_error" },
+      recovery: { cursor: "opaque-live-1" },
+    });
+  });
 });

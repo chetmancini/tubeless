@@ -1,6 +1,6 @@
 import { writeCliChunk, type WorkbenchCliIo } from "../workbench-shared.js";
 import { isCloudTransportError, type CloudClient } from "./client.js";
-import type { FollowEvent, FollowGap } from "./follow-protocol.js";
+import type { FollowEvent, FollowGap, FollowLog } from "./follow-protocol.js";
 import { CloudClientError, type CliRun, type CloudRunStatus } from "./protocol.js";
 import type { cloudSleep } from "./shared.js";
 
@@ -10,15 +10,14 @@ function terminalRun(status: CloudRunStatus): boolean {
 
 export function writeCloudLog(
   output: WorkbenchCliIo["stdout"],
-  log: Extract<FollowEvent, { type: "log" }>["payload"] | CliRun["logs"][number],
+  log: Omit<FollowLog, "position">,
   safeText: (value: string) => string,
   signal: AbortSignal
 ): Promise<void> {
   const time = log.time === undefined ? "" : `${new Date(log.time).toISOString()} `;
-  const command = "command" in log && log.command !== undefined ? safeText(log.command) : "";
-  const channel = "channel" in log ? log.channel : undefined;
-  const label = [command, channel].filter(Boolean).join(" ");
-  const truncated = "truncated" in log && log.truncated ? " [truncated]" : "";
+  const command = log.command === undefined ? "" : safeText(log.command);
+  const label = [command, log.channel].filter(Boolean).join(" ");
+  const truncated = log.truncated ? " [truncated]" : "";
   return writeCliChunk(
     output,
     `${time}${log.level}${label ? ` [${label}]` : ""}: ${safeText(log.message)}${truncated}\n`,
@@ -38,11 +37,8 @@ interface Observation {
   sleep: typeof cloudSleep;
 }
 
-function assertRun(run: CliRun, pipelineId?: string, status?: CloudRunStatus): void {
-  if (
-    (pipelineId !== undefined && run.pipelineId !== pipelineId) ||
-    (status !== undefined && run.status !== status)
-  )
+function assertRun(run: CliRun, pipelineId: string, status?: CloudRunStatus): void {
+  if (run.pipelineId !== pipelineId || (status !== undefined && run.status !== status))
     throw new CloudClientError("Cloud returned a conflicting run projection.", "invalid_response");
 }
 
@@ -89,32 +85,34 @@ export async function streamCloudRun(
   resume: { cursor?: string }
 ): Promise<CliRun> {
   const { client, workspace, runId, initial, signal, io, json, safeText, sleep } = observation;
-  let pipelineId = initial?.pipelineId;
-  let status: CloudRunStatus | undefined;
+  let projection: Pick<CliRun, "pipelineId" | "status"> | undefined;
   let position = 0;
   let failures = 0;
   const notices = new Set<FollowGap["reason"]>();
   const consume = async (event: FollowEvent, requestSignal: AbortSignal) => {
+    let nextPosition = position;
+    let nextProjection = projection;
+    let notice: FollowGap["reason"] | undefined;
     switch (event.type) {
       case "snapshot":
       case "progress":
       case "terminal": {
         const run = event.payload.run;
-        if (pipelineId !== undefined && pipelineId !== run.pipelineId)
+        const expectedPipeline = projection?.pipelineId ?? initial?.pipelineId;
+        if (expectedPipeline !== undefined && expectedPipeline !== run.pipelineId)
           throw new CloudClientError(
             "Cloud returned a conflicting run pipeline.",
             "invalid_response"
           );
-        pipelineId = run.pipelineId;
-        if (!json && run.status !== status && !terminalRun(run.status))
+        if (!json && run.status !== projection?.status && !terminalRun(run.status))
           await writeCliChunk(io.stdout, `Run ${safeText(runId)}: ${run.status}\n`, requestSignal);
-        status = run.status;
+        nextProjection = run;
         break;
       }
       case "log":
         if (event.payload.position <= position) return;
         if (!json) await writeCloudLog(io.stdout, event.payload, safeText, requestSignal);
-        position = event.payload.position;
+        nextPosition = event.payload.position;
         break;
       case "gap": {
         const gap = event.payload;
@@ -123,8 +121,8 @@ export async function streamCloudRun(
           ? JSON.stringify({ type: "cloud_follow_gap", ...gap })
           : gapNotice(gap);
         await writeCliChunk(io.stderr, `${diagnostic}\n`, requestSignal);
-        if (gap.through !== undefined) position = gap.through;
-        else notices.add(gap.reason);
+        if (gap.through !== undefined) nextPosition = gap.through;
+        else notice = gap.reason;
         break;
       }
       case "heartbeat":
@@ -132,40 +130,31 @@ export async function streamCloudRun(
         break;
     }
     requestSignal.throwIfAborted();
+    position = nextPosition;
+    projection = nextProjection;
+    if (notice !== undefined) notices.add(notice);
     resume.cursor = event.cursor;
   };
   for (;;) {
     const before = position;
-    let boundary: Awaited<ReturnType<CloudClient["followRun"]>>;
-    try {
-      boundary = await client.followRun(
-        workspace,
-        runId,
-        resume.cursor,
-        async (event, requestSignal) => {
-          try {
-            await consume(event, requestSignal);
-          } catch (error) {
-            if (error instanceof CloudClientError || requestSignal.aborted) throw error;
-            throw new CloudClientError(
-              "Could not write Cloud observation output.",
-              "observation_output_error"
-            );
-          }
-        }
-      );
-    } catch (error) {
-      if (!isCloudTransportError(error) || signal.aborted) throw error;
+    let sawSnapshot = false;
+    const boundary = await client
+      .followRun(workspace, runId, resume.cursor, async (event, requestSignal) => {
+        await consume(event, requestSignal);
+        if (event.type === "snapshot") sawSnapshot = true;
+      })
+      .catch((error: unknown) => {
+        if (!isCloudTransportError(error) || signal.aborted) throw error;
+        return error;
+      });
+    if (boundary instanceof CloudClientError) {
       if (position !== before) failures = 0;
-      if (++failures >= 3) throw error;
-      await sleep(250 * 2 ** (failures - 1), signal);
-      continue;
-    }
-    if (boundary.type === "terminal") {
+      if (++failures >= 3) throw boundary;
+    } else if (boundary.type === "terminal") {
       // A terminal stream projection always omits some retained run fields.
       // Read the complete JSON only after all streamed output has been consumed.
       const run = await client.getRun(workspace, runId);
-      assertRun(run, pipelineId, boundary.payload.run.status);
+      assertRun(run, boundary.payload.run.pipelineId, boundary.payload.run.status);
       if (boundary.payload.outcome === "interrupted")
         io.stderr.write(
           json
@@ -173,21 +162,22 @@ export async function streamCloudRun(
             : "Remote execution was interrupted.\n"
         );
       return run;
+    } else {
+      const { reason, resumable } = boundary.payload;
+      if (!resumable)
+        throw new CloudClientError(
+          reason === "authorization_lost"
+            ? "Cloud observation authority expired or was revoked."
+            : "The run is no longer available for observation.",
+          reason
+        );
+      if ((reason === "deadline" && sawSnapshot) || position !== before) failures = 0;
+      else if (++failures >= 3)
+        throw new CloudClientError(
+          "Cloud stopped observation without advancing output.",
+          reason === "deadline" ? "timeout" : "observation_unavailable"
+        );
     }
-    const { reason, resumable } = boundary.payload;
-    if (!resumable)
-      throw new CloudClientError(
-        reason === "authorization_lost"
-          ? "Cloud observation authority expired or was revoked."
-          : "The run is no longer available for observation.",
-        reason
-      );
-    if (reason === "deadline" || position !== before) failures = 0;
-    else if (++failures >= 3)
-      throw new CloudClientError(
-        "Cloud stopped observation without advancing output.",
-        "observation_unavailable"
-      );
     await sleep(250 * 2 ** Math.max(failures - 1, 0), signal);
   }
 }
