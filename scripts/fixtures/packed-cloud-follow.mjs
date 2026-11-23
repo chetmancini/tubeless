@@ -25,6 +25,8 @@ function diagnostics({ stderr }) {
     .filter((line) => line.startsWith("{"))
     .map((line) => JSON.parse(line));
 }
+const ndjson = (...events) => events.map((event) => JSON.stringify(event)).join("\n") + "\n";
+
 async function followFixture(name) {
   const { runId, cursor, bodyFile } = paired.stream.exchanges.find(
     ({ bodyFile }) => bodyFile === name
@@ -207,24 +209,20 @@ export async function verifyPackedCloudFollow({ execute, command, origin, automa
     automationToken,
     { exit: 2 }
   );
-  assert.equal(diagnostics(lost)[0].error.code, "authorization_lost");
-  assert.equal(diagnostics(lost)[0].recovery.cursor, revoked.events.at(-1).cursor);
+  const [loss] = diagnostics(lost);
+  assert.equal(loss.error.code, "authorization_lost");
+  assert.equal(loss.recovery.cursor, revoked.events.at(-1).cursor);
 
   const { runFollowing: _capability, ...legacy } = discover.responseBody;
-  const unsupported = await execute(
-    attach(live.runId, "--json"),
-    [response(discover, legacy)],
-    automationToken,
-    { exit: 2 }
-  );
-  assert.equal(diagnostics(unsupported)[0].error.code, "unsupported_capability");
-  const future = await execute(
-    attach(live.runId, "--json"),
-    [response(discover, { ...legacy, ...paired.discovery.unsupportedVersion })],
-    automationToken,
-    { exit: 2 }
-  );
-  assert.equal(diagnostics(future)[0].error.code, "unsupported_capability");
+  for (const capabilities of [legacy, { ...legacy, ...paired.discovery.unsupportedVersion }]) {
+    const unsupported = await execute(
+      attach(live.runId, "--json"),
+      [response(discover, capabilities)],
+      automationToken,
+      { exit: 2 }
+    );
+    assert.equal(diagnostics(unsupported)[0].error.code, "unsupported_capability");
+  }
   const polled = await execute(
     attach(live.runId, "--poll", "--json"),
     [fullRead(live.terminal)],
@@ -234,18 +232,13 @@ export async function verifyPackedCloudFollow({ execute, command, origin, automa
   assert.deepEqual(JSON.parse(polled.stdout), live.terminal);
 
   const waiting = await followFixture("deadline.ndjson");
+  const [snapshot] = waiting.events;
   // A real SIGINT closes the observer. The second attachment observes the
   // same run finishing, and the server rejects any unexpected POST.
   const held = {
     ...waiting.stream,
     hold: true,
-    raw:
-      waiting.lines[0] +
-      "\n" +
-      resumedBacklog.lines[1]
-        .replaceAll(backpressure.runId, waiting.runId)
-        .replaceAll(resumedBacklog.events[1].cursor, waiting.events[0].cursor) +
-      "\n",
+    raw: ndjson(snapshot, { ...snapshot, type: "gap", payload: { reason: "source_truncated" } }),
   };
   const afterSignal = await execute(
     attach(waiting.runId, "--json"),
@@ -256,22 +249,15 @@ export async function verifyPackedCloudFollow({ execute, command, origin, automa
   assert.equal(afterSignal.stdout, "");
   const interrupted = diagnostics(afterSignal).at(-1);
   assert.equal(interrupted.error.code, "observation_interrupted");
-  assert.equal(interrupted.recovery.cursor, waiting.events[0].cursor);
+  assert.equal(interrupted.recovery.cursor, snapshot.cursor);
   const finished = { ...live.terminal, id: waiting.runId };
   const finishedStream = {
     ...waiting.stream,
     path: `${waiting.path}?cursor=${interrupted.recovery.cursor}`,
-    raw:
-      [live.events[0], live.events.at(-1)]
-        .map((event) =>
-          JSON.stringify({
-            ...event,
-            runId: waiting.runId,
-            cursor: interrupted.recovery.cursor,
-            payload: { ...event.payload, run: finished },
-          })
-        )
-        .join("\n") + "\n",
+    raw: ndjson(
+      { ...snapshot, payload: { run: finished } },
+      { ...snapshot, type: "terminal", payload: { run: finished, outcome: "completed" } }
+    ),
   };
   assert.deepEqual(
     await command(

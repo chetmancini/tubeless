@@ -1,6 +1,7 @@
 import { writeCliChunk, type WorkbenchCliIo } from "../workbench-shared.js";
 import { isCloudTransportError, type CloudClient } from "./client.js";
 import type { FollowEvent, FollowGap, FollowLog } from "./follow-protocol.js";
+import type { cloudOutput } from "./output.js";
 import { CloudClientError, type CliRun, type CloudRunStatus } from "./protocol.js";
 import type { cloudSleep } from "./shared.js";
 
@@ -25,15 +26,13 @@ export function writeCloudLog(
   );
 }
 
-interface Observation {
+export interface ObservationContext {
   client: CloudClient;
   workspace: string;
-  runId: string;
-  initial?: CliRun;
   io: WorkbenchCliIo;
   signal: AbortSignal;
   json: boolean;
-  safeText(value: string): string;
+  output: ReturnType<typeof cloudOutput>;
   sleep: typeof cloudSleep;
 }
 
@@ -42,8 +41,12 @@ function assertRun(run: CliRun, pipelineId: string, status?: CloudRunStatus): vo
     throw new CloudClientError("Cloud returned a conflicting run projection.", "invalid_response");
 }
 
-export async function pollCloudRun(observation: Observation): Promise<CliRun> {
-  const { client, workspace, runId, initial, signal, io, json, safeText, sleep } = observation;
+export async function pollCloudRun(
+  context: ObservationContext,
+  runId: string,
+  initial?: CliRun
+): Promise<CliRun> {
+  const { client, workspace, signal, io, json, output, sleep } = context;
   io.stderr.write("Polling retained Cloud status and logs.\n");
   let run = initial ?? (await client.getRun(workspace, runId));
   const pipelineId = run.pipelineId;
@@ -52,7 +55,7 @@ export async function pollCloudRun(observation: Observation): Promise<CliRun> {
   while (true) {
     if (!json) {
       for (const log of run.logs.slice(printed))
-        await writeCloudLog(io.stdout, log, safeText, signal);
+        await writeCloudLog(io.stdout, log, output.text, signal);
       printed = Math.max(printed, run.logs.length);
     }
     if (terminalRun(run.status)) return run;
@@ -81,10 +84,12 @@ function gapNotice(gap: FollowGap): string {
 }
 
 export async function streamCloudRun(
-  observation: Observation,
-  resume: { cursor?: string }
+  context: ObservationContext,
+  runId: string,
+  resume: { cursor?: string },
+  initial?: CliRun
 ): Promise<CliRun> {
-  const { client, workspace, runId, initial, signal, io, json, safeText, sleep } = observation;
+  const { client, workspace, signal, io, json, output, sleep } = context;
   let projection: Pick<CliRun, "pipelineId" | "status"> | undefined;
   let position = 0;
   let failures = 0;
@@ -105,13 +110,17 @@ export async function streamCloudRun(
             "invalid_response"
           );
         if (!json && run.status !== projection?.status && !terminalRun(run.status))
-          await writeCliChunk(io.stdout, `Run ${safeText(runId)}: ${run.status}\n`, requestSignal);
+          await writeCliChunk(
+            io.stdout,
+            `Run ${output.text(runId)}: ${run.status}\n`,
+            requestSignal
+          );
         nextProjection = run;
         break;
       }
       case "log":
         if (event.payload.position <= position) return;
-        if (!json) await writeCloudLog(io.stdout, event.payload, safeText, requestSignal);
+        if (!json) await writeCloudLog(io.stdout, event.payload, output.text, requestSignal);
         nextPosition = event.payload.position;
         break;
       case "gap": {

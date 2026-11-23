@@ -9,7 +9,7 @@ import { createCloudClient, isCloudTransportError, type CloudClient } from "./cl
 import { resolveCloudHost } from "./config.js";
 import { resolveCloudCredential } from "./credentials.js";
 import { isFollowCursor } from "./follow-protocol.js";
-import { pollCloudRun, streamCloudRun, writeCloudLog } from "./follow.js";
+import { pollCloudRun, streamCloudRun, writeCloudLog, type ObservationContext } from "./follow.js";
 import { cloudOutput } from "./output.js";
 import { prepareRunInput, CloudRunUsageError, type PreparedCloudRunInput } from "./run-input.js";
 import {
@@ -39,8 +39,8 @@ type ObservationMode = { kind: "stream"; cursor?: string } | { kind: "poll" };
 type PipelineSelector = { id: string } | { name: string };
 type CloudAction =
   | { kind: "list" }
-  | { kind: "logs"; runId: string }
-  | { kind: "follow"; runId: string; mode: ObservationMode; format: "run" | "logs" }
+  | { kind: "logs"; runId: string; mode?: ObservationMode }
+  | { kind: "follow"; runId: string; mode: ObservationMode }
   | {
       kind: "run";
       pipeline: PipelineSelector;
@@ -91,23 +91,14 @@ async function prepareAction(
       throw new CloudRunUsageError("Pass a valid nonempty run-following cursor.");
   }
   return {
-    kind: "follow",
+    kind: command === "follow" ? "follow" : "logs",
     runId: selector,
     mode: values.poll ? { kind: "poll" } : { kind: "stream", cursor: values.cursor },
-    format: command === "follow" ? "run" : "logs",
   };
 }
 
-type CloudOutput = ReturnType<typeof cloudOutput>;
-interface CloudContext {
-  client: CloudClient;
-  workspace: string;
+interface CloudContext extends ObservationContext {
   session?: CliSession;
-  io: WorkbenchCliIo;
-  output: CloudOutput;
-  signal: AbortSignal;
-  sleep: typeof cloudSleep;
-  json: boolean;
 }
 
 async function resolveWorkspace(
@@ -216,7 +207,7 @@ async function observeRun(
   format: "run" | "logs",
   admission?: CliRun
 ): Promise<number> {
-  const { client, workspace, io, json, output, signal, session, sleep } = context;
+  const { client, workspace, io, json, output, signal, session } = context;
   const recovery = {
     host: client.host,
     workspaceId: workspace,
@@ -224,21 +215,10 @@ async function observeRun(
     cursor: mode.kind === "stream" ? mode.cursor : undefined,
   };
   try {
-    const observation = {
-      client,
-      workspace,
-      runId,
-      initial: admission,
-      io,
-      json,
-      safeText: output.text,
-      signal,
-      sleep,
-    };
     if (mode.kind === "stream") await client.requireRunFollowing(workspace, session);
     const run = await (mode.kind === "poll"
-      ? pollCloudRun(observation)
-      : streamCloudRun(observation, recovery));
+      ? pollCloudRun(context, runId, admission)
+      : streamCloudRun(context, runId, recovery, admission));
     printResult(context, run, format);
     return run.status === "completed" ? 0 : run.status === "cancelled" ? 7 : 6;
   } catch (error) {
@@ -281,6 +261,7 @@ async function executeAction(context: CloudContext, action: CloudAction): Promis
       return 0;
     }
     case "logs": {
+      if (action.mode) return observeRun(context, action.runId, action.mode, "logs");
       const run = await client.getRun(workspace, action.runId);
       if (!json)
         for (const log of run.logs) await writeCloudLog(io.stdout, log, output.text, signal);
@@ -288,7 +269,7 @@ async function executeAction(context: CloudContext, action: CloudAction): Promis
       return 0;
     }
     case "follow":
-      return observeRun(context, action.runId, action.mode, action.format);
+      return observeRun(context, action.runId, action.mode, "run");
     case "run": {
       const pipelineId = await selectPipeline(context, action.pipeline);
       const run = await admitRun(context, pipelineId, action.input);
@@ -326,11 +307,7 @@ export async function runCloud(
               "No active Cloud credential. Run tubeless auth login or supply TUBELESS_TOKEN."
             );
           output = cloudOutput(credential.token);
-          if (
-            action.kind === "follow" &&
-            action.mode.kind === "stream" &&
-            action.mode.cursor?.includes(credential.token)
-          )
+          if (parsed.values.cursor?.includes(credential.token))
             throw new CloudRunUsageError("Pass a valid run-following cursor.");
           const client = createCloudClient({
             host,
