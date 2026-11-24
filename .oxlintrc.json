@@ -165,6 +165,19 @@
         }
       }
     ],
+    "landmines/max-files-per-directory": [
+      "error",
+      {
+        "allow": {
+          "examples": 58,
+          "src/agent": 75,
+          "src/core": 45,
+          "src/hosting": 24,
+          "src/utilities": 25,
+          "src/workbench": 27
+        }
+      }
+    ],
     "landmines/no-clipboard-read-text": "error",
     "landmines/no-cold-import-in-test": "error",
     "landmines/no-conditional-expect": [
@@ -363,6 +376,7 @@
     "landmines/no-unsignaled-poll": "error",
     "landmines/package-exports": "error",
     "landmines/strict-msw": "error",
+    "landmines/test-dir-only-cross-functional": "error",
     "landmines/test-file-names": "error"
   },
   "overrides": [

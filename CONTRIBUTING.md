@@ -41,13 +41,16 @@ Oxlint runs the Landmines rules configured in `.oxlintrc.json`. Tests should wai
 for observable events or use fake timers for timing assertions. Keep assertions
 unconditional and put expected values in the `test.each` case table. Reduce
 per-file allowances as conditional assertions, parameter branches, and timeout
-overrides are removed. The Vitest diagnostics fixture deliberately exercises
+overrides are removed. Keep unit tests beside the modules they exercise. Reserve
+dedicated test directories for integration, end-to-end, and other
+cross-functional suites. The Vitest diagnostics fixture deliberately exercises
 spec-file discovery and retries.
 
 Split source files by responsibility before they exceed 500 lines. Existing
-longer files are capped at their recorded size. Group related modules in a
-directory once three siblings would share a filename prefix. Update or remove an
-existing `no-prefix-cluster` allowance when its module count goes down.
+longer files are capped at their recorded size. Group related modules into
+subdirectories once three siblings would share a filename prefix or a directory
+would exceed 20 source files. Lower existing directory and prefix allowances as
+their counts shrink, and remove the entries once the defaults apply.
 
 ## Public API and docs
 
