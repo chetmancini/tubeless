@@ -8,17 +8,8 @@ import type {
   StudioRunDetail,
   StudioSnapshot,
 } from "./transport.js";
-import { StudioDataController } from "./data-controller.js";
-
-function deferred<T>() {
-  let reject!: (error: unknown) => void;
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, reject, resolve };
-}
+import { MUTATION_VISIBILITY_DELAY_MS, StudioDataController } from "./data-controller.js";
+import { deferred, settle } from "./request.test-support.js";
 
 function run(runId: string, eventCount = 1): StoredPipelineRun {
   return {
@@ -69,9 +60,6 @@ function controller(service: StudioApi, runId: string | null = null) {
   controllers.push(instance);
   return instance;
 }
-async function settle() {
-  for (let i = 0; i < 8; i += 1) await Promise.resolve();
-}
 function detail(instance: StudioDataController) {
   const selection = instance.getState().selection;
   return selection.status === "ready" ? selection.detail : null;
@@ -91,7 +79,7 @@ describe("StudioDataController", () => {
     const instance = controller(api({ loadSnapshot }), "linked");
     expect(instance.getState().selection).toEqual({ status: "loading", runId: "linked" });
     instance.refresh();
-    instance.selectRun("missing");
+    instance.setNavigation({ runId: "missing" });
     requests[0].resolve(snapshot([run("linked")], "linked"));
     await settle();
     expect(instance.getState().selection).toMatchObject({ status: "loading", runId: "missing" });
@@ -114,9 +102,9 @@ describe("StudioDataController", () => {
     expect(service.loadSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({ pipelineId: "import", query: "", offset: 0 })
     );
-    expect(instance.getState().snapshotPipelineId).toBe("import");
-    instance.setHistoryQuery({ pipelineId: "import", query: "child", offset: 0 });
-    instance.selectRun("off-page");
+    expect(instance.getState().snapshotQuery?.pipelineId).toBe("import");
+    instance.setHistoryQuery({ query: "child" });
+    instance.setNavigation({ pipelineId: "import", runId: "off-page" });
     expect(instance.getState().historyQuery).toEqual({
       pipelineId: "import",
       query: "",
@@ -124,14 +112,14 @@ describe("StudioDataController", () => {
     });
     instance.invalidate({ resetHistory: true });
     expect(instance.getState().historyQuery.pipelineId).toBe("import");
-    instance.setHistoryQuery({});
-    expect(instance.getState().snapshotPipelineId).toBe("import");
+    instance.setNavigation({});
+    expect(instance.getState().snapshotQuery?.pipelineId).toBe("import");
     await settle();
     expect(service.loadSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({ pipelineId: undefined })
     );
     await settle();
-    expect(instance.getState().snapshotPipelineId).toBeUndefined();
+    expect(instance.getState().snapshotQuery?.pipelineId).toBeUndefined();
   });
 
   it("retires a slow history page when the query changes", async () => {
@@ -154,6 +142,71 @@ describe("StudioDataController", () => {
     requests[1].resolve(snapshot([run("new-page")]));
     await settle();
     expect(instance.getState().snapshot?.runs[0]?.runId).toBe("new-page");
+  });
+
+  it("queries the destination scope and selected run together", async () => {
+    const service = api({});
+    const instance = controller(service, "original");
+
+    instance.setNavigation({ pipelineId: "destination", runId: "linked" });
+    await settle();
+
+    expect(service.loadSnapshot).toHaveBeenCalledExactlyOnceWith({
+      pipelineId: "destination",
+      query: "",
+      offset: 0,
+      selectedRunId: "linked",
+    });
+    expect(instance.getState().snapshotQuery).toBe(instance.getState().historyQuery);
+  });
+
+  it("waits for a newly accepted run before releasing queued and polling reads", async () => {
+    vi.useFakeTimers();
+    const stale = deferred<StudioSnapshot>();
+    const accepted = run("accepted");
+    const loadSnapshot = vi
+      .fn()
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValue(snapshot([accepted], accepted.runId));
+    const instance = controller(api({ loadSnapshot }), "original");
+    instance.refresh();
+    instance.refresh(true);
+    instance.openAcceptedRun({ pipelineId: "import", runId: accepted.runId });
+
+    stale.resolve(snapshot([run("original")], "original"));
+    await vi.advanceTimersByTimeAsync(MUTATION_VISIBILITY_DELAY_MS - 1);
+    instance.refresh();
+    expect(loadSnapshot).toHaveBeenCalledTimes(1);
+    expect(instance.getState().selection).toMatchObject({
+      status: "loading",
+      runId: accepted.runId,
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(loadSnapshot).toHaveBeenCalledTimes(2);
+    expect(loadSnapshot).toHaveBeenLastCalledWith({
+      pipelineId: "import",
+      query: "",
+      offset: 0,
+      selectedRunId: accepted.runId,
+    });
+  });
+
+  it("opens a user-selected run immediately after a launch", async () => {
+    vi.useFakeTimers();
+    const service = api({});
+    const instance = controller(service);
+    instance.openAcceptedRun({ pipelineId: "import", runId: "accepted" });
+    instance.setNavigation({ runId: "linked" });
+
+    expect(service.loadSnapshot).toHaveBeenCalledExactlyOnceWith({
+      pipelineId: undefined,
+      query: "",
+      offset: 0,
+      selectedRunId: "linked",
+    });
+    await vi.advanceTimersByTimeAsync(MUTATION_VISIBILITY_DELAY_MS);
+    expect(service.loadSnapshot).toHaveBeenCalledTimes(1);
   });
 
   it("loads an off-page run using the selected summary and keeps selection while paging", async () => {
@@ -200,11 +253,11 @@ describe("StudioDataController", () => {
     await settle();
     instance.setHistoryQuery({ query: "root" });
     await settle();
-    instance.selectRun(child.runId);
+    instance.setNavigation({ runId: child.runId });
     expect(instance.getState().historyQuery.query).toBe("root");
     await settle();
     expect(detail(instance)?.run.runId).toBe(child.runId);
-    instance.selectRun("elsewhere");
+    instance.setNavigation({ runId: "elsewhere" });
     expect(instance.getState().historyQuery).toEqual({ query: "", offset: 0 });
     expect(detail(instance)).toBeNull();
   });
@@ -295,7 +348,7 @@ describe("StudioDataController", () => {
       })
     );
     for (const id of ["first", "second", "first"]) {
-      instance.selectRun(id);
+      instance.setNavigation({ runId: id });
       await settle();
     }
     requests[2].resolve(studioRunDetail(run("first", 2)));
@@ -418,7 +471,7 @@ describe("StudioDataController", () => {
     lateDetail.resolve(studioRunDetail(run("late")));
     await settle();
     instance.refresh(true);
-    instance.selectRun("other");
+    instance.setNavigation({ runId: "other" });
     instance.setHistoryQuery({ query: "private" });
     await vi.advanceTimersByTimeAsync(1000);
     expect(instance.getState()).toMatchObject({

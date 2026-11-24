@@ -1,9 +1,5 @@
 import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
-import {
-  renderWorkbenchUsage,
-  parseSubcommandArgs,
-  runWorkbenchSubcommand,
-} from "./workbench-subcommand.js";
+import { renderWorkbenchUsage, runWorkbenchSubcommand } from "./workbench-subcommand.js";
 import { didYouMean } from "../utilities/suggest.js";
 import { cacheArtifactMetadata } from "../run-store/cache-artifact.js";
 import { stat } from "node:fs/promises";
@@ -39,10 +35,6 @@ import {
 } from "./workbench-shared.js";
 
 const HISTORY_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.history);
-
-function parseHistoryArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, WORKBENCH_SPECS.history.options);
-}
 
 function summarizeRun(run: PipelineRunSummary): PipelineRunSummary {
   const summary: PipelineRunSummary = {
@@ -177,7 +169,6 @@ export async function runHistory(argv: readonly string[], io: WorkbenchCliIo): P
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.history,
-      parse: parseHistoryArgs,
       async run(parsed, commandIo) {
         if (parsed.values.json && parsed.values.events) {
           return writeUsageError(commandIo, "Use --json or --events, not both.", HISTORY_USAGE);

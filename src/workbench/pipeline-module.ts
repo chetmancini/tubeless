@@ -1,98 +1,62 @@
 import { pathToFileURL } from "node:url";
-import type { CliCommandDescriptor, CliContext } from "../cli/cli.js";
+import type { CliContext } from "../cli/cli.js";
+import {
+  isPipelineCommandContract,
+  type PipelineCommandParseResult,
+  type PipelineCommandContract,
+} from "../cli/cli-pipeline-command-contract.js";
+import type { HostablePipeline } from "../hosting/hosting-commands.js";
 import { pipelineForCommand } from "../utilities/pipeline-command-marker.js";
-import type {
-  PipelineMermaidOptions,
-  PipelinePlan,
-  PipelineRunControls,
-} from "../core/pipeline.js";
-
-/** Runtime surface required by the workbench's non-executing pipeline commands. */
-export interface WorkbenchPipeline {
-  readonly id: string;
-  readonly stepIds: readonly string[];
-  readonly targetIds: readonly string[];
-  plan(controls?: PipelineRunControls): PipelinePlan;
-  toMermaid(options?: PipelineMermaidOptions): string;
-}
 
 /** Runtime surface exposed only by commands created with definePipelineCommand. */
-export type WorkbenchPipelineCommandParseResult =
-  | { kind: "values"; values: Record<string, unknown> }
-  | { kind: "help"; helpText: string }
-  | { kind: "error"; errors: readonly string[]; helpText: string };
-
-export interface WorkbenchPipelineCommand {
-  readonly descriptor: CliCommandDescriptor;
-  readonly id: string;
-  readonly stepIds: readonly string[];
-  readonly targetIds: readonly string[];
-  parse(
-    argv?: readonly string[],
-    context?: Partial<CliContext>
-  ): WorkbenchPipelineCommandParseResult;
-  parseValues(
-    values: Record<string, unknown>,
-    context?: Partial<CliContext>
-  ): WorkbenchPipelineCommandParseResult;
-  execute(values: Record<string, unknown>, context?: Partial<CliContext>): Promise<unknown>;
-  plan(controls?: PipelineRunControls): PipelinePlan;
+export interface WorkbenchPipelineCommand extends PipelineCommandContract, HostablePipeline {
+  parse(argv?: readonly string[], context?: Partial<CliContext>): PipelineCommandParseResult;
   run(argv?: readonly string[], context?: Partial<CliContext>): Promise<unknown>;
-  toMermaid(options?: PipelineMermaidOptions): string;
 }
 
 /** Runtime surface accepted by `tubeless plan`, `inspect`, and `graph`. */
 export type WorkbenchPlanSource =
   | { kind: "command"; command: WorkbenchPipelineCommand }
-  | { kind: "pipeline"; pipeline: WorkbenchPipeline };
+  | { kind: "pipeline"; pipeline: HostablePipeline };
 
 export type SelectUniqueExportOptions = {
   hintExport?: boolean;
 };
 
-function isWorkbenchPipeline(value: unknown): value is WorkbenchPipeline {
+function hasGraphSurface(
+  value: object
+): value is Pick<HostablePipeline, "stepIds" | "targetIds" | "toMermaid"> {
+  return (
+    "stepIds" in value &&
+    Array.isArray(value.stepIds) &&
+    "targetIds" in value &&
+    Array.isArray(value.targetIds) &&
+    "toMermaid" in value &&
+    typeof value.toMermaid === "function"
+  );
+}
+
+function isWorkbenchPipeline(value: unknown): value is HostablePipeline {
   if (pipelineForCommand(value)) return false;
   return (
     (typeof value === "object" || typeof value === "function") &&
     value !== null &&
     "id" in value &&
     typeof value.id === "string" &&
-    "stepIds" in value &&
-    Array.isArray(value.stepIds) &&
-    "targetIds" in value &&
-    Array.isArray(value.targetIds) &&
     "plan" in value &&
     typeof value.plan === "function" &&
-    "toMermaid" in value &&
-    typeof value.toMermaid === "function"
+    hasGraphSurface(value)
   );
 }
 
 export function isWorkbenchPipelineCommand(value: unknown): value is WorkbenchPipelineCommand {
-  if (!pipelineForCommand(value)) return false;
-  const candidate = value as object;
   return (
-    "descriptor" in candidate &&
-    typeof candidate.descriptor === "object" &&
-    candidate.descriptor !== null &&
-    "id" in candidate &&
-    typeof candidate.id === "string" &&
-    "stepIds" in candidate &&
-    Array.isArray(candidate.stepIds) &&
-    "targetIds" in candidate &&
-    Array.isArray(candidate.targetIds) &&
-    "plan" in candidate &&
-    typeof candidate.plan === "function" &&
-    "parse" in candidate &&
-    typeof candidate.parse === "function" &&
-    "parseValues" in candidate &&
-    typeof candidate.parseValues === "function" &&
-    "execute" in candidate &&
-    typeof candidate.execute === "function" &&
-    "run" in candidate &&
-    typeof candidate.run === "function" &&
-    "toMermaid" in candidate &&
-    typeof candidate.toMermaid === "function"
+    isPipelineCommandContract(value) &&
+    hasGraphSurface(value) &&
+    "parse" in value &&
+    typeof value.parse === "function" &&
+    "run" in value &&
+    typeof value.run === "function"
   );
 }
 
@@ -100,12 +64,11 @@ function uniqueNamedExports<T>(
   moduleExports: Record<string, unknown>,
   predicate: (value: unknown) => value is T
 ): [string, T][] {
-  const candidates = Object.entries(moduleExports).filter((entry): entry is [string, T] =>
-    predicate(entry[1])
-  );
-  return candidates.filter(
-    ([, value], index) => candidates.findIndex(([, other]) => other === value) === index
-  );
+  const candidates = new Map<T, string>();
+  for (const [name, value] of Object.entries(moduleExports)) {
+    if (predicate(value) && !candidates.has(value)) candidates.set(value, name);
+  }
+  return Array.from(candidates, ([value, name]) => [name, value]);
 }
 
 export function selectUniqueExport<T>(

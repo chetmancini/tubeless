@@ -1,5 +1,5 @@
 import { PreparedOptions } from "../core/prepared-options.js";
-import { agentError } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
 import type { SavedCall } from "./checkpoint-format.js";
 import type { PreparedCall } from "./decision.js";
 import type { AgentExecutionScope } from "./execution-scope.js";

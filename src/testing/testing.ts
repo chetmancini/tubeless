@@ -1,6 +1,6 @@
 import type { AnyStep } from "../core/pipeline-steps.js";
 import { throwIfAborted } from "../utilities/abort.js";
-import { EXECUTE_TEST_RUN, isCompiledPipeline } from "../core/pipeline-identity.js";
+import { compiledPipelineOperations } from "../core/pipeline-identity.js";
 import { PipelineExecutionError } from "../core/pipeline-execution-error.js";
 import type {
   Pipeline,
@@ -45,20 +45,6 @@ export type PipelineTestRunControls<
   overrides?: readonly PipelineTestOverride[];
 };
 
-type TestExecutable<
-  TOptions extends object,
-  TResult,
-  TStepId extends string,
-  TTargetId extends string,
-> = {
-  [EXECUTE_TEST_RUN](
-    options: TOptions,
-    controls: PipelineRunControls<TStepId, TTargetId>,
-    context: PipelineContext,
-    overrides: ReadonlyMap<AnyStep, unknown>
-  ): Promise<PipelineRun<TResult>>;
-};
-
 async function runWithOverrides<
   TOptions extends object,
   TResult,
@@ -71,7 +57,8 @@ async function runWithOverrides<
   context: PipelineContext
 ): Promise<PipelineRun<TResult>> {
   if (!controls?.overrides?.length) return pipeline.run(options, controls, context);
-  if (!isCompiledPipeline(pipeline))
+  const operations = compiledPipelineOperations(pipeline);
+  if (!operations)
     throw new TypeError("Step overrides require a pipeline returned by definePipeline");
   const overrides = new Map<AnyStep, unknown>();
   for (const entry of controls.overrides) {
@@ -81,10 +68,7 @@ async function runWithOverrides<
       throw new TypeError(`Duplicate override for step ${pair.step.id}`);
     overrides.set(pair.step, pair.value);
   }
-  // SAFETY: definePipeline brands the exact object and installs this internal entrypoint.
-  const executable = pipeline as typeof pipeline &
-    TestExecutable<TOptions, TResult, TStepId, TTargetId>;
-  return executable[EXECUTE_TEST_RUN](options, controls, context, overrides);
+  return operations.runWithOverrides({ options, controls, context, overrides });
 }
 
 /** Log levels captured by a pipeline test runtime. */

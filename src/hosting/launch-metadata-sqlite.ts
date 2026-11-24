@@ -1,10 +1,10 @@
-import type { SqliteLaunchStorage } from "./launch-store-sqlite.js";
+import type { SqliteStorage } from "./sqlite-storage.js";
 import {
   studioLaunchMetadataSchema,
   type StudioLaunchMetadata,
 } from "../studio/shared/launch-metadata.js";
 
-export function createSqliteLaunchMetadataStore(storage: SqliteLaunchStorage) {
+export function createSqliteLaunchMetadataStore(storage: SqliteStorage) {
   storage.sql.exec(`CREATE TABLE IF NOT EXISTS tubeless_recovery_runs (
     run_id TEXT PRIMARY KEY NOT NULL, launch_id TEXT NOT NULL
   )`);

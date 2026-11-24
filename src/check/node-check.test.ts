@@ -53,12 +53,18 @@ describe("native recipe execution", () => {
       status: "spawn-failed",
     });
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 30);
     expect(
-      await runCheckProcess([process.execPath, "-e", "setTimeout(()=>{},30000)"], 5000, {
-        ...context,
-        signal: controller.signal,
-      })
+      await runCheckProcess(
+        [process.execPath, "-e", "console.log('ready');setTimeout(()=>{},30000)"],
+        5000,
+        {
+          ...context,
+          signal: controller.signal,
+          stdout(text) {
+            if (text.includes("ready")) controller.abort();
+          },
+        }
+      )
     ).toMatchObject({ status: "cancelled" });
   });
   it.runIf(process.platform !== "win32")(

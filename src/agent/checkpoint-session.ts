@@ -1,4 +1,4 @@
-import { agentError, limit } from "./agent-state.js";
+import { agentError, limit } from "./agent-errors.js";
 import { plainAgentCheckpointCodec } from "./checkpoint-codec.js";
 import type {
   AgentCheckpointCodec,
@@ -12,7 +12,6 @@ import type {
   Checkpoint,
   SavedAgent,
   SavedCall,
-  SavedDecision,
   StoredBudget,
 } from "./checkpoint-format.js";
 
@@ -79,9 +78,9 @@ export class AgentCheckpointSession {
     const value = this.#checkpoint.agents[key];
     return value === undefined ? undefined : this.roundTrip(value).decoded;
   }
-  decision(key: string): SavedDecision | undefined {
-    const saved = this.agent(key);
-    return saved?.phase === "calls" ? saved.decision : undefined;
+  callsAdmitted(key: string): boolean {
+    const saved = this.#checkpoint.agents[key];
+    return saved?.phase === "calls" && saved.decision.admitted;
   }
   budget(key: string): Readonly<StoredBudget> {
     const saved = this.#checkpoint.budgets[key];

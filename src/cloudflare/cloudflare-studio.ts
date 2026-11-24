@@ -1,4 +1,4 @@
-import { digestCollectorBody } from "../hosting/collector-protocol.js";
+import { sha256Hex } from "../utilities/sha256.js";
 import type { HostedFailureReason, RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js";
 import { createStudioHost, type StudioHost } from "../hosting/hosting-studio.js";
@@ -12,6 +12,7 @@ import { openDurableRunStore, type DurableRunStore } from "./cloudflare-run-stor
 import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
 import { PipelineRunStudioHistoryBusyError } from "../studio/server/state.js";
 import { HOST_TERMINATED } from "./cloudflare-run-contract.js";
+import type { CloudflareStudioIngest } from "./cloudflare-studio-ingest.js";
 import { CloudflareRunnerQueue } from "./cloudflare-runner-queue.js";
 import { serveRunnerRequest } from "./cloudflare-runner-api.js";
 import type { RunnerJob } from "../hosting/runner-protocol.js";
@@ -50,12 +51,7 @@ export interface StudioObjectDependencies {
   readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
-export type CloudflareStudioIngest = Pick<
-  StudioObjectCore,
-  "admit" | "appendEvents" | "reportFailure"
->;
-
-export class StudioObjectCore implements StudioIngest {
+export class StudioObjectCore implements CloudflareStudioIngest {
   readonly #store: SqliteHostedLaunchStore;
   readonly #events: DurableRunStore;
   readonly #coordinator: HostedRunCoordinator;
@@ -198,7 +194,7 @@ export class StudioObjectCore implements StudioIngest {
     const binding =
       generation === undefined
         ? undefined
-        : await digestCollectorBody(
+        : await sha256Hex(
             new TextEncoder().encode(
               JSON.stringify([launchId, deploymentId, pipelineId, definitionId, stage])
             )

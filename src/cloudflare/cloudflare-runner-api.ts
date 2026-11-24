@@ -1,7 +1,7 @@
 import type { CloudflareRunnerQueue } from "./cloudflare-runner-queue.js";
 import { CollectorInputError, COLLECTOR_BATCH_BYTES } from "../hosting/collector-protocol.js";
 import { HostedAttemptConflict } from "../hosting/attempt-store.js";
-import { isLaunchIdentifier } from "../hosting/execution-status.js";
+import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 import {
   RUNNER_PATH,
   RUNNER_VALUE_BYTES,

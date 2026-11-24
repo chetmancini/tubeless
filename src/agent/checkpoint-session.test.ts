@@ -49,7 +49,7 @@ it("keeps replayed outcomes and returned snapshots isolated from subsequent tran
   (replay.outcome.value as typeof value).messages.push("replay mutation");
   const snapshot = session.agent("agent")!;
   snapshot.execution.state = "snapshot mutation";
-  session.decision("agent")!.calls.length = 0;
+  session.agent("agent")!.decision!.calls.length = 0;
   await session.startCall("agent", "two", "safe");
   expect(await session.startCall("agent", "one", "safe")).toEqual({
     kind: "outcome",
@@ -57,7 +57,7 @@ it("keeps replayed outcomes and returned snapshots isolated from subsequent tran
     outcome: { id: "one", tool: "work", ok: true, value: { messages: ["persisted"] } },
   });
   expect(session.agent("agent")!.execution.state).toEqual({ conversation: ["initial"] });
-  expect(session.decision("agent")!.calls).toHaveLength(2);
+  expect(session.agent("agent")!.decision!.calls).toHaveLength(2);
   await session.close();
 });
 
@@ -77,13 +77,13 @@ it("publishes transitions only after acknowledgement and retains concurrent call
   const first = session.startCall("agent", "one", "safe");
   const second = session.startCall("agent", "two", "safe");
   await entered.promise;
-  expect(session.decision("agent")!.calls.map((call) => call.status)).toEqual([
+  expect(session.agent("agent")!.decision!.calls.map((call) => call.status)).toEqual([
     "pending",
     "pending",
   ]);
   release.resolve();
   await Promise.all([first, second]);
-  expect(session.decision("agent")!.calls.map((call) => call.status)).toEqual([
+  expect(session.agent("agent")!.decision!.calls.map((call) => call.status)).toEqual([
     "running",
     "running",
   ]);
@@ -110,13 +110,15 @@ it.each([false, true])(
       throw failure;
     });
     await expect(session.startCall("agent", "one", "safe")).rejects.toBe(failure);
-    expect(session.decision("agent")!.calls[0].status).toBe("pending");
+    expect(session.agent("agent")!.decision!.calls[0].status).toBe("pending");
     write.mockClear();
     await expect(session.startCall("agent", "two", "safe")).rejects.toBe(failure);
     expect(write).not.toHaveBeenCalled();
     await session.close();
     const reopened = await AgentCheckpointSession.open(storage, "job");
-    expect(reopened.decision("agent")!.calls[0].status).toBe(committed ? "running" : "pending");
+    expect(reopened.agent("agent")!.decision!.calls[0].status).toBe(
+      committed ? "running" : "pending"
+    );
     expect(await reopened.startCall("agent", "one", "safe")).toEqual({ kind: "run" });
     await reopened.close();
   }
@@ -139,7 +141,7 @@ it("still rejects a nondeterministic codec before acknowledging a new transition
     code: "TUBELESS_AGENT_CHECKPOINT_CODEC",
   });
   corrupt = false;
-  expect(session.decision("agent")!.calls[0].status).toBe("pending");
+  expect(session.agent("agent")!.decision!.calls[0].status).toBe("pending");
   expect(await session.startCall("agent", "one", "safe")).toEqual({ kind: "run" });
   await session.close();
 });

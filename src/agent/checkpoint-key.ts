@@ -1,4 +1,4 @@
-import { agentError } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
 
 export function checkCheckpointKey(key: string): void {
   if (typeof key !== "string" || !key.trim() || key.length > 4096)

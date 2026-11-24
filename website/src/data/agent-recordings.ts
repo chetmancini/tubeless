@@ -1,10 +1,12 @@
-// Context for the published recording, from the fixtures in scripts/eval-agent.mjs.
-// Update alongside agent-evaluation.json when replacing that recording.
-export const RECORDING_CONTEXT: Record<string, {
+import recording from "../../public/agent-evaluation.json";
+
+// These workspaces describe the archived run, independently of the current evaluator.
+const contextByRun: Record<string, {
   title: string;
   setup: string;
   expected: string;
   files: Record<string, string>;
+  openByDefault?: boolean;
 }> = {
   "investigate-edit-verify": {
     title: "Fix cents rounding",
@@ -37,6 +39,7 @@ export const RECORDING_CONTEXT: Record<string, {
   },
   "recover-and-compact": {
     title: "Recover from a missing configuration file",
+    openByDefault: true,
     setup: "The agent starts in the project root. legacy-config.json does not exist. The actual configuration is config/current.json, with retries set to 0.",
     expected: "After the missing-file error, the agent locates the current configuration, changes only retries to 3, and runs the checks. The conversation also compacts during this run.",
     files: {
@@ -46,4 +49,19 @@ export const RECORDING_CONTEXT: Record<string, {
   },
 };
 
-export const ROOT_INSTRUCTIONS = "Read relevant source before editing. Run node check.mjs from the project root after changes. Do not modify check.mjs or unrelated.txt.";
+const rootInstructions = "Read relevant source before editing. Run node check.mjs from the project root after changes. Do not modify check.mjs or unrelated.txt.";
+
+export const agentEvaluation = {
+  ...recording,
+  results: recording.results.map((run) => {
+    if (!Object.hasOwn(contextByRun, run.id)) {
+      throw new Error(`Published evaluation is missing workspace context for ${run.id}`);
+    }
+    const { files, ...context } = contextByRun[run.id];
+    return {
+      ...run,
+      context,
+      startingFiles: Object.entries({ "AGENTS.md": rootInstructions, ...files }),
+    };
+  }),
+};

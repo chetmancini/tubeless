@@ -62,7 +62,7 @@ describe("pipeline graph", () => {
       skipAfterFailureOf: [gate],
     });
 
-    expect([...targetClosure([target])]).toEqual([target, required, gate]);
+    expect([...targetClosure(target)]).toEqual([target, required, gate]);
   });
 
   it("compiles immutable steps and dependency arrays", () => {

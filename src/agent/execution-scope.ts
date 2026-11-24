@@ -212,7 +212,7 @@ export class AgentExecutionScope implements ExecutionScope {
   }
 
   async admitCalls(count: number, signal?: AbortSignal): Promise<void> {
-    if (this.journal?.decision(this.agentKey)?.admitted) return;
+    if (this.journal?.callsAdmitted(this.agentKey)) return;
     this.chargeLocal("maxCalls", count, signal);
     if (this.journal) await this.journal.admitCalls(this.agentKey, this.durableBudgets, count);
     else await this.admissionJournal?.reserve(this.durableBudgets, "maxCalls", count);

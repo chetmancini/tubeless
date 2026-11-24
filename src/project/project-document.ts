@@ -26,6 +26,12 @@ export interface PipelineDocumentDefinition {
   finalize: { run: string; requireOutputs?: readonly string[] };
 }
 
+export const STEP_DEPENDENCY_FIELDS = [
+  "dependsOn",
+  "optionalDependsOn",
+  "skipAfterFailureOf",
+] as const;
+
 interface PipelineDocumentStepBase {
   id: string;
   name?: string;
@@ -135,9 +141,7 @@ function parseStep(value: unknown, path: string): PipelineDocumentStep {
     "forEachPipeline",
     "name",
     "description",
-    "dependsOn",
-    "optionalDependsOn",
-    "skipAfterFailureOf",
+    ...STEP_DEPENDENCY_FIELDS,
     "skip",
     "dryRun",
     "outputSchema",

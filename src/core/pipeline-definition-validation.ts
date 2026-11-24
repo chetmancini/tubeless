@@ -290,7 +290,7 @@ export function validatePipelineDefinition<
     missingFinalizerSteps.length === 0
   ) {
     for (const target of declaredTargets) {
-      const selected = targetClosure([target]);
+      const selected = targetClosure(target);
       const missingRequiredSteps = requiredFinalizerSteps.filter((step) => !selected.has(step));
       if (missingRequiredSteps.length > 0) {
         errors.push(

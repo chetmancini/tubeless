@@ -5,7 +5,11 @@ import {
   type AgentTranscriptReader,
   type AgentTranscriptRecord,
 } from "../tracing/agent-transcript.js";
-import { transcriptPageQuery, transcriptRecordingStatus } from "./agent-transcript-page.js";
+import {
+  sameTranscriptRun,
+  transcriptPageQuery,
+  transcriptRecordingStatus,
+} from "./agent-transcript-page.js";
 
 /** Target-owned synchronous SQL. Callers own transactions; every exec is one statement. */
 export interface TranscriptSql {
@@ -51,7 +55,6 @@ function hasTranscripts(sql: TranscriptSql): boolean {
   );
 }
 function decodeRow(row: unknown): AgentTranscriptRecord {
-  // SAFETY: Queries select the owned table's record_json column.
   const { run_id, sequence, record_json } = row as {
     run_id: string;
     sequence: number;
@@ -94,11 +97,7 @@ export function importAgentTranscriptRows(
       identity = row ? decodeRow(row) : record;
       identities.set(record.runId, identity);
     }
-    if (
-      identity.agentId !== record.agentId ||
-      identity.parentRunId !== record.parentRunId ||
-      identity.dryRun !== record.dryRun
-    )
+    if (!sameTranscriptRun(identity, record))
       throw new Error("Transcript run identity changes within the store");
     const json = JSON.stringify(record);
     const previous = sql.rows(

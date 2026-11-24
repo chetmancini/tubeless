@@ -4,7 +4,8 @@ import { journalAgentStore, withExecutionJournal } from "../core/execution-journ
 import { isPipelineCancellation } from "../core/pipeline-execution-error.js";
 import type { PipelineDefinitionSnapshot, PipelineStepContext } from "../core/pipeline-types.js";
 import { throwIfAborted } from "../utilities/abort.js";
-import { agentError, ownState } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
+import { ownState } from "./agent-state.js";
 import type { AgentLimits, AgentState } from "./agent-types.js";
 import type { AgentDurability } from "./checkpoint-types.js";
 import type { SavedAgent } from "./checkpoint-format.js";

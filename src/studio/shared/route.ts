@@ -1,4 +1,3 @@
-/** Pipeline page tabs other than the default run list. */
 export type StudioPipelineTab = "graph" | "versions";
 
 /**
@@ -23,7 +22,6 @@ export function studioPage(route: StudioRoute): StudioPage {
   return route.runId ? "run" : route.pipelineId ? "pipeline" : "activity";
 }
 
-/** Drop parameters that do not apply to the selected page. */
 function normalizeStudioRoute(raw: {
   pipelineId?: string | null;
   runId?: string | null;
@@ -61,13 +59,4 @@ export function studioRouteUrl(href: string, route: StudioRoute): string {
   if (stepId) url.searchParams.set("step", stepId);
   if (tab) url.searchParams.set("tab", tab);
   return url.href;
-}
-
-export function sameStudioRoute(left: StudioRoute, right: StudioRoute): boolean {
-  return (
-    left.pipelineId === right.pipelineId &&
-    left.runId === right.runId &&
-    left.stepId === right.stepId &&
-    left.tab === right.tab
-  );
 }

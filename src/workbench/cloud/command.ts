@@ -1,8 +1,8 @@
-import { manageRemoteSignal } from "../workbench-remote-io.js";
+import { manageCliSignal } from "../../cli/cli-signal.js";
 import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
 import {
   renderWorkbenchUsage,
-  parseSubcommandArgs,
+  type ParsedSubcommand,
   runWorkbenchSubcommand,
 } from "../workbench-subcommand.js";
 import { createCloudClient, isCloudTransportError, type CloudClient } from "./client.js";
@@ -38,7 +38,6 @@ import {
 
 const CLOUD_SPEC = WORKBENCH_SPECS.cloud;
 const CLOUD_USAGE = renderWorkbenchUsage(CLOUD_SPEC);
-const parseArgs = (args: readonly string[]) => parseSubcommandArgs(args, CLOUD_SPEC.options);
 
 type ObservationMode = { kind: "stream"; cursor?: string } | { kind: "poll" };
 type PipelineSelector = { id: string } | { name: string };
@@ -55,7 +54,10 @@ type CloudAction<Input = PreparedCloudRunInput> =
 
 type CloudCliAction = CloudAction<CloudRunInputArguments> | { kind: "reproduce"; path: string };
 
-function parseAction({ values, positionals }: ReturnType<typeof parseArgs>): CloudCliAction {
+function parseAction({
+  values,
+  positionals,
+}: ParsedSubcommand<typeof CLOUD_SPEC.options>): CloudCliAction {
   const [command, selector] = positionals;
   if (!CLOUD_SPEC.subcommands.some((name) => name === command))
     throw new CloudRunUsageError(`Pass one of: ${CLOUD_SPEC.subcommands.join(", ")}.`);
@@ -303,7 +305,6 @@ export async function runCloud(
   return runWorkbenchSubcommand(
     {
       spec: CLOUD_SPEC,
-      parse: parseArgs,
       run: async (parsed) => {
         let action;
         try {
@@ -340,7 +341,7 @@ export async function runCloudCommand(
   io: WorkbenchCliIo,
   dependencies: CloudCommandDependencies
 ): Promise<number> {
-  const managed = manageRemoteSignal(io.signal);
+  const managed = manageCliSignal(io.signal);
   const { signal } = managed;
   let output = cloudOutput();
   try {

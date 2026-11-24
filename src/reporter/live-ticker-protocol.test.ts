@@ -41,9 +41,13 @@ describe("ticker output ownership", () => {
     expect(parent.claimOutput(0)).toBe(true);
   });
 
-  it("wakes a real cross-thread claim once the worker actually releases the lock", async () => {
+  it("hands off output after a worker releases its lock", async () => {
     const parent = new TickerWorkerState();
-    const holdMs = 150;
+    const release = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+    const releaseWorker = () => {
+      Atomics.store(release, 0, 1);
+      Atomics.notify(release, 0);
+    };
     const protocolUrl = new URL("../../dist/reporter/live-ticker-protocol.js", import.meta.url);
     const source = `
       import { parentPort, workerData } from "node:worker_threads";
@@ -51,13 +55,13 @@ describe("ticker output ownership", () => {
       const state = new TickerWorkerState(workerData.buffer);
       state.withWorkerOutput(() => {
         parentPort.postMessage("acquired");
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, workerData.holdMs);
+        Atomics.wait(workerData.release, 0, 0);
       });
       parentPort.postMessage("released");
     `;
     const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(source)}`), {
       execArgv: fileWorkerExecArgv(process.execArgv),
-      workerData: { buffer: parent.buffer, holdMs },
+      workerData: { buffer: parent.buffer, release },
     });
 
     try {
@@ -69,25 +73,22 @@ describe("ticker output ownership", () => {
         });
       });
 
-      // The worker genuinely holds the lock on its own OS thread right now: a
-      // short-timeout claim from this thread must time out for real, not because
-      // of same-thread simulation.
       expect(parent.claimOutput(10)).toBe(false);
       expect(parent.inlineRequested).toBe(true);
 
-      await new Promise<void>((resolve, reject) => {
+      const released = new Promise<void>((resolve, reject) => {
         worker.once("error", reject);
         worker.once("message", (message) => {
           if (message === "released") resolve();
           else reject(new Error(`unexpected worker message: ${String(message)}`));
         });
       });
+      releaseWorker();
+      await released;
 
-      // Once the worker's own `withWorkerOutput` call actually returns (Atomics.store
-      // + Atomics.notify on OUTPUT_LOCK), a fresh claim must succeed — proving the
-      // wake-on-release path works across real threads, not just same-thread timing.
       expect(parent.claimOutput(1_000)).toBe(true);
     } finally {
+      releaseWorker();
       await worker.terminate();
     }
   });

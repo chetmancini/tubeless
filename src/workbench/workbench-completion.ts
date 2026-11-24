@@ -4,7 +4,6 @@ import {
   type WorkbenchCommandSpec,
   type WorkbenchCompletionValue,
   renderWorkbenchUsage,
-  parseSubcommandArgs,
   runWorkbenchSubcommand,
 } from "./workbench-subcommand.js";
 import { didYouMean } from "../utilities/suggest.js";
@@ -69,7 +68,7 @@ function subcommandSpec(command: WorkbenchCommandSummary, nested?: string): Subc
     })),
     positional:
       nested === undefined
-        ? (command.spec.subcommands ?? command.spec.positional)
+        ? (command.spec.subcommands ?? command.spec.positional?.completion)
         : command.spec.subcommandPositionals?.[nested],
   };
 }
@@ -444,11 +443,6 @@ export async function runCompletion(argv: readonly string[], io: WorkbenchCliIo)
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.completion,
-      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.completion.options),
-      positionalCountError: {
-        count: 1,
-        message: `Pass one shell: ${COMPLETION_SHELLS.join(", ")}.`,
-      },
       async run(parsed, commandIo) {
         const shell = parsed.positionals[0];
         if (!isCompletionShell(shell)) {

@@ -2,16 +2,16 @@ import {
   HOSTED_EXECUTIONS_PATH,
   HOSTED_EXECUTION_REASONS,
   HOSTED_EXECUTION_STATES,
-  isLaunchIdentifier,
   type HostedExecutionStatus,
 } from "../../hosting/execution-status.js";
 import { parseStudioLaunchRequest } from "../../studio/shared/protocol.js";
 import { abortableSleep } from "../../utilities/abort.js";
 import { isJsonObject } from "../../utilities/canonical-json.js";
+import { isLaunchIdentifier } from "../../utilities/launch-identifier.js";
 import { readBoundedBody } from "../../utilities/read-body.js";
 import { withRetry } from "../../utilities/retry.js";
 import { readCliJson, type CliInputContext } from "../workbench-json-input.js";
-import { manageRemoteSignal } from "../workbench-remote-io.js";
+import { manageCliSignal } from "../../cli/cli-signal.js";
 import { errorMessage, terminalSafeText, type WorkbenchCliIo } from "../workbench-shared.js";
 import type { CloudCommandDependencies } from "../cloud/shared.js";
 import { workerHeaders } from "./access.js";
@@ -177,7 +177,7 @@ export async function executeOnWorker(
   dependencies: CloudCommandDependencies
 ): Promise<number> {
   const { io } = context;
-  const managed = manageRemoteSignal(io.signal);
+  const managed = manageCliSignal(io.signal);
   const { signal } = managed;
   let admittedId: string | undefined;
   let pendingKey: string | undefined;

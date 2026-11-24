@@ -1,5 +1,3 @@
-import { onFirstProcessSignal } from "../cli/cli-signal.js";
-
 /** Normalize a service origin without allowing credential, path or redirect ambiguity. */
 export function normalizeRemoteOrigin(value: string, label: string): string {
   let url: URL;
@@ -28,11 +26,4 @@ export function normalizeRemoteOrigin(value: string, label: string): string {
     );
   }
   return url.origin;
-}
-
-export function manageRemoteSignal(signal?: AbortSignal): { signal: AbortSignal; cleanup(): void } {
-  if (signal) return { signal, cleanup() {} };
-  const controller = new AbortController();
-  const cleanup = onFirstProcessSignal(["SIGINT", "SIGTERM"], () => controller.abort());
-  return { signal: controller.signal, cleanup };
 }

@@ -1,9 +1,5 @@
 import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
-import {
-  renderWorkbenchUsage,
-  parseSubcommandArgs,
-  runWorkbenchSubcommand,
-} from "./workbench-subcommand.js";
+import { renderWorkbenchUsage, runWorkbenchSubcommand } from "./workbench-subcommand.js";
 import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import { upgradeSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
@@ -18,23 +14,11 @@ import {
 
 const UPGRADE_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.upgrade);
 
-function parseUpgradeArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, WORKBENCH_SPECS.upgrade.options);
-}
-
 export async function runUpgrade(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.upgrade,
-      parse: parseUpgradeArgs,
       async run(parsed, commandIo) {
-        if (parsed.positionals.length > 0) {
-          return writeUsageError(
-            commandIo,
-            "upgrade does not take a positional argument.",
-            UPGRADE_USAGE
-          );
-        }
         const filename = path.resolve(
           commandIo.cwd,
           parsed.values.store ?? DEFAULT_PIPELINE_RUN_STORE

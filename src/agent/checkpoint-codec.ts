@@ -1,4 +1,4 @@
-import { agentError } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
 import type { AgentCheckpointCodec } from "./checkpoint-types.js";
 
 type Encoded =

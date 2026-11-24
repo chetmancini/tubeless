@@ -1,9 +1,5 @@
 import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
-import {
-  renderWorkbenchUsage,
-  parseSubcommandArgs,
-  runWorkbenchSubcommand,
-} from "./workbench-subcommand.js";
+import { renderWorkbenchUsage, runWorkbenchSubcommand } from "./workbench-subcommand.js";
 import { studioDescriptor } from "../hosting/hosting-commands.js";
 import { parseStudioHosting } from "../studio/server/hosting.js";
 import * as path from "node:path";
@@ -26,19 +22,11 @@ import {
 
 const UI_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.ui);
 
-function parseUiArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, WORKBENCH_SPECS.ui.options);
-}
-
 export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.ui,
-      parse: parseUiArgs,
-      async run(parsed, commandIo) {
-        if (parsed.positionals.length > 1) {
-          return writeUsageError(commandIo, "Pass at most one project file.", UI_USAGE);
-        }
+      async run(parsed) {
         const directCommandFiles = parsed.values.command ?? [];
         const projectFile = parsed.positionals[0];
         if (parsed.values.store && parsed.values.trace) {

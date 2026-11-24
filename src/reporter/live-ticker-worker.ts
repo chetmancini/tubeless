@@ -1,11 +1,6 @@
 import { writeSync } from "node:fs";
 import { parentPort, workerData } from "node:worker_threads";
-import {
-  currentSpinner,
-  paintLiveLines,
-  hasLiveAnimation,
-  TickerFrame,
-} from "./live-ticker-frame.js";
+import { hasLiveAnimation, paintTickerLines, TickerFrame } from "./live-ticker-frame.js";
 import {
   TickerWorkerState,
   type LiveTickerWorkerData,
@@ -24,15 +19,7 @@ let lines: string[] = [];
 let logPane: readonly string[] | undefined;
 
 function paintFrame(above?: string): void {
-  const painted = paintLiveLines(
-    lines,
-    currentSpinner(data.unicode, data.refreshIntervalMs),
-    Date.now(),
-    columns,
-    data.color,
-    data.unicode,
-    logPane
-  );
+  const painted = paintTickerLines(lines, data, columns, logPane);
   frame.redraw(painted, columns, above);
   data.framePort.postMessage(painted);
 }

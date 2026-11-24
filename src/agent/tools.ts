@@ -6,13 +6,9 @@ import type {
   PipelineStepContext,
   StandardSchemaV1,
 } from "../core/pipeline-types.js";
-import {
-  agentError,
-  checkDescription,
-  checkSchema,
-  jsonDescriptor,
-  ownState,
-} from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
+import { isToolReplayPolicy } from "./agent-values.js";
+import { checkDescription, checkSchema, jsonDescriptor, ownState } from "./agent-state.js";
 import { agentScope } from "./execution-scope.js";
 import { startToolActivity, type ToolActivity, type ToolActivityFormat } from "./tool-progress.js";
 import type { AgentTool, AgentToolContext, Awaitable, Input, Output } from "./agent-types.js";
@@ -67,9 +63,7 @@ function createTool<Arguments extends StandardSchemaV1, Result extends StandardS
     (definition.dryRun !== undefined &&
       definition.dryRun !== "skip" &&
       typeof definition.dryRun !== "function") ||
-    (definition.replay !== undefined &&
-      definition.replay !== "safe" &&
-      definition.replay !== "unsafe")
+    (definition.replay !== undefined && !isToolReplayPolicy(definition.replay))
   )
     throw agentError(
       "TUBELESS_AGENT_INVALID_DEFINITION",

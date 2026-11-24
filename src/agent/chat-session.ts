@@ -1,6 +1,6 @@
 import type { Pipeline } from "../core/pipeline-types.js";
 import { createAgentSession, type AgentSession } from "./agent-session.js";
-import { agentError } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
 
 type ChatAgent = Pipeline<{ task: string }, { answer: string }, "agent", "agent", string>;
 const CHAT_SESSION = Symbol.for("tubeless/chat-agent-session/v1");

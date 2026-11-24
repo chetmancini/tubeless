@@ -21,7 +21,7 @@ import type { ForEachItemFailurePolicy, ForEachSettledItem } from "./pipeline-st
 import type { ToMappedChildStepProgressOptions } from "./mapped-child-progress.js";
 import { createRunId, RUN_MODEL_VERSION } from "./pipeline-ids.js";
 import { duplicateValues } from "../utilities/collections.js";
-import { EXECUTE_COMPILED_RUN, isCompiledPipeline } from "./pipeline-identity.js";
+import { compiledPipelineOperations } from "./pipeline-identity.js";
 import { CHILD_PLACEMENT, childPlacement, type ChildPlacement } from "./child-placement.js";
 import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
 import { rejectChildOutputRecovery, snapshotRunControls } from "./run-controls.js";
@@ -40,27 +40,6 @@ import type { PipelineTracingOptions } from "../tracing/tracing-contracts.js";
 
 type ChildPipeline = Pipeline<object, unknown, string, string>;
 
-type CompiledChildExecute = (
-  plan: PipelinePlan,
-  options: object,
-  controls: PipelineRunControls,
-  context?: Partial<PipelineContext>,
-  overrides?: undefined,
-  preparedOptions?: PreparedOptions
-) => Promise<PipelineRun<unknown>>;
-
-type ExecutableChild = ChildPipeline & {
-  [EXECUTE_COMPILED_RUN]?: CompiledChildExecute;
-};
-
-function compiledChildExecute(pipeline: ChildPipeline): CompiledChildExecute | undefined {
-  if (!isCompiledPipeline(pipeline)) return undefined;
-  // SAFETY: branded pipelines are the `definePipeline` object, which always
-  // stamps `EXECUTE_COMPILED_RUN`. Wrappers that inherit the symbol are rejected
-  // by the identity check above.
-  return (pipeline as ExecutableChild)[EXECUTE_COMPILED_RUN];
-}
-
 function executeCompiledChild(
   pipeline: ChildPipeline,
   plan: PipelinePlan,
@@ -69,7 +48,7 @@ function executeCompiledChild(
   context: PipelineContext,
   preparedOptions?: PreparedOptions
 ): Promise<PipelineRun<unknown>> {
-  const execute = compiledChildExecute(pipeline);
+  const execute = compiledPipelineOperations(pipeline)?.run;
   if (execute === undefined) {
     if (context.executionJournal)
       return withExecutionJournal(context, async () => {
@@ -82,7 +61,7 @@ function executeCompiledChild(
       });
     return pipeline.run(domainOptions, controls, context);
   }
-  return execute(plan, domainOptions, controls, context, undefined, preparedOptions);
+  return execute({ plan, options: domainOptions, controls, context, preparedOptions });
 }
 
 function publicChildRuntime(context: PipelineContext): PipelineRuntime {
@@ -134,11 +113,11 @@ async function rejectedChildPlanResult(
   controls: PipelineRunControls,
   context: PipelineContext
 ): Promise<PipelineRun<unknown>> {
-  const execute = compiledChildExecute(pipeline);
+  const execute = compiledPipelineOperations(pipeline)?.run;
   if (execute === undefined) {
     return failedPublicChildPlanRun(pipeline, plan, controls, context);
   }
-  return execute(plan, domainOptions, controls, context);
+  return execute({ plan, options: domainOptions, controls, context });
 }
 
 type ChildInputs = Record<string, unknown>;
@@ -297,15 +276,6 @@ function childRunControls(
     resolved.dryRun = false;
   }
   return resolved;
-}
-
-function isConcurrencyFunction<TOptions extends object>(
-  concurrency:
-    | number
-    | ((inputs: ChildInputs, context: PipelineExecutionContext<TOptions>) => number)
-    | undefined
-): concurrency is (inputs: ChildInputs, context: PipelineExecutionContext<TOptions>) => number {
-  return typeof concurrency === "function";
 }
 
 function firstChildFailure(result: PipelineRun<unknown>) {
@@ -505,9 +475,10 @@ export function createMappedChildRunner<TParentOptions extends object>(
       );
     }
     await bindExecutionJournal(context, ["fan-out", config.stepId], { items, keys });
-    const concurrency = isConcurrencyFunction(config.concurrency)
-      ? config.concurrency(inputs, context)
-      : (config.concurrency ?? 1);
+    const concurrency =
+      typeof config.concurrency === "function"
+        ? config.concurrency(inputs, context)
+        : (config.concurrency ?? 1);
     if (!Number.isInteger(concurrency) || concurrency < 1) {
       throw new PipelineChildError(
         `Mapped child pipeline ${config.pipeline.id} concurrency must be a positive finite integer, got ${concurrency}`

@@ -1,6 +1,4 @@
-import { isAuthoredPipelineId } from "../core/pipeline-ids.js";
 import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt-batch.js";
-import { isLaunchIdentifier } from "../hosting/execution-status.js";
 import { createLaunchTracing } from "../hosting/launch-tracing.js";
 import {
   hostedCommandContext,
@@ -11,8 +9,9 @@ import {
   RUNNER_HEARTBEAT_MS,
   RUNNER_LEASE_MS,
   RUNNER_PATH,
-  RUNNER_VALUE_BYTES,
+  RUNNER_REPLY_BYTES,
   boundedRunnerJson,
+  decodeRunnerClaim,
   runnerProjectHeader,
   runnerChildControls,
   runnerValue,
@@ -63,7 +62,7 @@ function runnerTransport(fetcher: typeof fetch, host: string, headers: Headers):
     });
     let result: unknown;
     try {
-      const bytes = await readBoundedBody(response.body, RUNNER_VALUE_BYTES + 2_048, deadline);
+      const bytes = await readBoundedBody(response.body, RUNNER_REPLY_BYTES, deadline);
       result = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch (error) {
       if (response.ok) throw error;
@@ -79,31 +78,6 @@ function runnerTransport(fetcher: typeof fetch, host: string, headers: Headers):
     if (!isJsonObject(result)) throw new Error("The Worker returned an invalid runner response.");
     return result;
   };
-}
-
-function readClaim(
-  value: unknown,
-  deploymentId: string,
-  manifest: Record<string, string>
-): RunnerClaim {
-  if (
-    !isJsonObject(value) ||
-    !isJsonObject(value.job) ||
-    !isLaunchIdentifier(value.token) ||
-    typeof value.remainingMs !== "number" ||
-    !Number.isSafeInteger(value.remainingMs) ||
-    value.remainingMs < 1 ||
-    !(value.job.kind === "root" || value.job.kind === "stage") ||
-    value.job.deploymentId !== deploymentId ||
-    !isLaunchIdentifier(value.job.id) ||
-    !isLaunchIdentifier(value.job.launchId) ||
-    !isAuthoredPipelineId(value.job.pipelineId) ||
-    !Object.hasOwn(manifest, value.job.pipelineId) ||
-    value.job.definitionId !== manifest[value.job.pipelineId]
-  )
-    throw new Error("The Worker returned an incompatible runner claim.");
-  // The authenticated host constructed the pinned job. User values are validated when invoked.
-  return value as unknown as RunnerClaim;
 }
 
 async function executeClaim(options: {
@@ -333,7 +307,7 @@ export async function runRemoteRunner(options: {
         diagnostic = errorMessage(error);
       }
       if (response?.claim !== undefined) {
-        const claim = readClaim(response.claim, deploymentId, manifest);
+        const claim = decodeRunnerClaim(response.claim, deploymentId, manifest);
         const { pipelineId, id } = claim.job;
         const entry = commands.get(pipelineId);
         if (!entry) throw new Error("The claimed pipeline is unavailable.");

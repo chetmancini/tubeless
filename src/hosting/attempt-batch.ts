@@ -1,5 +1,6 @@
 import { decodeStoredTraceEvent } from "../run-store/run-store-event-decoder.js";
 import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
+import { sha256Hex } from "../utilities/sha256.js";
 import {
   wireArray,
   wireCustom,
@@ -13,7 +14,6 @@ import {
   COLLECTOR_BATCH_EVENTS,
   CollectorInputError,
   decodeCollectorJson,
-  digestCollectorBody,
   collectorId,
 } from "./collector-protocol.js";
 import { assertAttemptId } from "./attempt-store.js";
@@ -116,7 +116,7 @@ async function decodeBatch<T extends { events: PipelineTraceEvent[] }>(
   const bytes = new Uint8Array(body);
   const envelope = decodeCollectorJson(bytes, schema);
   if (envelope.events.length === 0) throw new CollectorInputError();
-  return { ...envelope, digest: await digestCollectorBody(bytes) };
+  return { ...envelope, digest: await sha256Hex(bytes) };
 }
 
 /** A fresh, validated current-version event for either transport direction. */

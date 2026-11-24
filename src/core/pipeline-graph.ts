@@ -1,6 +1,7 @@
 import { snapshotPipelineMetadata } from "../tracing/graph-metadata.js";
 import type { CompiledStepCache } from "./pipeline-cache.js";
 import type { AnyStep } from "./pipeline-steps.js";
+import type { PipelineStepSelectionReason } from "./pipeline-types.js";
 import {
   STEP_CACHE,
   STEP_INPUT,
@@ -84,18 +85,40 @@ export function stepEdges<TOptions extends object>(
   ];
 }
 
+type TargetEdgeKind = Extract<PipelineStepSelectionReason, { dependentId: string }>["kind"];
+
+/** Expand required inputs and failure gates, while reporting optional edges without selecting them. */
 export function targetClosure<TOptions extends object>(
-  targets: readonly AnyStep<TOptions>[]
-): Set<AnyStep<TOptions>> {
-  const selected = new Set<AnyStep<TOptions>>();
-  const include = (step: AnyStep<TOptions>): void => {
-    if (selected.has(step)) return;
-    selected.add(step);
-    for (const prerequisite of [...(step.dependsOn ?? []), ...(step.skipAfterFailureOf ?? [])]) {
-      include(prerequisite);
+  target: AnyStep<TOptions>,
+  onDependency?: (
+    step: AnyStep<TOptions>,
+    dependent: AnyStep<TOptions>,
+    kind: TargetEdgeKind
+  ) => void
+): ReadonlySet<AnyStep<TOptions>> {
+  type Step = AnyStep<TOptions>;
+  const selected = new Set<Step>();
+  const pending: ({ step: Step } | { step: Step; dependent: Step; kind: TargetEdgeKind })[] = [
+    { step: target },
+  ];
+  function enqueue(dependent: Step, kind: TargetEdgeKind, dependencies: readonly Step[] = []) {
+    for (let index = dependencies.length - 1; index >= 0; index--) {
+      pending.push({ step: dependencies[index], dependent, kind });
     }
-  };
-  for (const target of targets) include(target);
+  }
+  while (pending.length > 0) {
+    const edge = pending.pop()!;
+    const { step } = edge;
+    if ("kind" in edge) {
+      onDependency?.(step, edge.dependent, edge.kind);
+      if (edge.kind === "optional-only") continue;
+    }
+    if (selected.has(step)) continue;
+    selected.add(step);
+    if (onDependency) enqueue(step, "optional-only", step.optionalDependsOn);
+    enqueue(step, "failure-gate", step.skipAfterFailureOf);
+    enqueue(step, "required-dependency", step.dependsOn);
+  }
   return selected;
 }
 

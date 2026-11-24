@@ -1,10 +1,15 @@
-import type { PipelineRunEventQuery, PipelineRunEventReader } from "../run-store/run-store.js";
+import { CHILD_PROGRESS_TRACE_NAMES } from "../core/child-progress.js";
+import type {
+  PipelineRunEventQuery,
+  PipelineRunEventReader,
+  StoredPipelineEvent,
+} from "../run-store/run-store.js";
 import {
   RUN_EVENT_INSERT_SQL,
   RUN_EVENT_STORE_VERSION,
   RUN_EVENT_TABLE_STATEMENTS,
   RUN_EVENT_TRIGGER_STATEMENTS,
-  RUN_EVENT_DROP_TRIGGER_STATEMENTS,
+  RUN_EVENT_CLEAR_STATEMENTS,
   runEventListQuery,
   runEventRow,
   storedRunEvent,
@@ -22,17 +27,25 @@ import {
   listAgentTranscriptRows,
   type TranscriptSql,
 } from "../run-store/agent-transcript-sql.js";
+import { sameTranscriptRun } from "../run-store/agent-transcript-page.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 
 export interface DurableRunStore extends PipelineRunEventReader {
   readonly transcripts: Pick<AgentTranscriptReader, "list">;
   /** Append events; callers own the surrounding transactionSync. */
   append(events: readonly PipelineTraceEvent[]): void;
+  listChildProgress(
+    runId: string,
+    afterId: number
+  ): { events: StoredPipelineEvent[]; hasMore: boolean };
   /** Trusted content ingress. Missing structural starts refuse delivery without creating content. */
   appendTranscript(record: AgentTranscriptRecord): boolean;
   /** Caller owns a transaction and must prevent active launches from recreating history. */
   clearHistory(): void;
 }
+
+const CHILD_PROGRESS_PAGE_SIZE = 32;
+const CHILD_PROGRESS_EVENT_PARAMS = CHILD_PROGRESS_TRACE_NAMES.map(() => "?").join(", ");
 
 /** Event store over Durable Object SQLite. Schema version lives in a table, not user_version. */
 export function openDurableRunStore(
@@ -74,7 +87,6 @@ export function openDurableRunStore(
     appendTranscript(value) {
       const record = decodeAgentTranscriptRecord(value);
       return storage.transactionSync(() => {
-        // SAFETY: The owned event table returns RunEventRecord rows, decoded below.
         const row = sql
           .exec(
             "SELECT * FROM pipeline_run_events WHERE run_id = ? AND event_name = 'pipeline.started' ORDER BY id LIMIT 1",
@@ -85,9 +97,11 @@ export function openDurableRunStore(
         const started = storedRunEvent(row as unknown as RunEventRecord);
         if (
           started.name !== "pipeline.started" ||
-          started.pipelineId !== record.agentId ||
-          started.parentRunId !== record.parentRunId ||
-          started.payload.dryRun !== record.dryRun
+          !sameTranscriptRun(record, {
+            agentId: started.pipelineId,
+            parentRunId: started.parentRunId,
+            dryRun: started.payload.dryRun,
+          })
         )
           throw new Error("Transcript record disagrees with its structural run identity");
         importAgentTranscriptRows(content, [record]);
@@ -96,18 +110,30 @@ export function openDurableRunStore(
     },
     clearHistory() {
       clearAgentTranscriptRows(content);
-      for (const statement of RUN_EVENT_DROP_TRIGGER_STATEMENTS) sql.exec(statement);
-      sql.exec("DELETE FROM pipeline_run_events");
-      for (const statement of RUN_EVENT_TRIGGER_STATEMENTS) sql.exec(statement);
+      for (const statement of RUN_EVENT_CLEAR_STATEMENTS) sql.exec(statement);
     },
     append(events) {
       for (const event of events) sql.exec(RUN_EVENT_INSERT_SQL, ...runEventRow(event));
     },
     async listEvents(query: PipelineRunEventQuery = {}) {
       const { sql: text, params } = runEventListQuery(query);
-      // SAFETY: SELECT * over the owned pipeline_run_events table returns RunEventRecord rows.
       const rows = sql.exec(text, ...params).toArray() as unknown as RunEventRecord[];
       return rows.map(storedRunEvent);
+    },
+    listChildProgress(runId, afterId) {
+      const rows = sql
+        .exec(
+          `SELECT * FROM pipeline_run_events WHERE run_id = ? AND id > ?
+           AND event_name IN (${CHILD_PROGRESS_EVENT_PARAMS}) ORDER BY id LIMIT ?`,
+          runId,
+          afterId,
+          ...CHILD_PROGRESS_TRACE_NAMES,
+          CHILD_PROGRESS_PAGE_SIZE + 1
+        )
+        .toArray() as unknown as RunEventRecord[];
+      const hasMore = rows.length > CHILD_PROGRESS_PAGE_SIZE;
+      if (hasMore) rows.pop();
+      return { events: rows.map(storedRunEvent), hasMore };
     },
     close() {},
   };

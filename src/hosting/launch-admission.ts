@@ -3,6 +3,7 @@ import {
   type PipelineRunStudioLaunchRequest,
 } from "../studio/shared/protocol.js";
 import { canonicalJsonValue } from "../utilities/canonical-json.js";
+import { sha256Hex } from "../utilities/sha256.js";
 import { parseHostedLaunch, type HostedCommand, type HostedOutput } from "./hosting-commands.js";
 import type { RunJob } from "./run-contract.js";
 import {
@@ -11,7 +12,7 @@ import {
   type StudioLaunchMetadata,
 } from "../studio/shared/launch-metadata.js";
 import { recordedLaunch } from "./launch-metadata.js";
-import { isLaunchIdentifier } from "./execution-status.js";
+import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 
 /** Structured command parameters, including built-in execution controls. */
 export type HostedLaunchValues = PipelineRunStudioLaunchRequest["values"];
@@ -188,10 +189,7 @@ export function createHostedLaunchAdmission(input: {
     );
     if (bytes.byteLength > 65_536)
       return invalid(["Normalized launch intent must fit within 64 KiB."]);
-    const hash = await crypto.subtle.digest("SHA-256", bytes);
-    const intentDigest = Array.from(new Uint8Array(hash), (byte) =>
-      byte.toString(16).padStart(2, "0")
-    ).join("");
+    const intentDigest = await sha256Hex(bytes);
     const createdAtMs = now();
     const launchId = previous?.launchId ?? crypto.randomUUID();
     const job: RunJob = {

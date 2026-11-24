@@ -2,8 +2,7 @@ import { stat } from "node:fs/promises";
 import * as path from "node:path";
 import type { Readable } from "node:stream";
 import { TUBELESS_WORKBENCH_EXIT_CODE } from "../cli/cli-exit.js";
-import { onFirstProcessSignal } from "../cli/cli-signal.js";
-import { loadPlanSourceModule, type WorkbenchPlanSource } from "./pipeline-module.js";
+import { manageCliSignal } from "../cli/cli-signal.js";
 import { tubelessErrorKind } from "../utilities/tubeless-error.js";
 
 export { TUBELESS_WORKBENCH_EXIT_CODE };
@@ -154,43 +153,8 @@ export async function loadWorkbenchModule<T>(
   }
 }
 
-export async function loadPlanSource(
-  fileArgument: string,
-  exportName: string | undefined,
-  io: WorkbenchCliIo
-): Promise<{ source: WorkbenchPlanSource } | { exitCode: number }> {
-  return loadWorkbenchModule(fileArgument, io, async (filePath) => ({
-    source: await loadPlanSourceModule(filePath, exportName),
-  }));
-}
-
-export { hostedCommandContext as commandContext } from "../hosting/hosting-commands.js";
-
-export interface ManagedWorkbenchSignal {
-  cleanup(): void;
-  signal: AbortSignal;
-  wasInterrupted(): boolean;
-}
-
-export function manageWorkbenchSignal(io: WorkbenchCliIo): ManagedWorkbenchSignal {
-  if (io.signal) {
-    return {
-      cleanup: () => {},
-      signal: io.signal,
-      wasInterrupted: () => io.signal?.aborted === true,
-    };
-  }
-
-  const controller = new AbortController();
-  let interrupted = false;
-  const dispose = onFirstProcessSignal(["SIGINT", "SIGTERM"], (signal) => {
-    interrupted = true;
+export function manageWorkbenchSignal(io: WorkbenchCliIo) {
+  return manageCliSignal(io.signal, (signal) => {
     io.stderr.write(`${signal} received; cancelling pipeline work.\n`);
-    controller.abort();
   });
-  return {
-    cleanup: dispose,
-    signal: controller.signal,
-    wasInterrupted: () => interrupted,
-  };
 }

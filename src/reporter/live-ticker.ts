@@ -3,9 +3,8 @@ import { isatty } from "node:tty";
 import { MessageChannel, receiveMessageOnPort, Worker } from "node:worker_threads";
 import { fileWorkerExecArgv } from "../utilities/worker-argv.js";
 import {
-  currentSpinner,
   hasLiveAnimation,
-  paintLiveLines,
+  paintTickerLines,
   TICKER_ANSI,
   TickerFrame,
 } from "./live-ticker-frame.js";
@@ -49,19 +48,7 @@ function createInlineTicker(
   const redraw = (above?: string): void => {
     if (disposed) return;
     const columns = resolveColumns(options);
-    frame.redraw(
-      paintLiveLines(
-        lines,
-        currentSpinner(options.unicode, options.refreshIntervalMs),
-        Date.now(),
-        columns,
-        options.color === true,
-        options.unicode,
-        logPane
-      ),
-      columns,
-      above
-    );
+    frame.redraw(paintTickerLines(lines, options, columns, logPane), columns, above);
   };
 
   const timer = setInterval(() => {
@@ -242,7 +229,7 @@ function createWorkerTicker(options: LiveTickerOptions & { fd: number }): LiveTi
           } satisfies TickerWorkerMessage);
           workerStopped = state.waitForStop(500);
         } catch {
-          // If posting fails, `workerStopped` stays false and the fallback below runs.
+          // The worker's message channel can close before disposal posts the stop request.
         }
         if (!workerStopped) {
           const ticker = createFallback();

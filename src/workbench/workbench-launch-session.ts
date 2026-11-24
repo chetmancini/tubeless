@@ -1,5 +1,4 @@
-import type { PipelineContext } from "../core/pipeline.js";
-import type { PipelineRunStudioLaunchResult } from "../studio/server/listener.js";
+import type { PipelineRunStudioLaunchResult } from "../studio/shared/protocol.js";
 import type { PipelineTraceEvent, PipelineTraceExporter } from "../tracing/tracing.js";
 
 type ExecutionSettlement =
@@ -35,6 +34,11 @@ export class WorkbenchLaunchSession {
   #runId: string | undefined;
   #startObserved = false;
 
+  readonly exporter: PipelineTraceExporter = {
+    export: (event) => this.#record(event),
+    flush: () => this.#store.flush?.(),
+  };
+
   constructor(options: WorkbenchLaunchSessionOptions) {
     this.#onRunRecorded = options.onRunRecorded;
     this.#signal = AbortSignal.any([options.signal, this.#controller.signal]);
@@ -43,14 +47,6 @@ export class WorkbenchLaunchSession {
     this.#recordedStart = new Promise((resolve) => {
       this.#recordStart = resolve;
     });
-  }
-
-  get pipelineContext(): Omit<PipelineContext, "cwd" | "log" | "signal"> {
-    const exporter: PipelineTraceExporter = {
-      export: (event) => this.#record(event),
-      flush: () => this.#store.flush?.(),
-    };
-    return { tracing: { exporter } };
   }
 
   get runId(): string | undefined {

@@ -71,6 +71,13 @@ const STORE_OPTION = {
 
 const CLOUD_SERVICE_COMMANDS = ["list", "run", "follow", "logs"] as const;
 
+const PIPELINE_POSITIONAL = {
+  min: 1,
+  max: 1,
+  error: "Pass exactly one pipeline or command file.",
+  completion: "pipeline",
+} as const;
+
 const CLOUD_HOST_OPTION = {
   type: "string",
   description: "Cloud origin (default https://cloud.tubeless.io)",
@@ -87,6 +94,7 @@ export const WORKBENCH_SPECS = {
 List the pipelines and commands registered in a Tubeless project file, one per line
 with its display name and description.
 `,
+    positional: { max: 0, error: "List does not accept a positional argument." },
     options: {
       project: PROJECT_FILE_OPTION,
       json: { type: "boolean", description: "Emit the project inventory as JSON" },
@@ -102,7 +110,12 @@ Does not check graph semantics, registered names, or domain values. Use inspect
 or plan on the compiled command module for engine validation.
 YAML uses Bun's parser; duplicate mapping keys may be overwritten during parsing.
 `,
-    positional: "file",
+    positional: {
+      min: 1,
+      max: 1,
+      error: "Pass exactly one YAML or JSON document.",
+      completion: "file",
+    },
     options: {
       json: { type: "boolean", description: "Emit a structured validation result" },
     },
@@ -114,7 +127,7 @@ YAML uses Bun's parser; duplicate mapping keys may be overwritten during parsing
 
 Show a registered id or exported pipeline's identity plus the default structural plan.
 `,
-    positional: "pipeline",
+    positional: PIPELINE_POSITIONAL,
     options: {
       ...REGISTRATION_OPTIONS,
       ...STEP_FILTER_OPTIONS,
@@ -128,7 +141,7 @@ Show a registered id or exported pipeline's identity plus the default structural
 
 Preview a registered or exported pipeline without running steps or requiring domain options.
 `,
-    positional: "pipeline",
+    positional: PIPELINE_POSITIONAL,
     options: {
       ...REGISTRATION_OPTIONS,
       target: {
@@ -159,7 +172,7 @@ Preview a registered or exported pipeline without running steps or requiring dom
 
 Generate Mermaid flowchart source from a registered or exported pipeline or command.
 `,
-    positional: "pipeline",
+    positional: PIPELINE_POSITIONAL,
     options: {
       ...REGISTRATION_OPTIONS,
       direction: {
@@ -187,7 +200,7 @@ Execute a project pipeline or a directly exported pipeline or command using its 
 `,
     footer: `Pass application flags after --. For command help, use: tubeless run <file> -- --help
 Schema-backed pipelines infer arguments; use definePipelineCommand for custom inputs.`,
-    positional: "pipeline",
+    positional: { ...PIPELINE_POSITIONAL, error: "Pass exactly one pipeline ID or file." },
     passthrough: true,
     options: {
       ...REGISTRATION_OPTIONS,
@@ -266,6 +279,7 @@ and 2 rebuild the event table, keep event ids, and rename retired PIPES_ error
 codes to TUBELESS_. Version 3 adds a column. Run this before an unattended
 \`tubeless run --store\` or \`tubeless ui\` so that job does not stop on an older store.
 `,
+    positional: { max: 0, error: "upgrade does not take a positional argument." },
     options: {
       store: STORE_OPTION,
       yes: { type: "boolean", description: "Confirm the rewrite; there is no interactive prompt" },
@@ -280,7 +294,11 @@ Prompt a workspace agent, watch its pipeline execution, then prompt again.
 Prompts share completed conversation context; each execution has fresh limits.
 Select a defineAgent agent by project ID or file, or omit it for the built-in workspace agent.
 `,
-    positional: "pipeline",
+    positional: {
+      max: 1,
+      error: "Pass at most one agent ID or file.",
+      completion: "pipeline",
+    },
     footer: `REPL commands:
 ${AGENT_REPL_HELP}
 For the built-in agent, export OPENAI_API_KEY (default) or ANTHROPIC_API_KEY (--provider anthropic), or use --env-file.
@@ -326,6 +344,8 @@ Targets:
   ${CLOUDFLARE_TARGET.id.padEnd(12)} ${CLOUDFLARE_TARGET.description}
 `,
     subcommands: [PROJECT_TARGET.id, CLOUDFLARE_TARGET.id],
+    defaultSubcommand: PROJECT_TARGET.id,
+    positional: { max: 1, error: "Pass at most one target." },
     options: {
       project: {
         ...PROJECT_FILE_OPTION,
@@ -575,7 +595,7 @@ Serve the local pipeline studio from an append-only SQLite run store or a
 finished NDJSON trace. Load pipelines from a project, or register
 pipeline or definePipelineCommand modules directly, and only with a writable SQLite store.
 `,
-    positional: "file",
+    positional: { max: 1, error: "Pass at most one project file.", completion: "file" },
     options: {
       command: {
         type: "string",
@@ -642,7 +662,12 @@ Enable it in the current shell:
 Add the same line to ~/.bashrc, ~/.zshrc (after compinit), or
 ~/.config/fish/config.fish to keep it.
 `,
-    positional: COMPLETION_SHELLS,
+    positional: {
+      min: 1,
+      max: 1,
+      error: `Pass one shell: ${COMPLETION_SHELLS.join(", ")}.`,
+      completion: COMPLETION_SHELLS,
+    },
     options: {},
   },
 } as const satisfies Readonly<

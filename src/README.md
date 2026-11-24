@@ -114,6 +114,10 @@ Only boundaries that are not obvious from names are listed.
 - `pipeline-definition-validation.ts` produces validated order, targets, cache plans
   and finalizer metadata once; graph compilation consumes that order instead of
   sorting again.
+- `pipeline-graph.ts` owns target traversal for planning and definition validation.
+  `pipeline-disposition.ts` applies the same dependency rules to planned states
+  and executed reports. `pipeline-identity.ts` owns private operations for exact
+  compiled pipeline objects.
 - `pipeline-execute.ts` coordinates a run; `lifecycle.ts` owns hooks, trace creation,
   scoped loggers and flushing; `pipeline-run-state.ts` owns state transitions and
   terminal reports; `pipeline-cache.ts` owns cache keys and policy around handler
@@ -164,6 +168,8 @@ Only boundaries that are not obvious from names are listed.
   `checkpoint-session.ts`, `checkpoint-format.ts` and `checkpoint-calls.ts` own
   recovery. Callers cannot mutate the journal. Storage and codecs are separate
   contracts; traces stay best-effort and independent of recovery.
+- `agent-values.ts` owns the identity and replay validators shared by live
+  decisions, tool registration and checkpoint decoding.
 - Handler tools validate arguments before dispatch and run as private one-step
   pipelines. `default-tool-names.ts` is the pure builtin inventory shared with CLI
   setup, and `default-tools.ts` must provide exactly those names.
@@ -218,14 +224,16 @@ Only boundaries that are not obvious from names are listed.
   execution contract separately from the Studio browser protocol.
   `cloudflare-runner-queue.ts` owns Bun claims, cancellation and the attempt lease
   in the Studio object. `runner-protocol.ts` in hosting defines the shared handoff.
-  Collector and Bun ingestion use `attempt-ledger-sqlite.ts` for run binding and
-  batch receipts. Bun commits a child’s terminal event and its result together.
+  Collector and Bun ingestion use `attempt-ledger-sqlite.ts` for run binding,
+  sequence checks and batch receipts. Bun commits a child's terminal event and its
+  result together. The parent receives that result after reading stage progress.
   Explicit child composition calls an internal host capability when configured.
 
 ### Workbench
 
-- `workbench-command-specs.ts` is the single command inventory; dispatch, root help,
-  completion and subcommand parsing derive from it.
+- `workbench-command-specs.ts` is the command inventory for dispatch, help,
+  completion and parsing. It owns static positional bounds and the application
+  argument separator. Handlers validate combinations that depend on the operation.
 - Normalize project pipelines and direct files into workbench registrations at
   loading boundaries; commands and Studio use the lazy loaders rather than
   branching on source kind.
@@ -235,15 +243,17 @@ Only boundaries that are not obvious from names are listed.
 - `workbench/cloud/` never imports selected pipeline files and stays outside public
   runtime entrypoints. `workbench/agent/` holds the REPL, provider resolution and
   prompt/session sequencing over `createAgentSession`.
-- Studio launcher and launch sessions receive only a trace exporter; they cannot
-  query, clear or close the store. Stop admission, drain executions, then close storage.
+- Studio launcher and launch sessions receive a trace exporter. The local launch
+  session owns the admission acknowledgement and exposes its exporter to the
+  tracing configuration. Stop admission, drain executions, then close storage.
 
 ### Reporter
 
 `interactive-reporter.ts` owns lifecycle and redraw; `live-ticker.ts` owns worker
 startup, fallback and shutdown; `live-ticker-frame.ts` is pure rendering through an
-injected writer; `live-ticker-protocol.ts` owns worker messages and the shared-memory
-output lock. Only a worker exit permits clearing an abandoned lock.
+injected writer. `reporter-format.ts` owns shared labels and duration formatting.
+`live-ticker-protocol.ts` owns worker messages and the shared-memory output lock.
+Only a worker exit permits clearing an abandoned lock.
 
 ### History and Studio
 
@@ -259,7 +269,8 @@ output lock. Only a worker exit permits clearing an abandoned lock.
   after the maintenance adapter succeeds. `handler.ts` fixes request order:
   authentication, trusted host, Origin on mutations, mount, health, page, then API.
 - `studio/shared/schema.ts` defines the browser protocol and reuses pure trace
-  schemas; successful reply shapes belong there.
+  schemas. `studio/shared/api-paths.ts` owns the paths and mutation guard headers
+  used by both the request handler and browser transport.
 - Studio server and browser code is separated by directory; the browser never loads
   server or transport code from graph construction.
 

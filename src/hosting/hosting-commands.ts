@@ -1,4 +1,9 @@
-import type { CliCommandDescriptor, CliContext } from "../cli/cli.js";
+import type { CliContext } from "../cli/cli.js";
+import {
+  isPipelineCommandContract,
+  type PipelineCommandContract,
+  type PipelineCommandParseResult,
+} from "../cli/cli-pipeline-command-contract.js";
 import { definePipelineCommand, type PipelineCommand } from "../cli/cli-pipeline-command.js";
 import {
   cliValidationReportLines,
@@ -8,12 +13,7 @@ import {
   toExitCode,
   TUBELESS_WORKBENCH_EXIT_CODE,
 } from "../cli/cli-exit.js";
-import type {
-  Pipeline,
-  PipelineContext,
-  PipelinePlan,
-  PipelineRunControls,
-} from "../core/pipeline.js";
+import type { Pipeline, PipelineContext } from "../core/pipeline.js";
 import { causalPipelineErrors } from "../core/pipeline-diagnostics.js";
 import type {
   AnyProjectPipeline,
@@ -23,22 +23,6 @@ import type {
 import { renderPipelineError } from "../render/render.js";
 import type { PipelineRunStudioCommand } from "../studio/shared/protocol.js";
 import { isAbortError } from "../utilities/abort.js";
-import { pipelineForCommand } from "../utilities/pipeline-command-marker.js";
-
-export type HostedParseResult =
-  | { kind: "values"; values: Record<string, unknown> }
-  | { kind: "help"; helpText: string }
-  | { kind: "error"; errors: readonly string[]; helpText: string };
-
-/** Runtime surface of a definePipelineCommand result needed to host it. */
-export interface HostedPipelineCommand {
-  readonly id: string;
-  readonly descriptor: CliCommandDescriptor;
-  parseValues(values: Record<string, unknown>, context?: Partial<CliContext>): HostedParseResult;
-  execute(values: Record<string, unknown>, context?: Partial<CliContext>): Promise<unknown>;
-  plan(controls?: PipelineRunControls): PipelinePlan;
-}
-
 export interface HostedOutput {
   readonly cwd: string;
   readonly stdout: { write(chunk: string): boolean | void };
@@ -48,7 +32,7 @@ export interface HostedOutput {
 export interface HostedCommand {
   readonly tracing?: ProjectOptions["tracing"];
   readonly descriptor: PipelineRunStudioCommand;
-  readonly command: HostedPipelineCommand;
+  readonly command: PipelineCommandContract;
 }
 
 /** Validate one owned submission and expose only declared command parameters. */
@@ -58,7 +42,7 @@ export function parseHostedLaunch(
   output: HostedOutput
 ): { values: Record<string, unknown> } | { errors: readonly string[] } {
   if (!entry) return { errors: ["Pipeline command not found."] };
-  let parsed: HostedParseResult;
+  let parsed: PipelineCommandParseResult;
   try {
     parsed = entry.command.parseValues(
       values,
@@ -81,24 +65,6 @@ export function parseHostedLaunch(
   };
 }
 
-function isHostedPipelineCommand(value: unknown): value is HostedPipelineCommand {
-  if (!pipelineForCommand(value)) return false;
-  const candidate = value as object;
-  return (
-    "id" in candidate &&
-    typeof candidate.id === "string" &&
-    "descriptor" in candidate &&
-    typeof candidate.descriptor === "object" &&
-    candidate.descriptor !== null &&
-    "parseValues" in candidate &&
-    typeof candidate.parseValues === "function" &&
-    "execute" in candidate &&
-    typeof candidate.execute === "function" &&
-    "plan" in candidate &&
-    typeof candidate.plan === "function"
-  );
-}
-
 /** Pipeline surface available before proving that a loaded module can also run. */
 export type HostablePipeline = Pick<
   Pipeline<object, unknown>,
@@ -117,7 +83,7 @@ function isExecutablePipeline(pipeline: HostablePipeline): pipeline is Pipeline<
 export function commandForPipeline(
   pipeline: HostablePipeline,
   source: "directly loaded" | "project"
-): HostedPipelineCommand & PipelineCommand<{}, unknown> {
+): PipelineCommandContract & PipelineCommand<{}, unknown> {
   if (!isExecutablePipeline(pipeline)) {
     throw new Error("The selected pipeline does not expose executable run methods.");
   }
@@ -134,7 +100,7 @@ export function commandForPipeline(
   return definePipelineCommand(pipeline);
 }
 
-export function studioDescriptor(command: HostedPipelineCommand): PipelineRunStudioCommand {
+export function studioDescriptor(command: PipelineCommandContract): PipelineRunStudioCommand {
   const descriptor: PipelineRunStudioCommand = {
     canPlan: true,
     id: command.id,
@@ -154,16 +120,16 @@ export function hostedProjectCommands(
     "commands" | "pipelines" | "tracing"
   >
 ): readonly HostedCommand[] {
-  const explicit = new Map<string, HostedPipelineCommand>();
+  const explicit = new Map<string, PipelineCommandContract>();
   for (const command of project.commands) {
-    if (!isHostedPipelineCommand(command)) {
+    if (!isPipelineCommandContract(command)) {
       throw new Error("Project commands must be created with definePipelineCommand.");
     }
     explicit.set(command.id, command);
   }
   const seen = new Set<string>();
   return project.pipelines.map((pipeline) => {
-    let command: HostedPipelineCommand;
+    let command: PipelineCommandContract;
     try {
       command = explicit.get(pipeline.id) ?? commandForPipeline(pipeline, "project");
     } catch (error) {
@@ -255,7 +221,7 @@ export async function executeHostedCommandOperation(
 }
 
 export async function executeHostedCommand(
-  command: Pick<HostedPipelineCommand, "execute">,
+  command: Pick<PipelineCommandContract, "execute">,
   values: Record<string, unknown>,
   output: HostedOutput,
   signal: AbortSignal,

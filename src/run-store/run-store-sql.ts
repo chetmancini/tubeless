@@ -44,9 +44,11 @@ export const RUN_EVENT_TRIGGER_STATEMENTS: readonly string[] = [
   END`,
 ];
 
-export const RUN_EVENT_DROP_TRIGGER_STATEMENTS: readonly string[] = [
+export const RUN_EVENT_CLEAR_STATEMENTS: readonly string[] = [
   "DROP TRIGGER IF EXISTS pipeline_run_events_no_update",
   "DROP TRIGGER IF EXISTS pipeline_run_events_no_delete",
+  "DELETE FROM pipeline_run_events",
+  ...RUN_EVENT_TRIGGER_STATEMENTS,
 ];
 
 export const RUN_EVENT_INSERT_SQL = `INSERT INTO pipeline_run_events (

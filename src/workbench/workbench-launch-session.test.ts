@@ -57,7 +57,7 @@ describe("WorkbenchLaunchSession", () => {
       acknowledged = true;
     });
 
-    const exportStart = session.pipelineContext.tracing!.exporter.export(startedEvent());
+    const exportStart = session.exporter.export(startedEvent());
     await Promise.resolve();
     expect(exported).toEqual([startedEvent()]);
     expect(recorded).toEqual([]);
@@ -90,9 +90,7 @@ describe("WorkbenchLaunchSession", () => {
     });
     const tracked = session.track(execution.promise, vi.fn());
 
-    await expect(session.pipelineContext.tracing!.exporter.export(startedEvent())).rejects.toBe(
-      failure
-    );
+    await expect(session.exporter.export(startedEvent())).rejects.toBe(failure);
     await expect(tracked.acknowledgement).rejects.toBe(failure);
     expect(onRunRecorded).not.toHaveBeenCalled();
     expect(session.runId).toBeUndefined();
@@ -114,7 +112,7 @@ describe("WorkbenchLaunchSession", () => {
     });
     const tracked = session.track(execution.promise, reportLateFailure);
 
-    await session.pipelineContext.tracing!.exporter.export(startedEvent());
+    await session.exporter.export(startedEvent());
     await expect(tracked.acknowledgement).resolves.toEqual({ accepted: true, runId: "run-1" });
     execution.reject(failure);
     await tracked.settled;

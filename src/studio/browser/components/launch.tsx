@@ -1,5 +1,5 @@
 import type { TargetedEvent } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { CliParameterDescriptor } from "../../../cli/cli.js";
 import type { PipelinePlan } from "../../../core/pipeline.js";
 import type { StudioApi } from "../transport.js";
@@ -11,6 +11,7 @@ import {
   createStudioLaunchForm,
   serializeLaunchValues,
   serializePlanInput,
+  updateStudioLaunchForm,
   type StudioLaunchForm,
   type StudioParameterValue,
 } from "../launch-form.js";
@@ -270,24 +271,27 @@ export function LaunchModal({
   const [planning, setPlanning] = useState(false);
   const firstField = useRef<HTMLDivElement>(null);
   const planVersion = useRef(0);
+  const invalidatePreview = useCallback(() => {
+    planVersion.current += 1;
+    setPlan(null);
+  }, []);
 
   useEffect(() => {
     setSelectedId(commandId);
   }, [commandId, commands]);
 
   useEffect(() => {
-    planVersion.current += 1;
+    invalidatePreview();
     setForm(
       command
         ? createStudioLaunchForm(command, previousLaunch)
         : { values: [], preservedKeys: new Set() }
     );
-    setPlan(null);
     setError("");
     requestAnimationFrame(() =>
       firstField.current?.querySelector<HTMLElement>("input, select, textarea")?.focus()
     );
-  }, [command, previousLaunch]);
+  }, [command, previousLaunch, invalidatePreview]);
 
   useEscapeDismiss(onClose, {
     blocked: launching || planning,
@@ -299,22 +303,8 @@ export function LaunchModal({
   };
   const updateValue = (index: number, next: StudioParameterValue[]) => {
     if (!command) return;
-    planVersion.current += 1;
-    setForm((current) => ({
-      ...current,
-      values: current.values.map((value, candidateIndex) => {
-        if (candidateIndex === index) return next;
-        const parameter = command.parameters[candidateIndex];
-        return command.parameters[index]?.exclusive &&
-          command.parameters[index]?.multiple &&
-          next.length > 0 &&
-          parameter?.exclusive &&
-          parameter.multiple
-          ? []
-          : value;
-      }),
-    }));
-    setPlan(null);
+    invalidatePreview();
+    setForm((current) => updateStudioLaunchForm(command, current, index, next));
   };
   const preview = async () => {
     if (!command?.canPlan || planning) return;
@@ -400,8 +390,7 @@ export function LaunchModal({
               id="launchCommand"
               value={selectedId}
               onChange={(event) => {
-                planVersion.current += 1;
-                setPlan(null);
+                invalidatePreview();
                 setError("");
                 setSelectedId(event.currentTarget.value);
               }}

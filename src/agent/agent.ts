@@ -5,7 +5,7 @@ import type {
   DefaultAgentToolName,
   Tools,
 } from "./agent-types.js";
-import { agentError } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
 import { compileAgent } from "./compile-agent.js";
 
 export { pipelineTool } from "./pipeline-tool.js";

@@ -40,7 +40,30 @@ function iterationFields(
   };
 }
 
-function agentFields(agent: NonNullable<PipelineDefinitionSnapshot["steps"][number]["agent"]>) {
+function structuralIdentityFields(identity: PipelineDefinitionIdentity) {
+  return { version: identity.version, structuralFingerprint: identity.structuralFingerprint };
+}
+
+function fullIdentityFields(identity: PipelineDefinitionIdentity) {
+  return {
+    ...structuralIdentityFields(identity),
+    ...(identity.implementationVersion !== undefined
+      ? { implementationVersion: identity.implementationVersion }
+      : {}),
+    definitionId: identity.definitionId,
+  };
+}
+
+type AgentMetadata = NonNullable<PipelineDefinitionSnapshot["steps"][number]["agent"]>;
+
+function sortedCapabilities(agent: AgentMetadata) {
+  return [...agent.capabilities].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+function agentFields<TIdentity>(
+  agent: AgentMetadata,
+  projectIdentity: (identity: PipelineDefinitionIdentity) => TIdentity
+) {
   return {
     limits: {
       maxTurns: agent.limits.maxTurns,
@@ -50,21 +73,12 @@ function agentFields(agent: NonNullable<PipelineDefinitionSnapshot["steps"][numb
       maxConcurrency: agent.limits.maxConcurrency,
     },
     resultSchemaFingerprint: agent.resultSchemaFingerprint,
-    capabilities: [...agent.capabilities]
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-      .map((capability) => ({
-        name: capability.name,
-        description: capability.description,
-        inputSchemaFingerprint: capability.inputSchemaFingerprint,
-        identity: {
-          version: capability.identity.version,
-          structuralFingerprint: capability.identity.structuralFingerprint,
-          ...(capability.identity.implementationVersion !== undefined
-            ? { implementationVersion: capability.identity.implementationVersion }
-            : {}),
-          definitionId: capability.identity.definitionId,
-        },
-      })),
+    capabilities: sortedCapabilities(agent).map((capability) => ({
+      name: capability.name,
+      description: capability.description,
+      inputSchemaFingerprint: capability.inputSchemaFingerprint,
+      identity: projectIdentity(capability.identity),
+    })),
   };
 }
 
@@ -107,7 +121,7 @@ export function compileDefinitionSnapshot(input: {
             },
           }
         : {}),
-      ...(step[STEP_AGENT] ? { agent: agentFields(step[STEP_AGENT]) } : {}),
+      ...(step[STEP_AGENT] ? { agent: agentFields(step[STEP_AGENT], fullIdentityFields) } : {}),
       ...(nested
         ? {
             nestedPipeline: {
@@ -187,22 +201,7 @@ export function createDefinitionIdentity(
             },
           }
         : {}),
-      ...(step.agent
-        ? {
-            agent: {
-              ...agentFields(step.agent),
-              capabilities: agentFields(step.agent).capabilities.map(
-                ({ identity, ...capability }) => ({
-                  ...capability,
-                  identity: {
-                    version: identity.version,
-                    structuralFingerprint: identity.structuralFingerprint,
-                  },
-                })
-              ),
-            },
-          }
-        : {}),
+      ...(step.agent ? { agent: agentFields(step.agent, structuralIdentityFields) } : {}),
       ...(step.nestedPipeline
         ? {
             nestedPipeline: {
@@ -211,12 +210,7 @@ export function createDefinitionIdentity(
               ...iterationFields(step.nestedPipeline),
               stepIds: [...step.nestedPipeline.stepIds],
               ...(step.nestedPipeline.identity
-                ? {
-                    identity: {
-                      version: step.nestedPipeline.identity.version,
-                      structuralFingerprint: step.nestedPipeline.identity.structuralFingerprint,
-                    },
-                  }
+                ? { identity: structuralIdentityFields(step.nestedPipeline.identity) }
                 : {}),
               ...(step.nestedPipeline.concurrency !== undefined
                 ? { concurrency: step.nestedPipeline.concurrency }
@@ -255,28 +249,12 @@ export function createDefinitionIdentity(
         const child = step.nestedPipeline?.identity;
         if (step.agent)
           return {
-            child: child
-              ? {
-                  version: child.version,
-                  structuralFingerprint: child.structuralFingerprint,
-                  ...(child.implementationVersion !== undefined
-                    ? { implementationVersion: child.implementationVersion }
-                    : {}),
-                  definitionId: child.definitionId,
-                }
-              : undefined,
-            capabilities: agentFields(step.agent).capabilities.map(({ identity }) => identity),
+            child: child ? fullIdentityFields(child) : undefined,
+            capabilities: sortedCapabilities(step.agent).map(({ identity }) =>
+              fullIdentityFields(identity)
+            ),
           };
-        if (!child) return null;
-        // Bind every recorded child identity field, not just its opaque definition ID.
-        return {
-          version: child.version,
-          structuralFingerprint: child.structuralFingerprint,
-          ...(child.implementationVersion !== undefined
-            ? { implementationVersion: child.implementationVersion }
-            : {}),
-          definitionId: child.definitionId,
-        };
+        return child ? fullIdentityFields(child) : null;
       }),
     }),
   };

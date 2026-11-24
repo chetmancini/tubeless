@@ -1,10 +1,6 @@
-import { manageRemoteSignal } from "../workbench-remote-io.js";
+import { manageCliSignal } from "../../cli/cli-signal.js";
 import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
-import {
-  renderWorkbenchUsage,
-  parseSubcommandArgs,
-  runWorkbenchSubcommand,
-} from "../workbench-subcommand.js";
+import { renderWorkbenchUsage, runWorkbenchSubcommand } from "../workbench-subcommand.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createCloudClient, cloudVerificationUrl } from "./client.js";
@@ -33,7 +29,6 @@ export async function runAuth(
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.auth,
-      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.auth.options),
       run: async ({ values, positionals }) => {
         const [command] = positionals;
         if (
@@ -42,7 +37,7 @@ export async function runAuth(
         ) {
           return writeUsageError(io, "Pass login, status, or logout.", AUTH_USAGE);
         }
-        const managed = manageRemoteSignal(io.signal);
+        const managed = manageCliSignal(io.signal);
         try {
           const host = resolveCloudHost(values.host);
           const store = dependencies.store ?? createNativeCredentialStore();

@@ -16,6 +16,8 @@ type CommandRunner = (
   context: Pick<PipelineStepContext<object>, "cwd" | "signal" | "log">
 ) => Promise<CheckProcessOutcome>;
 
+const PIPELINE_ID = "node-check";
+
 /** Schedule an already verified plan, with process admission owned by the caller. */
 export async function executeNodeCheckPlan(
   plan: NodeCheckPlan,
@@ -24,50 +26,55 @@ export async function executeNodeCheckPlan(
   dryRun?: boolean
 ): Promise<NodeCheckExecution> {
   const { step } = createSteps();
-  const steps: Step<string, CheckProcessOutcome, object>[] = [];
+  const steps = new Map<string, Step<string, CheckProcessOutcome, object>>();
   const commands: NodeCheckExecution["commands"] = [];
-  const reports: NodeCheckExecution["reports"] = plan.commands
-    .filter((command) => command.kind === "vitest")
-    .map(({ id: stepId, report: { path } }) => ({ stepId, path, result: { state: "missing" } }));
+  const reports: NodeCheckExecution["reports"] = [];
   for (const command of plan.commands) {
-    steps.push(
+    const report:
+      | { toolVersion: string; entry: NodeCheckExecution["reports"][number] }
+      | undefined =
+      command.kind === "vitest"
+        ? {
+            toolVersion: command.report.version,
+            entry: {
+              stepId: command.id,
+              path: command.report.path,
+              result: { state: "missing" },
+            },
+          }
+        : undefined;
+    if (report) reports.push(report.entry);
+    const dependsOn = command.dependsOn.map((id) => {
+      const dependency = steps.get(id);
+      if (!dependency) throw new Error(`Check dependency ${id} must precede ${command.id}.`);
+      return dependency;
+    });
+    steps.set(
+      command.id,
       step(command.id, {
         description: command.reason,
-        dependsOn: command.dependsOn.map((id) => steps.find((item) => item.id === id)!),
+        dependsOn,
         dryRun: "skip",
         run: async (_inputs, ctx) => {
-          if (command.kind === "vitest") await prepareCheckReport(ctx.cwd, command.report.path);
+          if (report) await prepareCheckReport(ctx.cwd, report.entry.path);
           const outcome = await run(command, ctx);
           commands.push({ id: command.id, process: outcome });
-          if (command.kind === "vitest") {
-            const file = await readCheckReportFile(ctx.cwd, command.report.path);
-            const result =
+          if (report) {
+            const file = await readCheckReportFile(ctx.cwd, report.entry.path);
+            report.entry.result =
               "result" in file
                 ? file.result
                 : vitestCheckReport(file.content, {
                     root: ctx.cwd,
-                    toolVersion: command.report.version,
+                    toolVersion: report.toolVersion,
                     context: {
-                      pipelineId: "node-check",
+                      pipelineId: PIPELINE_ID,
                       runId: ctx.runId,
                       stepId: command.id,
                       attemptId: ctx.attemptId,
                     },
                     process: outcome,
                   });
-            reports.find((report) => report.stepId === command.id)!.result = result;
-            ctx.signal?.throwIfAborted();
-            if (
-              outcome.status === "exited" &&
-              outcome.exitCode === 0 &&
-              (result.state !== "available" ||
-                result.report.completeness !== "complete" ||
-                result.report.tests.some((test) => test.outcome === "failed") ||
-                result.report.failures.length)
-            )
-              throw new Error(
-                `Expected complete Vitest report for ${command.id}; collection cannot establish a complete gate.`
-              );
           }
           ctx.signal?.throwIfAborted();
           if (outcome.status !== "exited" || outcome.exitCode !== 0)
@@ -77,12 +84,23 @@ export async function executeNodeCheckPlan(
               ),
               { code: "NATIVE_PROCESS_FAILED" }
             );
+          const collected = report?.entry.result;
+          if (
+            collected &&
+            (collected.state !== "available" ||
+              collected.report.completeness !== "complete" ||
+              collected.report.tests.some((test) => test.outcome === "failed") ||
+              collected.report.failures.length)
+          )
+            throw new Error(
+              `Expected complete Vitest report for ${command.id}; collection cannot establish a complete gate.`
+            );
           return outcome;
         },
       })
     );
   }
-  const pipeline = definePipeline({ id: "node-check", steps });
+  const pipeline = definePipeline({ id: PIPELINE_ID, steps: [...steps.values()] });
   const execution = await pipeline.run(
     {},
     { maxConcurrency: plan.maxConcurrency, dryRun },

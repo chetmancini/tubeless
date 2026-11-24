@@ -1,3 +1,4 @@
+import { hasPublishedOutput } from "./pipeline-disposition.js";
 import type { PipelineError, PipelineErrorCause, PipelineStepReport } from "./pipeline-types.js";
 
 function deepestPipelineCause(
@@ -34,17 +35,10 @@ function unpublishedByFailure(
   if (report === undefined || report.status === "completed") return false;
   if (report.status !== "skipped") return true;
   if (report.reason === "failed-dependency" || report.reason === "fail-fast") return true;
-  // Dependencies are acyclic, so this walk terminates.
   if (report.reason === "unmet-dependency" && report.dependencyId !== undefined) {
     return unpublishedByFailure(reports.get(report.dependencyId), reports);
   }
   return false;
-}
-
-function unpublished(report: PipelineStepReport): boolean {
-  return (
-    report.status !== "completed" && !(report.status === "skipped" && report.reason === "policy")
-  );
 }
 
 /**
@@ -62,7 +56,7 @@ export function causalPipelineErrors(run: {
   if (causal.length === 0 || !run.steps) return run.errors;
   const reports = new Map(run.steps.map((report) => [report.id, report]));
   const derived = run.steps.every(
-    (report) => !unpublished(report) || unpublishedByFailure(report, reports)
+    (report) => hasPublishedOutput(report) || unpublishedByFailure(report, reports)
   );
   return derived ? causal : run.errors;
 }

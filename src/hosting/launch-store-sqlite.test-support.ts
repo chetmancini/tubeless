@@ -9,14 +9,15 @@ import {
   storedRunEvent,
   type RunEventRecord,
 } from "../run-store/run-store-sql.js";
-import { SqliteHostedLaunchStore, type SqliteLaunchStorage } from "./launch-store-sqlite.js";
+import { SqliteHostedLaunchStore } from "./launch-store-sqlite.js";
+import type { SqliteStorage } from "./sqlite-storage.js";
 
 /** A second, plain SQLite adapter: no Durable Object storage, alarms, KV or schema metadata. */
 export function createSqliteLaunchStoreFixture(filename = ":memory:") {
   const database = new DatabaseSync(filename);
   for (const statement of [...RUN_EVENT_TABLE_STATEMENTS, ...RUN_EVENT_TRIGGER_STATEMENTS])
     database.exec(statement);
-  const storage: SqliteLaunchStorage = {
+  const storage: SqliteStorage = {
     sql: {
       exec(query, ...bindings) {
         // SAFETY: fixtures supply SQLite scalar bindings and read row objects.

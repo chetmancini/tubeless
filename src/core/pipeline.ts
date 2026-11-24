@@ -1,4 +1,3 @@
-import type { PreparedOptions } from "./prepared-options.js";
 import { PipelineExecutionError } from "./pipeline-execution-error.js";
 import {
   defaultPipelineContext,
@@ -18,11 +17,7 @@ import type {
 } from "./pipeline-definition.js";
 import { PipelineDefinitionError, pipelineDiagnostic } from "./pipeline-errors.js";
 import { requireOutputs } from "./pipeline-finalizer.js";
-import {
-  brandCompiledPipeline,
-  EXECUTE_COMPILED_RUN,
-  EXECUTE_TEST_RUN,
-} from "./pipeline-identity.js";
+import { registerCompiledPipeline, type CompiledRunInvocation } from "./pipeline-identity.js";
 import { renderPipelineMermaid } from "./pipeline-mermaid.js";
 import { buildPipelinePlan } from "./pipeline-plan.js";
 import { prepareRunControls } from "./run-controls.js";
@@ -203,21 +198,17 @@ export function definePipeline<
   }
 
   async function executeCompiled(
-    runPlan: PipelinePlan,
-    options: TInputOptions,
-    controls: PipelineRunControls<TStepId, TTargetId>,
-    context: Partial<PipelineContext> = defaultPipelineContext(),
-    overrides?: ReadonlyMap<AnyStep, unknown>,
-    preparedOptions?: PreparedOptions
+    input: CompiledRunInvocation<TInputOptions, TStepId, TTargetId>,
+    overrides?: ReadonlyMap<AnyStep, unknown>
   ): Promise<PipelineRun<TPipelineResult>> {
     return executePlannedRun({
       compiled,
-      controls,
-      domainOptions: options,
-      plan: runPlan,
-      runtime: resolvePipelineRuntime(context),
+      controls: input.controls,
+      domainOptions: input.options,
+      plan: input.plan,
+      runtime: resolvePipelineRuntime(input.context),
       overrides,
-      preparedOptions,
+      preparedOptions: input.preparedOptions,
     });
   }
 
@@ -230,7 +221,7 @@ export function definePipeline<
     // SAFETY: the public signature permits omission only when {} satisfies the
     // input type. Schemas still validate the default object during execution.
     const input = options === undefined ? ({} as TInputOptions) : options;
-    return executeCompiled(prepared.plan, input, prepared.controls, context);
+    return executeCompiled({ ...prepared, options: input, context });
   }
 
   async function runOrThrow(
@@ -263,14 +254,9 @@ export function definePipeline<
     runOrThrow,
     toMermaid,
   };
-  Object.defineProperty(pipeline, EXECUTE_COMPILED_RUN, { value: executeCompiled });
-  Object.defineProperty(pipeline, EXECUTE_TEST_RUN, {
-    value: (
-      options: TInputOptions,
-      controls: PipelineRunControls<TStepId, TTargetId>,
-      context: Partial<PipelineContext>,
-      overrides: ReadonlyMap<AnyStep, unknown>
-    ) => {
+  registerCompiledPipeline<TInputOptions, TPipelineResult, TStepId, TTargetId>(pipeline, {
+    run: executeCompiled,
+    runWithOverrides({ options, controls, context, overrides }) {
       const resolved = new Map<AnyStep, unknown>();
       for (const [step, value] of overrides) {
         const compiledStep = compiled.compiledByAuthorStep.get(step);
@@ -294,15 +280,11 @@ export function definePipeline<
           : [];
       const prepared = prepareRun(controls, errors);
       return executeCompiled(
-        prepared.plan,
-        options === undefined ? ({} as TInputOptions) : options,
-        prepared.controls,
-        context,
+        { ...prepared, options: options === undefined ? ({} as TInputOptions) : options, context },
         resolved
       );
     },
   });
-  brandCompiledPipeline(pipeline);
   return pipeline;
 }
 

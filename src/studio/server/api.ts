@@ -1,7 +1,15 @@
 import type { PipelineRunEventReader } from "../../run-store/run-store.js";
 import type { LaunchActor, StudioLaunchMetadata } from "../shared/launch-metadata.js";
 import { jsonResponse } from "../../utilities/http-response.js";
+import { sha256Hex } from "../../utilities/sha256.js";
 import type { AgentTranscriptReader } from "../../tracing/agent-transcript.js";
+import {
+  parseStudioResourcePath,
+  STUDIO_API_ACTION,
+  STUDIO_API_PATH,
+  STUDIO_GUARD_HEADER,
+  STUDIO_GUARD_VALUE,
+} from "../shared/api-paths.js";
 import {
   isPipelineRunStudioParameter,
   parseStudioLaunchRequest,
@@ -33,7 +41,6 @@ export interface PipelineRunStudioApiOptions {
   transcripts?: Pick<AgentTranscriptReader, "list">;
 }
 
-/** Own API routes and their state without opening a listener or concrete storage. */
 export function createStudioApiHandler(
   options: PipelineRunStudioApiOptions
 ): (request: Request, url: URL, actor?: LaunchActor) => Promise<Response> {
@@ -62,7 +69,7 @@ export function createStudioApiHandler(
   const instanceId = crypto.randomUUID();
   return async (request, url, actor) => {
     try {
-      if (request.method === "GET" && url.pathname === "/api/snapshot") {
+      if (request.method === "GET" && url.pathname === STUDIO_API_PATH.snapshot) {
         const query = url.searchParams.get("query") ?? "";
         if (query.length > 4096)
           throw new StudioRequestError(
@@ -86,7 +93,7 @@ export function createStudioApiHandler(
           pipelineId
         );
         const liveRunIds = (await launcher?.liveRunIds?.()) ?? [];
-        const etag = `"${await sha256Hex(JSON.stringify([instanceId, snapshot.revision, url.search, liveRunIds]))}"`;
+        const etag = `"${await sha256Hex(new TextEncoder().encode(JSON.stringify([instanceId, snapshot.revision, url.search, liveRunIds])))}"`;
         if (request.headers.get("if-none-match") === etag) {
           return new Response(null, { status: 304, headers: { etag } });
         }
@@ -94,12 +101,13 @@ export function createStudioApiHandler(
       }
       if (
         request.method === "GET" &&
-        (url.pathname === "/api/definitions" || url.pathname === "/api/definitions/runs")
+        (url.pathname === STUDIO_API_PATH.definitions ||
+          url.pathname === STUDIO_API_PATH.definitionRuns)
       ) {
         const pipelineId = url.searchParams.get("pipelineId") ?? "";
         const definitionId = url.searchParams.get("definitionId") ?? undefined;
         const result =
-          url.pathname === "/api/definitions/runs"
+          url.pathname === STUDIO_API_PATH.definitionRuns
             ? await eventState.definitionRuns(pipelineId, definitionId, historyOffset(url))
             : await eventState
                 .definition(pipelineId, definitionId)
@@ -113,15 +121,15 @@ export function createStudioApiHandler(
               "Refresh the observed definitions."
             );
       }
-      if (request.method === "GET" && url.pathname === "/api/capabilities") {
+      if (request.method === "GET" && url.pathname === STUDIO_API_PATH.capabilities) {
         return jsonResponse({
           canCancel: launcher?.cancel !== undefined && launcher.liveRunIds !== undefined,
           canClearHistory: history !== undefined,
         });
       }
-      const childrenMatch = /^\/api\/runs\/([^/]+)\/children$/.exec(url.pathname);
-      if (request.method === "GET" && childrenMatch) {
-        const runId = decodePathSegment(childrenMatch[1]);
+      const runResource = parseStudioResourcePath(url.pathname, STUDIO_API_PATH.runs);
+      if (request.method === "GET" && runResource?.action === STUDIO_API_ACTION.children) {
+        const runId = decodePathSegment(runResource.encodedId);
         const page = await eventState.childRuns(runId, childPage(url));
         return page
           ? jsonResponse(page)
@@ -129,12 +137,11 @@ export function createStudioApiHandler(
               404,
               "run_not_found",
               "Run not found.",
-              "Refresh /api/snapshot and choose an available runId."
+              `Refresh ${STUDIO_API_PATH.snapshot} and choose an available runId.`
             );
       }
-      const runMatch = /^\/api\/runs\/([^/]+)$/.exec(url.pathname);
-      if (request.method === "GET" && runMatch) {
-        const runId = decodePathSegment(runMatch[1]);
+      if (request.method === "GET" && runResource && runResource.action === undefined) {
+        const runId = decodePathSegment(runResource.encodedId);
         const detail = await eventState.detail(runId);
         return detail
           ? jsonResponse({
@@ -154,12 +161,11 @@ export function createStudioApiHandler(
               404,
               "run_not_found",
               "Run not found.",
-              "Refresh /api/snapshot and choose an available runId."
+              `Refresh ${STUDIO_API_PATH.snapshot} and choose an available runId.`
             );
       }
-      const transcriptMatch = /^\/api\/runs\/([^/]+)\/transcript$/.exec(url.pathname);
-      if (request.method === "GET" && transcriptMatch) {
-        const runId = decodePathSegment(transcriptMatch[1]);
+      if (request.method === "GET" && runResource?.action === STUDIO_API_ACTION.transcript) {
+        const runId = decodePathSegment(runResource.encodedId);
         const afterSequence = queryInteger(
           url,
           "afterSequence",
@@ -177,8 +183,7 @@ export function createStudioApiHandler(
               "Choose a recorded agent run with a transcript source."
             );
       }
-      const cancelMatch = /^\/api\/runs\/([^/]+)\/cancel$/.exec(url.pathname);
-      if (request.method === "POST" && cancelMatch) {
+      if (request.method === "POST" && runResource?.action === STUDIO_API_ACTION.cancel) {
         if (!launcher?.cancel) {
           return errorResponse(
             405,
@@ -187,27 +192,27 @@ export function createStudioApiHandler(
             "Start the Studio with a launcher that provides cancel and liveRunIds."
           );
         }
-        if (request.headers.get("x-tubeless-studio-cancel") !== "1") {
+        if (request.headers.get(STUDIO_GUARD_HEADER.cancel) !== STUDIO_GUARD_VALUE) {
           return errorResponse(
             415,
             "cancel_guard_required",
             "A same-origin cancel request is required.",
-            "Send x-tubeless-studio-cancel: 1 from the Studio origin."
+            `Send ${STUDIO_GUARD_HEADER.cancel}: ${STUDIO_GUARD_VALUE} from the Studio origin.`
           );
         }
-        const runId = decodePathSegment(cancelMatch[1]);
+        const runId = decodePathSegment(runResource.encodedId);
         const result = await launcher.cancel(runId);
         if (!result.cancelled) {
           return errorResponse(
             404,
             "run_not_live",
             "The run is not a live launch.",
-            "Refresh /api/snapshot and cancel a run listed in liveRunIds."
+            `Refresh ${STUDIO_API_PATH.snapshot} and cancel a run listed in liveRunIds.`
           );
         }
         return jsonResponse({ cancelled: true, runId: result.runId }, 202);
       }
-      if (request.method === "DELETE" && url.pathname === "/api/history") {
+      if (request.method === "DELETE" && url.pathname === STUDIO_API_PATH.history) {
         if (!history) {
           return errorResponse(
             405,
@@ -216,23 +221,23 @@ export function createStudioApiHandler(
             "Start the Studio with a history maintenance adapter."
           );
         }
-        if (request.headers.get("x-tubeless-studio-clear-history") !== "1") {
+        if (request.headers.get(STUDIO_GUARD_HEADER.clear) !== STUDIO_GUARD_VALUE) {
           return errorResponse(
             415,
             "history_guard_required",
             "A same-origin history request is required.",
-            "Send x-tubeless-studio-clear-history: 1 from the Studio origin."
+            `Send ${STUDIO_GUARD_HEADER.clear}: ${STUDIO_GUARD_VALUE} from the Studio origin.`
           );
         }
         const cleared = await eventState.clear(history);
         return jsonResponse({ cleared: true, ...cleared });
       }
-      if (request.method === "GET" && url.pathname === "/api/commands") {
+      if (request.method === "GET" && url.pathname === STUDIO_API_PATH.commands) {
         return jsonResponse({ commands });
       }
-      const planMatch = /^\/api\/commands\/([^/]+)\/plan$/.exec(url.pathname);
-      if (request.method === "POST" && planMatch) {
-        const commandId = decodePathSegment(planMatch[1]);
+      const commandResource = parseStudioResourcePath(url.pathname, STUDIO_API_PATH.commands);
+      if (request.method === "POST" && commandResource?.action === STUDIO_API_ACTION.plan) {
+        const commandId = decodePathSegment(commandResource.encodedId);
         if (!launcher?.plan || !commandById.get(commandId)?.canPlan) {
           return errorResponse(
             405,
@@ -243,13 +248,13 @@ export function createStudioApiHandler(
         }
         if (
           !request.headers.get("content-type")?.startsWith("application/json") ||
-          request.headers.get("x-tubeless-studio-plan") !== "1"
+          request.headers.get(STUDIO_GUARD_HEADER.plan) !== STUDIO_GUARD_VALUE
         ) {
           return errorResponse(
             415,
             "plan_guard_required",
             "A same-origin JSON plan request is required.",
-            "Send application/json with x-tubeless-studio-plan: 1 from the Studio origin."
+            `Send application/json with ${STUDIO_GUARD_HEADER.plan}: ${STUDIO_GUARD_VALUE} from the Studio origin.`
           );
         }
         const input = parseStudioPlanInput(await readJsonBody(request));
@@ -263,8 +268,7 @@ export function createStudioApiHandler(
         }
         return jsonResponse({ plan: await launcher.plan(commandId, input) });
       }
-      const launchMatch = /^\/api\/commands\/([^/]+)\/runs$/.exec(url.pathname);
-      if (request.method === "POST" && launchMatch) {
+      if (request.method === "POST" && commandResource?.action === STUDIO_API_ACTION.launch) {
         if (!launcher) {
           return errorResponse(
             405,
@@ -275,13 +279,13 @@ export function createStudioApiHandler(
         }
         if (
           !request.headers.get("content-type")?.startsWith("application/json") ||
-          request.headers.get("x-tubeless-studio-launch") !== "1"
+          request.headers.get(STUDIO_GUARD_HEADER.launch) !== STUDIO_GUARD_VALUE
         ) {
           return errorResponse(
             415,
             "launch_guard_required",
             "A same-origin JSON launch request is required.",
-            "Send application/json with x-tubeless-studio-launch: 1 from the Studio origin."
+            `Send application/json with ${STUDIO_GUARD_HEADER.launch}: ${STUDIO_GUARD_VALUE} from the Studio origin.`
           );
         }
         const launch = parseStudioLaunchRequest(await readJsonBody(request));
@@ -293,13 +297,13 @@ export function createStudioApiHandler(
             "Send a values object matching the selected command descriptor."
           );
         }
-        const commandId = decodePathSegment(launchMatch[1]);
+        const commandId = decodePathSegment(commandResource.encodedId);
         if (!commandById.has(commandId)) {
           return errorResponse(
             404,
             "command_not_found",
             "Pipeline command not found.",
-            "Refresh /api/commands and choose an available commandId."
+            `Refresh ${STUDIO_API_PATH.commands} and choose an available commandId.`
           );
         }
         const result = await launcher.launch(commandId, launch.values, {
@@ -346,11 +350,6 @@ export function createStudioApiHandler(
       return unexpectedStudioErrorResponse(error);
     }
   };
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function historyOffset(url: URL): number {

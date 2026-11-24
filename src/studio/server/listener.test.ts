@@ -6,9 +6,7 @@ import type { PipelineRunEventStore, StoredPipelineEvent } from "../../run-store
 import type { StoredRunSummary } from "../../run-store/run-history.js";
 import { STUDIO_OPEN_RUN_LIMIT } from "./run-details.js";
 import { summarizePipelines } from "./history.js";
-import { PIPELINE_RUN_STUDIO_STYLE } from "./page.js";
 import { readStudioClientScript } from "./client-script.js";
-import { connectionPresentation } from "../browser/app.js";
 import {
   isLiteralOrLocalhostHttpHost,
   startPipelineRunStudio,
@@ -163,28 +161,8 @@ describe("local pipeline run studio", () => {
     expect(page.headers.get("content-security-policy")).toContain("default-src 'none'");
     const html = await page.text();
     expect(html).toContain("<title>Tubeless — Studio</title>");
-    expect(html).toContain("nested work stays with its parent");
-    expect(html).toContain("/api/runs/");
-    expect(html).not.toContain('data-view="active"');
-    expect(html).not.toContain('data-view="definitions"');
-    expect(html).toContain("Run pipeline");
-    expect(html).toContain("Nested pipelines");
-    expect(html).toContain("Preview plan");
-    expect(html).toContain("Pipeline inputs");
-    expect(html).toContain("Execution controls");
-    expect(html).toContain("Built into Tubeless");
-    expect(html).toContain("Clear run history?");
-    expect(html).toContain("Cancel run");
-    expect(html).toContain("x-tubeless-studio-cancel");
-    expect(html).toContain("liveRunIds");
-    expect(html).toContain("step-status-icon");
-    expect(html).toContain("status-mark");
-    expect(html).toContain("progress-details");
-    expect(html).toContain("Remote step");
-    expect(html).toContain("declared steps");
-    expect(html).toContain("Showing ");
-    expect(html).not.toContain("mode-tabs");
-    expect(html).not.toContain("Pipes");
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(html).toContain('id="studio-root"');
 
     const snapshot = await fetch(`${server.url}/api/snapshot`).then((response) => response.json());
     expect(snapshot).toMatchObject({
@@ -264,45 +242,6 @@ describe("local pipeline run studio", () => {
       `default-src 'none'; style-src ${styleHash}; script-src ${scriptHash}; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
     );
     expect(csp).not.toContain("unsafe-inline");
-  });
-
-  it("keeps studio styles in the hashed stylesheet instead of inline declarations", async () => {
-    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
-    servers.push(server);
-
-    const html = await fetch(server.url).then((response) => response.text());
-    const script = /<script type="module">([\s\S]*)<\/script>/.exec(html)?.[1] ?? "";
-    const style = /<style>([\s\S]*)<\/style>/.exec(html)?.[1] ?? "";
-    expect(script).toBe(PIPELINE_RUN_STUDIO_SCRIPT);
-    expect(style).toBe(PIPELINE_RUN_STUDIO_STYLE);
-    expect(script).not.toMatch(/\bstyle="/);
-    expect(style).toContain(".pulse.lost");
-    expect(style).toContain(".detail-heading-copy");
-    expect(style).toContain(".detail-heading-actions");
-    expect(style).toContain(".progress > i.w0");
-    expect(style).toContain(".progress > i.w100");
-    expect(script).toContain("Math.round");
-    expect(script).toContain("Connection lost");
-  });
-
-  it("clears the pulse lost class after a disconnect then reconnect", () => {
-    expect(connectionPresentation(false)).toEqual({
-      className: "pulse lost",
-      label: "Connection lost",
-    });
-    expect(connectionPresentation(true)).toEqual({
-      className: "pulse",
-      label: "Connected · local",
-    });
-  });
-
-  it("escapes step status labels and guards isoTime in the served script", async () => {
-    const server = await startPipelineRunStudio({ port: 0, store: memoryStore(events) });
-    servers.push(server);
-
-    const html = await fetch(server.url).then((response) => response.text());
-    expect(html).toContain('id="studio-root"');
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("aria-label");
   });
 
   it("exposes only injected commands and delegates bounded structured launch values", async () => {

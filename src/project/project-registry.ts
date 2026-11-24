@@ -98,7 +98,7 @@ function resolve<T>(
 }
 
 function handler<T extends PipelineDocumentHandler | PipelineDocumentFinalizer>(
-  registry: Readonly<Record<string, T>>,
+  registry: Readonly<Record<string, T>> | undefined,
   name: string,
   path: string
 ): T {
@@ -231,9 +231,7 @@ export class ProjectRegistryResolver {
   }
 
   skip(name: string | undefined, path: string): PipelineDocumentSkipPredicate | undefined {
-    return name === undefined
-      ? undefined
-      : handler(this.#registry.skipPredicates ?? {}, name, path);
+    return name === undefined ? undefined : handler(this.#registry.skipPredicates, name, path);
   }
 
   optionsSchema(

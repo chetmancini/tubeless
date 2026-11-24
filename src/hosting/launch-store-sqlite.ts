@@ -11,7 +11,6 @@ import {
   COLLECTOR_FAILURE_BYTES,
   COLLECTOR_MESSAGE_BYTES,
   decodeCollectorJson,
-  digestCollectorBody,
   failureSchema,
   isCollectorCredentialId,
   isCollectorVerifier,
@@ -40,14 +39,8 @@ import { JOURNAL_OUTCOME_UNKNOWN, PIPELINE_TRACE_VERSION } from "../tracing/trac
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { HostedFailureReason } from "./run-contract.js";
 import { SqliteExecutionStore, TRUSTED_LAUNCHES } from "./execution-store-sqlite.js";
-
-/** Synchronous SQLite port; adapter and schema initialization remain target-owned. */
-export interface SqliteLaunchStorage {
-  readonly sql: {
-    exec(query: string, ...bindings: unknown[]): { toArray(): Record<string, unknown>[] };
-  };
-  transactionSync<T>(fn: () => T): T;
-}
+import { sha256Hex } from "../utilities/sha256.js";
+import type { SqliteStorage } from "./sqlite-storage.js";
 
 /** Appends share the adapter's surrounding transaction. */
 export interface LaunchEventStore {
@@ -111,7 +104,7 @@ export class SqliteHostedLaunchStore
   readonly executions: SqliteExecutionStore;
   readonly attemptLedger: SqliteAttemptLedger;
   constructor(
-    private readonly storage: SqliteLaunchStorage,
+    private readonly storage: SqliteStorage,
     private readonly events: LaunchEventStore & PipelineRunEventReader,
     private readonly now: () => number = Date.now
   ) {
@@ -505,19 +498,17 @@ export class SqliteHostedLaunchStore
       batch.attemptId !== owner.attemptId
     )
       throw new HostedAttemptConflict("ownership");
-    const replay = this.attemptLedger.replay(batch);
-    if (replay !== undefined) return { accepted: true, runId: replay };
+    const status = this.attemptLedger.check(batch);
+    if (status.kind === "replay") return { accepted: true, runId: status.runId };
     const launch = this.#get(owner.launchId);
     if (!launch || TERMINAL.has(launch.state)) return { accepted: false };
-    if (batch.sequence !== launch.lastBatch + 1)
-      throw new HostedAttemptConflict("sequence", launch.lastBatch + 1);
-    const runId = this.attemptLedger.bind(
-      { ...owner, pipelineId: String(attempt.pipeline_id) },
-      launch.runId,
-      batch.events
+    if (status.kind === "gap") throw new HostedAttemptConflict("sequence", status.expectedSequence);
+    const runId = this.attemptLedger.bindBatch(
+      batch,
+      { pipelineId: String(attempt.pipeline_id) },
+      status.runId
     );
     this.#commitBatch(launch, batch.sequence, batch.events);
-    this.attemptLedger.record(batch, runId);
     return { accepted: true, runId };
   }
 
@@ -718,7 +709,7 @@ export class SqliteHostedLaunchStore
     const failure = decodeCollectorJson(bytes, failureSchema);
     if (new TextEncoder().encode(failure.message).byteLength > COLLECTOR_MESSAGE_BYTES)
       throw new CollectorInputError(413);
-    const digest = await digestCollectorBody(bytes);
+    const digest = await sha256Hex(bytes);
     return this.storage.transactionSync(() => {
       this.#requireCollectorAuthority(snapshot);
       const attempt = this.#getAttempt(snapshot);
@@ -803,7 +794,6 @@ export class SqliteHostedLaunchStore
     excludedBranches: readonly string[] = []
   ): PipelineTraceEvent[] {
     const { sql, params } = openRunStartsQuery(rootRunId, excludedBranches);
-    // SAFETY: SELECT * over the owned pipeline_run_events table returns RunEventRecord rows.
     const rows = this.storage.sql.exec(sql, ...params).toArray() as unknown as RunEventRecord[];
     const closed = new Set<string>();
     const completions: PipelineTraceEvent[] = [];

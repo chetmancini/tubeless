@@ -1,10 +1,12 @@
-import { isLaunchIdentifier } from "../hosting/execution-status.js";
+import { manageCliSignal } from "../cli/cli-signal.js";
+import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 import type { CloudCommandDependencies } from "./cloud/shared.js";
 import type { RemoteExecution } from "./remote/execution.js";
 import type { RemoteProcess } from "./remote/process.js";
 import { remoteDirectory, selectRemote, type RemoteDestination } from "./remote/profiles.js";
+import { DEFAULT_PIPELINE_PROJECT_FILE } from "./workbench-project-loader.js";
 import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
-import { manageRemoteSignal, normalizeRemoteOrigin } from "./workbench-remote-io.js";
+import { normalizeRemoteOrigin } from "./workbench-remote-io.js";
 import {
   errorMessage,
   terminalSafeText,
@@ -12,14 +14,13 @@ import {
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 import {
-  parseSubcommandArgs,
   renderWorkbenchUsage,
+  type ParsedSubcommand,
   runWorkbenchSubcommand,
 } from "./workbench-subcommand.js";
 
 const SPEC = WORKBENCH_SPECS.remote;
-const parse = (args: readonly string[]) => parseSubcommandArgs(args, SPEC.options);
-type Values = ReturnType<typeof parse>["values"];
+type Values = ParsedSubcommand<typeof SPEC.options>["values"];
 
 function executionRequest(
   operation: string,
@@ -31,7 +32,11 @@ function executionRequest(
     const deploymentId = values["deployment-id"];
     if (!isLaunchIdentifier(deploymentId))
       throw new Error("Pass the exact Worker revision with --deployment-id.");
-    return { kind: operation, deploymentId, projectFile: values.project ?? "tubeless.project.ts" };
+    return {
+      kind: operation,
+      deploymentId,
+      projectFile: values.project ?? DEFAULT_PIPELINE_PROJECT_FILE,
+    };
   }
   if (operation !== "run" && operation !== "status" && operation !== "cancel")
     throw new Error("Choose remote connect, create, list, run, status, cancel or runner.");
@@ -60,7 +65,6 @@ export async function runRemote(
   return runWorkbenchSubcommand(
     {
       spec: SPEC,
-      parse,
       async run({ values, positionals: [operation, ...args] }, commandIo) {
         const env = dependencies.env ?? process.env;
         const directory = remoteDirectory(env);
@@ -75,7 +79,7 @@ export async function runRemote(
                 : `remote ${operation} takes no positional arguments.`,
               usage
             );
-          const managed = manageRemoteSignal(commandIo.signal);
+          const managed = manageCliSignal(commandIo.signal);
           try {
             const { setupRemote } = await import("./remote/setup.js");
             return await setupRemote(operation, args[0], values, {

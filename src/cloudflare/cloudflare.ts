@@ -8,25 +8,20 @@ import type { PipelineTraceEvent, PipelineTraceExporterOptions } from "../tracin
 import { createAccessAuthenticator, parseAccessConfig } from "./cloudflare-access.js";
 import { MAX_RUN_DURATION_MS, type CloudflareRunTraceContext } from "./cloudflare-run-contract.js";
 import { RunObjectCore } from "./cloudflare-run.js";
-import {
-  StudioObjectCore,
-  type CloudflareStudioIngest,
-  type RunStubLike,
-} from "./cloudflare-studio.js";
+import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
+import type { CloudflareStudioIngest } from "./cloudflare-studio-ingest.js";
 import type {
   HostedLaunchRequest,
   HostedLaunchResult as CloudflareLaunchResult,
   HostedLaunchStatus as CloudflareLaunchStatus,
   HostedLaunchValues as CloudflareLaunchValues,
 } from "../hosting/launch-admission.js";
-import {
-  isLaunchIdentifier,
-  type HostedExecutionStatus as CloudflareExecutionStatus,
-} from "../hosting/execution-status.js";
+import type { HostedExecutionStatus as CloudflareExecutionStatus } from "../hosting/execution-status.js";
+import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 import { isExecutionPath, serveExecutionRequest } from "./cloudflare-execution-api.js";
 import { isRunnerPath } from "./cloudflare-runner-api.js";
 import { placeCloudflareChild, type RunnerStageStore } from "./cloudflare-child-placement.js";
-import type { RunnerJob } from "../hosting/runner-protocol.js";
+import { MAX_RUNNER_MANIFEST_PIPELINES, type RunnerJob } from "../hosting/runner-protocol.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import type {
   LaunchActor,
@@ -214,8 +209,11 @@ export function createCloudflareApp<TEnv = unknown>(
   if (options.localRunner !== undefined) {
     if (!deploymentId || !runnerService || runnerService.length > 1024)
       throw new Error("Local runner placement requires deploymentId and an Access serviceId.");
-    if (options.localRunner.pipelines.length < 1 || options.localRunner.pipelines.length > 200)
-      throw new Error("Configure 1–200 local runner pipelines.");
+    if (
+      options.localRunner.pipelines.length < 1 ||
+      options.localRunner.pipelines.length > MAX_RUNNER_MANIFEST_PIPELINES
+    )
+      throw new Error(`Configure 1–${MAX_RUNNER_MANIFEST_PIPELINES} local runner pipelines.`);
     localPipelines = new Map(
       options.localRunner.pipelines.map((id) => {
         const identity = commands.get(id)?.command.plan().definition?.identity;

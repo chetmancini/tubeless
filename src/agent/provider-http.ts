@@ -147,8 +147,6 @@ export async function withProviderDeadline<T>(
   }
 }
 
-export const DEFAULT_MAX_RETRIES = 2;
-export const MAX_RETRIES_LIMIT = 10;
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_BACKOFF_MS = 8_000;
 const MAX_RETRY_WAIT_MS = 60_000;

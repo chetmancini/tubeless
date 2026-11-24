@@ -206,7 +206,19 @@ it("fences duplicate claims and an expired attempt, cancels queued work, and rej
   );
   const terminal = events.pop()!;
   expect(terminal.name).toBe("pipeline.completed");
-  const progress = encodeAttemptBatches("complete-stage", 0, events)[0];
+  const running = events.find((event) => event.name === "step.running");
+  if (!running) throw new Error("Expected the stage to start work.");
+  const updates = Array.from({ length: 33 }, (_, index) => ({
+    ...running,
+    payload: { ...running.payload, progress: { completed: index + 1 } },
+  }));
+  const [progress] = encodeAttemptBatches(
+    "complete-stage",
+    0,
+    events.flatMap<PipelineTraceEvent>((event) =>
+      event === running ? [event, ...updates] : [event]
+    )
+  );
   expect(await (await request("events", progress, token)).json()).toEqual({ accepted: true });
   const statusOfStage = () =>
     storage.sql
@@ -234,7 +246,18 @@ it("fences duplicate claims and an expired attempt, cancels queued work, and rej
 
   const completion = encodeRunnerCompletion("complete-stage", 1, terminal, report);
   expect(await (await request("events", completion, token)).json()).toEqual({ accepted: true });
-  expect(studio.readStage(parent, "complete-stage", -1).result).toMatchObject({
+  const firstPage = studio.readStage(parent, "complete-stage", -1);
+  expect(firstPage).toMatchObject({ hasMore: true });
+  expect(firstPage.result).toBeUndefined();
+  const finalPage = studio.readStage(parent, "complete-stage", firstPage.events.at(-1)!.id);
+  expect(
+    [...firstPage.events, ...finalPage.events].flatMap((event) =>
+      event.name === "step.running" && event.payload.progress
+        ? [event.payload.progress.completed]
+        : []
+    )
+  ).toEqual(updates.map((event) => event.payload.progress.completed));
+  expect(finalPage.result).toMatchObject({
     report: { value: "ACTUAL REPORT", status: "completed" },
   });
   expect(statusOfStage()).toBe(1);

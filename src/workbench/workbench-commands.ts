@@ -1,9 +1,5 @@
 import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
-import {
-  renderWorkbenchUsage,
-  parseSubcommandArgs,
-  runWorkbenchSubcommand,
-} from "./workbench-subcommand.js";
+import { renderWorkbenchUsage, runWorkbenchSubcommand } from "./workbench-subcommand.js";
 import { querySteps } from "../core/pipeline.js";
 import { readFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
@@ -14,7 +10,8 @@ import {
 } from "../core/pipeline-types.js";
 import { PipelineDocumentError, validatePipelineDocument } from "../project/project-document.js";
 import { renderPipelinePlan } from "../render/render.js";
-import { isWorkbenchPipelineCommand, type WorkbenchPipeline } from "./pipeline-module.js";
+import type { HostablePipeline } from "../hosting/hosting-commands.js";
+import { isWorkbenchPipelineCommand } from "./pipeline-module.js";
 import {
   DEFAULT_PIPELINE_PROJECT_FILE,
   loadPipelineProjectFile,
@@ -27,11 +24,6 @@ import {
   writeUsageError,
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
-
-const PIPELINE_FILE_POSITIONAL = {
-  count: 1,
-  message: "Pass exactly one pipeline or command file.",
-} as const;
 
 async function loadParsedPlanSource(
   parsed: {
@@ -62,7 +54,7 @@ function optionalInlineText(value: unknown): string | undefined {
   return text === "" ? undefined : text;
 }
 
-function pipelineIdentityText(view: WorkbenchPipeline): { name?: string; description?: string } {
+function pipelineIdentityText(view: HostablePipeline): { name?: string; description?: string } {
   const source = isWorkbenchPipelineCommand(view) ? view.descriptor : view;
   const name = "name" in source ? optionalInlineText(source.name) : undefined;
   const description = "description" in source ? optionalInlineText(source.description) : undefined;
@@ -87,16 +79,10 @@ function alignedRows(
   );
 }
 
-function parseListArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, WORKBENCH_SPECS.list.options);
-}
-
 export async function runList(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.list,
-      parse: parseListArgs,
-      positionalCountError: { count: 0, message: "List does not accept a positional argument." },
       async run(parsed, commandIo) {
         const loaded = await loadPipelineProjectFile(
           parsed.values.project ?? DEFAULT_PIPELINE_PROJECT_FILE,
@@ -128,16 +114,10 @@ export async function runList(argv: readonly string[], io: WorkbenchCliIo): Prom
   );
 }
 
-function parseValidateArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, WORKBENCH_SPECS.validate.options);
-}
-
 export async function runValidate(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.validate,
-      parse: parseValidateArgs,
-      positionalCountError: { count: 1, message: "Pass exactly one YAML or JSON document." },
       async run(parsed, commandIo) {
         const file = resolve(commandIo.cwd, parsed.positionals[0]);
         try {
@@ -202,16 +182,10 @@ interface WorkbenchInspection {
   targetIds: string[];
 }
 
-function parseInspectArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, WORKBENCH_SPECS.inspect.options);
-}
-
 export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.inspect,
-      parse: parseInspectArgs,
-      positionalCountError: PIPELINE_FILE_POSITIONAL,
       async run(parsed, commandIo) {
         const loaded = await loadParsedPlanSource(parsed, commandIo, INSPECT_USAGE);
         if ("exitCode" in loaded) return loaded.exitCode;
@@ -271,16 +245,10 @@ export async function runInspect(argv: readonly string[], io: WorkbenchCliIo): P
 
 const PLAN_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.plan);
 
-function parsePlanArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, WORKBENCH_SPECS.plan.options);
-}
-
 export async function runPlan(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.plan,
-      parse: parsePlanArgs,
-      positionalCountError: PIPELINE_FILE_POSITIONAL,
       async run(parsed, commandIo) {
         const loaded = await loadParsedPlanSource(parsed, commandIo, PLAN_USAGE);
         if ("exitCode" in loaded) return loaded.exitCode;
@@ -316,16 +284,10 @@ function isMermaidDirection(value: string): value is PipelineMermaidDirection {
 
 const GRAPH_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.graph);
 
-function parseGraphArgs(argv: readonly string[]) {
-  return parseSubcommandArgs(argv, WORKBENCH_SPECS.graph.options);
-}
-
 export async function runGraph(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.graph,
-      parse: parseGraphArgs,
-      positionalCountError: PIPELINE_FILE_POSITIONAL,
       async run(parsed, commandIo) {
         const direction = parsed.values.direction ?? "TD";
         if (!isMermaidDirection(direction)) {

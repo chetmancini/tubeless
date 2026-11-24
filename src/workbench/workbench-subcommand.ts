@@ -1,4 +1,4 @@
-import { parseArgs, type ParseArgsConfig } from "node:util";
+import { parseArgs } from "node:util";
 import { didYouMean } from "../utilities/suggest.js";
 import {
   errorMessage,
@@ -7,7 +7,7 @@ import {
   type WorkbenchCliIo,
 } from "./workbench-shared.js";
 
-type SubcommandOptions = NonNullable<ParseArgsConfig["options"]>;
+type SubcommandOptions = Readonly<Record<string, WorkbenchOption>>;
 
 export type WorkbenchCompletionValue = "file" | "text" | "target" | "step" | readonly string[];
 
@@ -31,13 +31,19 @@ export type WorkbenchOption = {
     }
 );
 
-export interface WorkbenchCommandSpec {
+export interface WorkbenchCommandSpec<TOptions extends SubcommandOptions = SubcommandOptions> {
   readonly name: string;
   readonly usage: string;
   readonly footer?: string;
-  readonly options: Readonly<Record<string, WorkbenchOption>>;
-  readonly positional?: "pipeline" | "file" | readonly string[];
+  readonly options: TOptions;
+  readonly positional?: {
+    readonly min?: number;
+    readonly max: number;
+    readonly error: string;
+    readonly completion?: "pipeline" | "file" | readonly string[];
+  };
   readonly subcommands?: readonly string[];
+  readonly defaultSubcommand?: string;
   readonly subcommandPositionals?: Readonly<Record<string, "file">>;
   readonly passthrough?: boolean;
 }
@@ -67,43 +73,39 @@ export function renderWorkbenchUsage(spec: WorkbenchCommandSpec, command?: strin
   return `${spec.usage.trimEnd()}\n\nOptions:\n${rows.map(({ flag, description }) => `  ${flag.padEnd(width)}  ${description}`).join("\n")}\n${spec.footer ? `\n${spec.footer.trimEnd()}\n` : ""}`;
 }
 
-export function parseSubcommandArgs<const T extends SubcommandOptions>(
+export function parseSubcommandArgs<const TOptions extends SubcommandOptions>(
   argv: readonly string[],
-  options: T
+  spec: WorkbenchCommandSpec<TOptions>
 ) {
-  return parseArgs({
-    args: [...argv],
-    allowPositionals: true,
-    options: { ...options, help: HELP_OPTION } as const,
-    strict: true,
-  });
+  const separator = spec.passthrough ? argv.indexOf("--") : -1;
+  return {
+    ...parseArgs({
+      args: separator === -1 ? [...argv] : argv.slice(0, separator),
+      allowPositionals: true,
+      options: { ...spec.options, help: HELP_OPTION } as const,
+      strict: true,
+    }),
+    commandArgs: separator === -1 ? [] : argv.slice(separator + 1),
+  };
 }
 
-interface ParsedSubcommand {
-  values: { help?: boolean };
-  positionals: readonly string[];
+export type ParsedSubcommand<TOptions extends SubcommandOptions> = ReturnType<
+  typeof parseSubcommandArgs<TOptions>
+>;
+
+interface WorkbenchSubcommand<TOptions extends SubcommandOptions> {
+  readonly spec: WorkbenchCommandSpec<TOptions>;
+  run(parsed: ParsedSubcommand<TOptions>, io: WorkbenchCliIo): Promise<number>;
 }
 
-/**
- * Shared prologue for workbench subcommands. New subcommands should be written
- * against `runWorkbenchSubcommand` so usage, help, and positional checks stay
- * in one place. Extra validation after that prologue belongs in `run`.
- */
-export interface WorkbenchSubcommand<TParsed extends ParsedSubcommand> {
-  readonly spec: WorkbenchCommandSpec;
-  parse(argv: readonly string[]): TParsed;
-  readonly positionalCountError?: { count: number; message: string };
-  run(parsed: TParsed, io: WorkbenchCliIo): Promise<number>;
-}
-
-export async function runWorkbenchSubcommand<TParsed extends ParsedSubcommand>(
-  command: WorkbenchSubcommand<TParsed>,
+export async function runWorkbenchSubcommand<const TOptions extends SubcommandOptions>(
+  command: WorkbenchSubcommand<TOptions>,
   argv: readonly string[],
   io: WorkbenchCliIo
 ): Promise<number> {
-  let parsed: TParsed;
+  let parsed: ParsedSubcommand<TOptions>;
   try {
-    parsed = command.parse(argv);
+    parsed = parseSubcommandArgs(argv, command.spec);
   } catch (error) {
     return writeUsageError(
       io,
@@ -112,21 +114,26 @@ export async function runWorkbenchSubcommand<TParsed extends ParsedSubcommand>(
     );
   }
   const usage = renderWorkbenchUsage(command.spec, parsed.positionals[0]);
-  if (parsed.values.help === true) {
+  if ("help" in parsed.values && parsed.values.help === true) {
     io.stdout.write(usage);
     return TUBELESS_WORKBENCH_EXIT_CODE.success;
   }
-  const positionalError = command.positionalCountError;
-  if (positionalError && parsed.positionals.length !== positionalError.count) {
-    return writeUsageError(io, positionalError.message, usage);
+  const positional = command.spec.positional;
+  if (
+    positional &&
+    (parsed.positionals.length < (positional.min ?? 0) ||
+      parsed.positionals.length > positional.max)
+  ) {
+    return writeUsageError(io, positional.error, usage);
   }
-  const options = workbenchOptions(command.spec, parsed.positionals[0]);
+  const selected = parsed.positionals[0] ?? command.spec.defaultSubcommand;
+  const options = workbenchOptions(command.spec, selected);
   for (const key of Object.keys(parsed.values)) {
     if (!Object.hasOwn(options, key)) {
       return writeUsageError(
         io,
-        `--${key} is not supported by ${command.spec.name} ${parsed.positionals[0]}.`,
-        usage
+        `--${key} is not supported by ${command.spec.name} ${selected}.`,
+        renderWorkbenchUsage(command.spec, selected)
       );
     }
   }

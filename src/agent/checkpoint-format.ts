@@ -1,5 +1,11 @@
 import type { AgentLimits, AgentOutcome, Tools } from "./agent-types.js";
 import { DEFAULT_AGENT_LIMITS, validAgentLimit } from "./agent-limits.js";
+import {
+  isAgentCallId,
+  isAgentToolName,
+  isPlainRecord,
+  isToolReplayPolicy,
+} from "./agent-values.js";
 import { isStepCachePolicy } from "../tracing/tracing-constants.js";
 import type { StepCachePolicy } from "../core/pipeline-cache.js";
 
@@ -62,14 +68,6 @@ export interface Checkpoint {
   budgets: Record<string, StoredBudget>;
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-  );
-}
 function natural(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
@@ -77,21 +75,20 @@ function options(value: unknown): value is object {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function failure(value: unknown): boolean {
-  return record(value) && typeof value.code === "string" && typeof value.message === "string";
+  return (
+    isPlainRecord(value) && typeof value.code === "string" && typeof value.message === "string"
+  );
 }
 
 function checkCall(call: unknown, admitted: boolean, ids: Set<string>): void {
   if (
-    !record(call) ||
-    typeof call.id !== "string" ||
-    !call.id.trim() ||
-    call.id.length > 256 ||
+    !isPlainRecord(call) ||
+    !isAgentCallId(call.id) ||
     ids.has(call.id) ||
-    typeof call.tool !== "string" ||
-    !/^[A-Za-z][A-Za-z0-9_-]{0,127}$/.test(call.tool) ||
-    !["handler", "pipeline"].includes(String(call.kind)) ||
-    !["safe", "unsafe"].includes(String(call.replay)) ||
-    !["pending", "running", "completed"].includes(String(call.status)) ||
+    (call.kind !== "handler" && call.kind !== "pipeline") ||
+    !isAgentToolName(call.tool) ||
+    !isToolReplayPolicy(call.replay) ||
+    (call.status !== "pending" && call.status !== "running" && call.status !== "completed") ||
     !Object.hasOwn(call, "input")
   )
     throw new Error("Invalid saved call");
@@ -102,7 +99,7 @@ function checkCall(call: unknown, admitted: boolean, ids: Set<string>): void {
   if (call.status === "completed") {
     const outcome = call.outcome;
     if (
-      !record(outcome) ||
+      !isPlainRecord(outcome) ||
       outcome.id !== call.id ||
       outcome.tool !== call.tool ||
       typeof outcome.ok !== "boolean" ||
@@ -113,7 +110,7 @@ function checkCall(call: unknown, admitted: boolean, ids: Set<string>): void {
 }
 
 function checkAgent(agent: unknown): void {
-  if (!record(agent) || !record(agent.metadata) || !record(agent.execution))
+  if (!isPlainRecord(agent) || !isPlainRecord(agent.metadata) || !isPlainRecord(agent.execution))
     throw new Error("Invalid saved agent");
   const { metadata, execution } = agent;
   if (
@@ -123,7 +120,7 @@ function checkAgent(agent: unknown): void {
     !options(metadata.options) ||
     (metadata.implementationVersion !== undefined &&
       typeof metadata.implementationVersion !== "string") ||
-    !isStepCachePolicy(String(metadata.cache))
+    !isStepCachePolicy(metadata.cache)
   )
     throw new Error("Invalid saved agent metadata");
   if (
@@ -132,7 +129,10 @@ function checkAgent(agent: unknown): void {
     execution.turn < 1 ||
     !natural(execution.stateVersion) ||
     !natural(execution.calls) ||
-    !["decide", "calls", "completed", "failed"].includes(String(agent.phase))
+    (agent.phase !== "decide" &&
+      agent.phase !== "calls" &&
+      agent.phase !== "completed" &&
+      agent.phase !== "failed")
   )
     throw new Error("Invalid saved agent execution");
   if (agent.phase === "completed" && !Object.hasOwn(agent, "result"))
@@ -140,7 +140,7 @@ function checkAgent(agent: unknown): void {
   if (
     agent.phase === "completed" &&
     agent.completedState !== undefined &&
-    (!record(agent.completedState) || !Object.hasOwn(agent.completedState, "state"))
+    (!isPlainRecord(agent.completedState) || !Object.hasOwn(agent.completedState, "state"))
   )
     throw new Error("Invalid saved completed state");
   if (agent.phase === "failed" && !failure(agent.failure))
@@ -148,7 +148,7 @@ function checkAgent(agent: unknown): void {
   if (agent.phase === "calls") {
     const decision = agent.decision;
     if (
-      !record(decision) ||
+      !isPlainRecord(decision) ||
       !Object.hasOwn(decision, "state") ||
       !Array.isArray(decision.calls) ||
       decision.calls.length === 0 ||
@@ -162,11 +162,11 @@ function checkAgent(agent: unknown): void {
 
 function checkBudget(budget: unknown): void {
   if (
-    !record(budget) ||
+    !isPlainRecord(budget) ||
     !natural(budget.depth) ||
     !natural(budget.maxCalls) ||
     !natural(budget.maxDecisions) ||
-    !record(budget.limits)
+    !isPlainRecord(budget.limits)
   )
     throw new Error("Invalid saved agent budget");
   for (const name of Object.keys(DEFAULT_AGENT_LIMITS) as (keyof AgentLimits)[]) {
@@ -180,7 +180,12 @@ function checkBudget(budget: unknown): void {
 }
 
 export function checkedCheckpoint(value: unknown): Checkpoint {
-  if (!record(value) || value.version !== 1 || !record(value.agents) || !record(value.budgets))
+  if (
+    !isPlainRecord(value) ||
+    value.version !== 1 ||
+    !isPlainRecord(value.agents) ||
+    !isPlainRecord(value.budgets)
+  )
     throw new Error("Invalid agent checkpoint envelope");
   for (const [key, agent] of Object.entries(value.agents)) {
     checkAgent(agent);

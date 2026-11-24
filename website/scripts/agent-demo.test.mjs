@@ -31,8 +31,8 @@ test("the historical evaluation matches its archived evaluator and model sources
   const { revision, sources } = JSON.parse(read(sourceSnapshot));
   assert.match(revision, /^[a-f0-9]{40}$/);
   assert.deepEqual(Object.keys(sources).sort(), Object.keys(sourceHashes).sort());
-  for (const path of ["src/agent/model-prompt.ts", "src/agent/openai.ts", "scripts/eval-agent.mjs"]) {
-    assert.equal(sourceHashes[path], createHash("sha256").update(sources[path]).digest("hex"), path);
+  for (const [path, expectedHash] of Object.entries(sourceHashes)) {
+    assert.equal(createHash("sha256").update(sources[path]).digest("hex"), expectedHash, path);
   }
 });
 

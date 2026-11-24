@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { GraphDetail, GraphRun, GraphStep } from "./input.js";
+import { graphKey, graphRunId, type GraphDetail, type GraphRun, type GraphStep } from "./input.js";
 import { StepArtifacts } from "../components/artifacts.js";
 import { preferredScrollBehavior } from "../components/common.js";
 import type { StudioApi } from "../transport.js";
@@ -8,14 +8,7 @@ import { RunDetailLoader } from "../run-detail-loader.js";
 import { duration, shortId, Status } from "../components/steps.js";
 import { Drawer, EDGE_KIND_LABEL, Facts, runOffset, StepInspector } from "./inspector.js";
 
-import {
-  childStepTotal,
-  edgeState,
-  graphRunId,
-  incomingEdges,
-  type EdgeKind,
-  type EdgeState,
-} from "./dependencies.js";
+import { edgeState, incomingEdges, type EdgeKind, type EdgeState } from "./dependencies.js";
 import {
   buildGraphScene,
   CENTER_Y,
@@ -171,8 +164,22 @@ function GraphNode(props: GraphNodeProps) {
   );
 }
 
+function selectionKey(selection: GraphSelection): string {
+  const { kind, runId } = selection;
+  switch (kind) {
+    case "step":
+      return graphKey(kind, runId, selection.stepId);
+    case "edge":
+      return graphKey(kind, runId, selection.from, selection.to);
+    case "run":
+      return graphKey(kind, runId);
+    case "item":
+      return graphKey(kind, runId, selection.stepId, selection.itemId);
+  }
+}
+
 function sameSelection(left: GraphSelection | null, right: GraphSelection): boolean {
-  return left !== null && JSON.stringify(left) === JSON.stringify(right);
+  return left !== null && selectionKey(left) === selectionKey(right);
 }
 
 function ExpansionView({
@@ -210,7 +217,7 @@ function ExpansionView({
                 title={item.label}
                 status={status}
                 selected={sameSelection(ui.selection, selection)}
-                pulse={ui.pulse(`${graphRunId(run)}/${step.id}/${item.detail.id}`, status)}
+                pulse={ui.pulse(selectionKey(selection), status)}
                 onSelect={() => ui.select(selection)}
               />
             </g>
@@ -223,7 +230,7 @@ function ExpansionView({
             count={summary.stepCount}
             expanded={item.expanded}
             label={item.label}
-            onToggle={() => ui.toggle(summary.runId, !item.expanded)}
+            onToggle={() => ui.toggle(selectionKey(selection), !item.expanded)}
           />
         );
         if (item.graph) {
@@ -271,7 +278,7 @@ function ExpansionView({
               title={`${item.label} (${summary.pipelineId})`}
               status={summary.status}
               selected={sameSelection(ui.selection, selection)}
-              pulse={ui.pulse(summary.runId, summary.status)}
+              pulse={ui.pulse(selectionKey(selection), summary.status)}
               onSelect={() => ui.select(selection)}
               badge={item.unavailable || !item.expandable ? undefined : badge}
             />
@@ -348,7 +355,6 @@ function RunSceneView({ scene, ui }: { scene: RunScene; ui: GraphUi }) {
   );
 }
 
-/** Drawer content for the current selection, or null when nothing valid is selected. */
 function inspectorContent({
   selection,
   ctx,
@@ -404,7 +410,7 @@ function inspectorContent({
               <button
                 class="secondary-button"
                 type="button"
-                onClick={() => ui.toggle(summary.runId, !expanded)}
+                onClick={() => ui.toggle(selectionKey(selection), !expanded)}
               >
                 {expanded ? "Collapse steps" : "Show steps"}
               </button>
@@ -513,19 +519,13 @@ function inspectorContent({
   if (run && selection?.kind === "step") {
     const step = run.steps.find((candidate) => candidate.id === selection.stepId);
     if (step) {
-      const childRuns = (ctx.children.get(graphRunId(run)) ?? []).filter(
-        (child) => child.origin?.stepId === step.id
-      );
+      const childPage = ctx.childRunPages.get(selection.runId)?.(step.id);
       return (
         <StepInspector
           run={run}
           step={step}
-          childRuns={childRuns}
-          childTotal={childStepTotal(
-            ctx.childSteps.get(graphRunId(run)) ?? [],
-            step.id,
-            childRuns.length
-          )}
+          childRuns={childPage?.runs ?? []}
+          childTotal={childPage?.total ?? 0}
           onOpenRun={onOpenRun}
           onSelectInput={(id) =>
             ui.select({ kind: "edge", runId: graphRunId(run), from: id, to: step.id })

@@ -1,10 +1,6 @@
 import { createTerminalTextStream } from "./text-stream.js";
 import { WORKBENCH_SPECS } from "../workbench-command-specs.js";
-import {
-  renderWorkbenchUsage,
-  parseSubcommandArgs,
-  runWorkbenchSubcommand,
-} from "../workbench-subcommand.js";
+import { renderWorkbenchUsage, runWorkbenchSubcommand } from "../workbench-subcommand.js";
 import type { AgentLimits, AgentTranscriptOptions } from "../../agent/agent.js";
 import {
   DEFAULT_AGENT_LIMITS,
@@ -44,10 +40,7 @@ export function runAgent(argv: readonly string[], io: WorkbenchCliIo): Promise<n
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.agent,
-      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.agent.options),
       async run({ values, positionals }, io) {
-        if (positionals.length > 1)
-          return writeUsageError(io, "Pass at most one agent ID or file.", AGENT_USAGE);
         const target = positionals[0];
         if (target === undefined && (values.project !== undefined || values.export !== undefined))
           return writeUsageError(

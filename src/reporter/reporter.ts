@@ -1,6 +1,6 @@
-import type { PipelineStepOutputSource } from "../tracing/tracing-constants.js";
 import type { PipelineHooks, PipelineLogger } from "../core/pipeline.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
+import { formatDurationMs, stepDisplayName } from "./reporter-format.js";
 import { safeTerminalText } from "./terminal-text.js";
 
 /** Policy for ANSI color in terminal reporter output. */
@@ -94,21 +94,6 @@ function paint(enabled: boolean, code: string, value: string): string {
   return enabled ? `${code}${value}${ANSI.reset}` : value;
 }
 
-export function formatDurationMs(durationMs: number): string {
-  const ms = Math.max(0, Math.round(durationMs));
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) {
-    const seconds = Math.round(ms / 100) / 10;
-    if (seconds < 60) {
-      return Number.isInteger(seconds) ? `${seconds}s` : `${seconds.toFixed(1)}s`;
-    }
-  }
-  const totalSeconds = Math.round(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return seconds === 0 ? `${minutes}m` : `${minutes}m${seconds}s`;
-}
-
 export interface ReporterTheme {
   capabilities: ReporterTerminalCapabilities;
   colorEnabled: boolean;
@@ -148,16 +133,6 @@ export function createReporterTheme(config: RunReporterConfig = {}): ReporterThe
   };
 }
 
-export function outputSourceSuffix(source?: PipelineStepOutputSource): string {
-  return source === "override"
-    ? " (overridden)"
-    : source === "cache"
-      ? " (cached)"
-      : source === "supplied"
-        ? " (supplied)"
-        : "";
-}
-
 /** Create concise, append-only lifecycle logging for a pipeline run. */
 export function createRunReporter<TResult = unknown>(
   options: RunReporterOptions
@@ -167,19 +142,8 @@ export function createRunReporter<TResult = unknown>(
   const logSummary = options.logSummary !== false;
   const { styled, symbols, unicodeEnabled } = createReporterTheme(options);
   const lastProgressLogAt = new Map<string, number>();
-  const lastProgressMessage = new Map<string, string>();
   const progressLogIntervalMs = 750;
   const ellipsis = unicodeEnabled ? "…" : "...";
-  const displayName = (step: {
-    id: string;
-    name?: string;
-    outputSource?: PipelineStepOutputSource;
-  }): string => safeTerminalText(step.name ?? step.id) + outputSourceSuffix(step.outputSource);
-  const clearProgress = (stepId: string): void => {
-    lastProgressLogAt.delete(stepId);
-    lastProgressMessage.delete(stepId);
-  };
-
   return {
     onPipelineStart: (plan) => {
       if (!logPlan) return;
@@ -194,7 +158,7 @@ export function createRunReporter<TResult = unknown>(
         ? ` - ${styled.description(safeTerminalText(step.description))}`
         : "";
       log.log(
-        `  ${styled.start(symbols.start)} ${displayName({ ...step, outputSource })}${description}`
+        `  ${styled.start(symbols.start)} ${stepDisplayName(step, outputSource)}${description}`
       );
     },
     onStepProgress: ({ progress, step }) => {
@@ -208,49 +172,44 @@ export function createRunReporter<TResult = unknown>(
       const line = `${progress.completed}/${total}${message}`;
       const now = Date.now();
       const previousAt = lastProgressLogAt.get(step.id) ?? Number.NEGATIVE_INFINITY;
-      const previousLine = lastProgressMessage.get(step.id);
       const isCompletion =
         progress.total !== undefined &&
         Number.isFinite(progress.total) &&
         progress.completed >= progress.total;
-      if (!isCompletion && line === previousLine && now - previousAt < progressLogIntervalMs) {
-        return;
-      }
-      if (!isCompletion && now - previousAt < progressLogIntervalMs && previousLine !== undefined) {
-        return;
-      }
+      if (!isCompletion && now - previousAt < progressLogIntervalMs) return;
       lastProgressLogAt.set(step.id, now);
-      lastProgressMessage.set(step.id, line);
-      log.log(`  ${styled.description(ellipsis)} ${displayName(step)} ${styled.description(line)}`);
+      log.log(
+        `  ${styled.description(ellipsis)} ${stepDisplayName(step)} ${styled.description(line)}`
+      );
     },
     onStepComplete: (event) => {
-      clearProgress(event.id);
+      lastProgressLogAt.delete(event.id);
       const durationMs = event.finishedAtMs - event.startedAtMs;
       log.log(
-        `  ${styled.complete(symbols.complete)} ${displayName(event)} ${styled.duration(`(${formatDurationMs(durationMs)})`)}`
+        `  ${styled.complete(symbols.complete)} ${stepDisplayName(event, event.outputSource)} ${styled.duration(`(${formatDurationMs(durationMs)})`)}`
       );
     },
     onStepSkip: (event) => {
-      clearProgress(event.id);
+      lastProgressLogAt.delete(event.id);
       const detail = safeTerminalText(
         event.dependencyId
           ? `${event.reason}: ${event.dependencyId}`
           : (event.message ?? event.reason)
       );
       log.log(
-        `  ${styled.skip(symbols.skip)} ${displayName(event)} ${styled.duration(`(${detail})`)}`
+        `  ${styled.skip(symbols.skip)} ${stepDisplayName(event, event.outputSource)} ${styled.duration(`(${detail})`)}`
       );
     },
     onStepCancel: (event) => {
-      clearProgress(event.id);
+      lastProgressLogAt.delete(event.id);
       log.warn(
-        `  ${styled.skip(symbols.skip)} ${displayName(event)}: cancelled: ${safeTerminalText(event.error.message)}`
+        `  ${styled.skip(symbols.skip)} ${stepDisplayName(event, event.outputSource)}: cancelled: ${safeTerminalText(event.error.message)}`
       );
     },
     onStepFail: (event) => {
-      clearProgress(event.id);
+      lastProgressLogAt.delete(event.id);
       log.error(
-        `  ${styled.fail(symbols.fail)} ${displayName(event)}: ${safeTerminalText(event.error.message)}`
+        `  ${styled.fail(symbols.fail)} ${stepDisplayName(event, event.outputSource)}: ${safeTerminalText(event.error.message)}`
       );
     },
     onFinalizeStart: () => {

@@ -3,9 +3,9 @@ import { didYouMean } from "../utilities/suggest.js";
 import { isStepCachePolicy } from "../tracing/tracing-constants.js";
 import type { CompiledPipeline } from "./pipeline-compiler.js";
 import type { StepIds, TargetIds } from "./pipeline-definition.js";
-import { decideStepDisposition } from "./pipeline-disposition.js";
+import { decideStepDisposition, type DependencyState } from "./pipeline-disposition.js";
 import { pipelineDiagnostic } from "./pipeline-errors.js";
-import type { CompiledStep } from "./pipeline-graph.js";
+import { targetClosure, type CompiledStep } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { STEP_NESTED_PIPELINE, STEP_REMOTE, STEP_AGENT } from "./pipeline-step-metadata.js";
 import type {
@@ -13,20 +13,17 @@ import type {
   PipelinePlan,
   PipelinePlanStep,
   PipelineRunControls,
-  PipelineStepReport,
   PipelineStepSelectionReason,
   PipelineStepSkipReason,
-  PipelineStepSkippedReport,
   StandardSchemaV1,
 } from "./pipeline-types.js";
 
-export function stepToPlanStep<TOptions extends object>(
+function stepToPlanStep<TOptions extends object>(
   step: CompiledStep<TOptions>,
   selected: boolean,
-  skipReason?: PipelineStepSkipReason,
-  selectionReasons?: readonly PipelineStepSelectionReason[]
+  skipReason: PipelineStepSkipReason | undefined,
+  selectionReasons: readonly PipelineStepSelectionReason[]
 ): PipelinePlanStep {
-  const reasons = selectionReasons ?? [{ kind: "all" }];
   const planStep: PipelinePlanStep = {
     dependencies: step.dependsOn.map((dep) => dep.id),
     description: step.description,
@@ -37,7 +34,7 @@ export function stepToPlanStep<TOptions extends object>(
     optionalDependencies: step.optionalDependsOn.map((dep) => dep.id),
     runtimeSkipPossible: step.skip !== undefined,
     selected,
-    selectionReasons: reasons,
+    selectionReasons,
     skipAfterFailureOf: step.skipAfterFailureOf.map((dep) => dep.id),
     skipReason,
   };
@@ -59,7 +56,6 @@ function targetSelectionReasons<TOptions extends object>(
 ): Map<string, PipelineStepSelectionReason[]> {
   const reasonsByStepId = new Map<string, PipelineStepSelectionReason[]>();
 
-  // Each target expands a step once. Validation rejects repeated IDs within each dependency list.
   function addReason(stepId: string, reason: PipelineStepSelectionReason): void {
     const reasons = reasonsByStepId.get(stepId);
     if (reasons) reasons.push(reason);
@@ -68,36 +64,9 @@ function targetSelectionReasons<TOptions extends object>(
 
   for (const target of targets) {
     addReason(target.id, { kind: "target", targetId: target.id });
-    const expanded = new Set<CompiledStep<TOptions>>();
-    const includePrerequisites = (step: CompiledStep<TOptions>): void => {
-      if (expanded.has(step)) return;
-      expanded.add(step);
-
-      for (const dependency of step.dependsOn) {
-        addReason(dependency.id, {
-          dependentId: step.id,
-          kind: "required-dependency",
-          targetId: target.id,
-        });
-        includePrerequisites(dependency);
-      }
-      for (const dependency of step.skipAfterFailureOf) {
-        addReason(dependency.id, {
-          dependentId: step.id,
-          kind: "failure-gate",
-          targetId: target.id,
-        });
-        includePrerequisites(dependency);
-      }
-      for (const dependency of step.optionalDependsOn) {
-        addReason(dependency.id, {
-          dependentId: step.id,
-          kind: "optional-only",
-          targetId: target.id,
-        });
-      }
-    };
-    includePrerequisites(target);
+    targetClosure(target, (dependency, dependent, kind) => {
+      addReason(dependency.id, { dependentId: dependent.id, kind, targetId: target.id });
+    });
   }
 
   return reasonsByStepId;
@@ -169,12 +138,12 @@ export function buildPipelinePlan<
     steps: [],
   };
 
-  const knownStepIds = new Set(compiled.stepIds);
-  const declaredTargetIds = new Set(compiled.declaredTargets.map((target) => target.id));
+  const knownSteps = compiled.stepsById;
+  const declaredTargetIds = new Set(compiled.targetIds);
   const requestedStepIds = controls.stepIds ?? [];
   const requestedTargets = controls.targets ?? [];
   for (const stepId of controls.suppliedOutputs?.keys() ?? []) {
-    if (!knownStepIds.has(stepId))
+    if (!knownSteps.has(stepId))
       errors.push(
         pipelineDiagnostic(
           "TUBELESS_RUN_OUTPUT_RECOVERY_INVALID",
@@ -246,7 +215,7 @@ export function buildPipelinePlan<
       )
     );
   }
-  const unknownRequestedStepIds = requestedStepIds.filter((stepId) => !knownStepIds.has(stepId));
+  const unknownRequestedStepIds = requestedStepIds.filter((stepId) => !knownSteps.has(stepId));
   if (unknownRequestedStepIds.length > 0) {
     errors.push(
       pipelineDiagnostic(
@@ -271,7 +240,7 @@ export function buildPipelinePlan<
       )
     );
   }
-  const unknownTargets = requestedTargets.filter((stepId) => !knownStepIds.has(stepId));
+  const unknownTargets = requestedTargets.filter((stepId) => !knownSteps.has(stepId));
   if (unknownTargets.length > 0) {
     errors.push(
       pipelineDiagnostic(
@@ -286,7 +255,7 @@ export function buildPipelinePlan<
     );
   }
   const undeclaredTargets = requestedTargets.filter(
-    (stepId) => knownStepIds.has(stepId) && !declaredTargetIds.has(stepId)
+    (stepId) => knownSteps.has(stepId) && !declaredTargetIds.has(stepId)
   );
   if (undeclaredTargets.length > 0) {
     const uniqueUndeclared = [...new Set(undeclaredTargets)];
@@ -322,8 +291,7 @@ export function buildPipelinePlan<
       ])
     );
   } else if (controls.targets !== undefined) {
-    const stepsById = new Map(steps.map((step) => [step.id, step]));
-    const selectedTargets = controls.targets.map((target) => stepsById.get(target)!);
+    const selectedTargets = controls.targets.map((target) => compiled.stepsById.get(target)!);
     selectionReasonsByStepId = targetSelectionReasons(selectedTargets);
     for (const step of steps) {
       const reasons = selectionReasonsByStepId.get(step.id) ?? [];
@@ -355,50 +323,26 @@ export function buildPipelinePlan<
   }
   if (errors.length > 0) return invalidPlan;
   const planSteps: PipelinePlanStep[] = [];
-  const plannedReportsByStepId = new Map<string, PipelineStepReport>();
+  const plannedStates = new Map<string, DependencyState>();
   for (const step of steps) {
     const selectionReasons = selectionReasonsByStepId.get(step.id)!;
     const selected = selectionReasons.some(selectsStep);
-    const disposition =
-      selected && controls.suppliedOutputs?.has(step.id)
-        ? ({ kind: "run" } as const)
-        : decideStepDisposition({
-            dryRun,
-            selected,
-            reportsByStepId: plannedReportsByStepId,
-            step,
-          });
+    const disposition = decideStepDisposition({
+      dryRun,
+      selected,
+      hasReplacementOutput: controls.suppliedOutputs?.has(step.id),
+      dependencyStates: plannedStates,
+      step,
+    });
     const skipReason = disposition.kind === "skip" ? disposition.reason : undefined;
-    const planStep = stepToPlanStep(step, selected, skipReason, selectionReasons);
-    planSteps.push(planStep);
-    if (disposition.kind === "skip") {
-      const report: PipelineStepSkippedReport = {
-        id: step.id,
-        name: step.name,
-        description: step.description,
-        finishedAtMs: 0,
-        reason: disposition.reason,
-        status: "skipped",
-      };
-      if (disposition.dependencyId) report.dependencyId = disposition.dependencyId;
-      if (disposition.message) report.message = disposition.message;
-      plannedReportsByStepId.set(step.id, report);
-    } else {
-      plannedReportsByStepId.set(step.id, {
-        attemptId: "",
-        id: step.id,
-        name: step.name,
-        description: step.description,
-        finishedAtMs: 0,
-        startedAtMs: 0,
-        status: "completed",
-      });
-    }
+    planSteps.push(stepToPlanStep(step, selected, skipReason, selectionReasons));
+    plannedStates.set(
+      step.id,
+      disposition.kind === "skip"
+        ? { status: "skipped", reason: disposition.reason }
+        : { status: "completed" }
+    );
   }
 
   return { ...invalidPlan, ok: true, steps: planSteps };
-}
-
-export function planStepById(plan: PipelinePlan): Map<string, PipelinePlanStep> {
-  return new Map(plan.steps.map((step) => [step.id, step]));
 }

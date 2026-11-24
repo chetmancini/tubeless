@@ -15,7 +15,6 @@ import type { StepsOptions } from "./pipeline-definition.js";
 import { decideStepDisposition } from "./pipeline-disposition.js";
 import { schedulePipelineSteps } from "./pipeline-scheduler.js";
 import type { CompiledStep } from "./pipeline-graph.js";
-import { planStepById, stepToPlanStep } from "./pipeline-plan.js";
 import { PipelineRunState, type PipelineStepAttempt } from "./pipeline-run-state.js";
 import type { AnyStep } from "./pipeline-steps.js";
 import { prepareStepOutput, type RunOutputObservation } from "./pipeline-output-observer.js";
@@ -177,13 +176,14 @@ export async function executePlannedRun<
     trace: lifecycle.traceContext,
   };
 
-  const plannedSteps = planStepById(input.plan);
-  const stepsById = new Map(compiled.orderedSteps.map((step) => [step.id, step]));
-  const orderedSteps = input.plan.steps.map(
-    (step) => stepsById.get(step.id) as CompiledStep<TOptions>
-  );
+  const plannedSteps = new Map(input.plan.steps.map((step) => [step.id, step]));
+  const orderedSteps = input.plan.steps.map(({ id }) => {
+    const step = compiled.stepsById.get(id);
+    if (!step) throw new Error(`Pipeline ${compiled.id} plan references unknown step ${id}`);
+    return step;
+  });
   const plannedStepFor = (step: CompiledStep<TOptions>): PipelinePlanStep =>
-    plannedSteps.get(step.id) ?? stepToPlanStep(step, true);
+    plannedSteps.get(step.id)!;
 
   let stopError: PipelineError | undefined;
   let externalCancellationError: PipelineError | undefined;
@@ -279,37 +279,37 @@ export async function executePlannedRun<
     const plannedStep = plannedStepFor(step);
     if (cancelBeforeStepStart(step)) return;
 
-    const outputSource = controls.suppliedOutputs?.has(step.id)
-      ? "supplied"
-      : input.overrides?.has(step)
-        ? "override"
+    const supplied = controls.suppliedOutputs;
+    const overridden = input.overrides;
+    const replacement = supplied?.has(step.id)
+      ? { source: "supplied" as const, value: supplied.get(step.id) }
+      : overridden?.has(step)
+        ? { source: "override" as const, value: overridden.get(step) }
         : undefined;
-    if (plannedStep.selected && outputSource) {
-      const attempt = state.beginAttempt(plannedStep, runtime.now(), outputSource);
+    const disposition = decideStepDisposition({
+      dryRun,
+      selected: plannedStep.selected,
+      hasReplacementOutput: replacement !== undefined,
+      dependencyStates: state.reportsByStepId,
+      step,
+    });
+    if (disposition.kind === "skip") {
+      state.skipStep(plannedStep, disposition);
+      return;
+    }
+    if (replacement) {
+      const attempt = state.beginAttempt(plannedStep, runtime.now(), replacement.source);
       try {
         const output = await validateStepOutput(
           step,
-          outputSource === "supplied"
-            ? controls.suppliedOutputs!.get(step.id)
-            : input.overrides!.get(step),
-          `Pipeline ${compiled.id} step ${step.id} ${outputSource} output`
+          replacement.value,
+          `Pipeline ${compiled.id} step ${step.id} ${replacement.source} output`
         );
         throwIfAborted(runtime);
         state.completeStep(plannedStep, attempt, output);
       } catch (error) {
         recordStepExecutionFailure(error, plannedStep, attempt);
       }
-      return;
-    }
-
-    const disposition = decideStepDisposition({
-      dryRun,
-      selected: plannedStep.selected,
-      reportsByStepId: state.reportsByStepId,
-      step,
-    });
-    if (disposition.kind === "skip") {
-      state.skipStep(plannedStep, disposition);
       return;
     }
 
@@ -430,7 +430,7 @@ const fallbackNow = (): number => Date.now();
 const fallbackSleep = (durationMs: number, signal?: AbortSignal): Promise<void> =>
   abortableSleep(durationMs, signal, "Pipeline sleep");
 
-export function defaultPipelineContext(): PipelineContext {
+export function defaultPipelineContext(): PipelineRuntime {
   return { cwd: process.cwd(), log: console, now: fallbackNow, sleep: fallbackSleep };
 }
 
@@ -441,7 +441,7 @@ export function resolvePipelineRuntime(context: Partial<PipelineContext> = {}): 
     ...context,
     cwd: context.cwd ?? defaults.cwd,
     log: context.log ?? defaults.log,
-    now: context.now ?? defaults.now ?? fallbackNow,
-    sleep: context.sleep ?? defaults.sleep ?? fallbackSleep,
+    now: context.now ?? defaults.now,
+    sleep: context.sleep ?? defaults.sleep,
   };
 }

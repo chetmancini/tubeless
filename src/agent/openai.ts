@@ -2,14 +2,13 @@ import { readAgentText, type AgentTextSink } from "./text-stream.js";
 import { readOpenAIStream } from "./openai-stream.js";
 import type { AgentModel, AgentModelDescriptors } from "./model-types.js";
 import { openaiRequest } from "./openai-http.js";
-import { DEFAULT_COMPACT_AFTER_BYTES, MAX_REQUEST_BYTES } from "./provider-limits.js";
 import {
+  DEFAULT_COMPACT_AFTER_BYTES,
   DEFAULT_MAX_RETRIES,
-  MAX_RETRIES_LIMIT,
-  providerBaseUrl,
-  withProviderDeadline,
-  withProviderRetry,
-} from "./provider-http.js";
+  MAX_REQUEST_BYTES,
+  validProviderLimits,
+} from "./provider-limits.js";
+import { providerBaseUrl, withProviderDeadline, withProviderRetry } from "./provider-http.js";
 import { record } from "./provider-schema.js";
 import { openaiDecision, outputItems, parameter } from "./openai-protocol.js";
 import { boundedToolOutputs } from "./provider-tool-outputs.js";
@@ -73,17 +72,8 @@ export function openaiModel(options: OpenAIModelOptions = {}): AgentModel {
   } = options;
   if (
     (text !== undefined && typeof text !== "function") ||
-    (compactAfterBytes !== null &&
-      (!Number.isSafeInteger(compactAfterBytes) ||
-        compactAfterBytes < 1 ||
-        compactAfterBytes >= MAX_REQUEST_BYTES)) ||
+    !validProviderLimits(timeoutMs, maxRetries, compactAfterBytes) ||
     (baseUrl !== undefined && typeof baseUrl !== "string") ||
-    !Number.isSafeInteger(maxRetries) ||
-    maxRetries < 0 ||
-    maxRetries > MAX_RETRIES_LIMIT ||
-    !Number.isSafeInteger(timeoutMs) ||
-    timeoutMs < 1 ||
-    timeoutMs > 2_147_483_647 ||
     (model !== undefined && (typeof model !== "string" || !model.trim())) ||
     (apiKey !== undefined && (typeof apiKey !== "string" || !apiKey.trim())) ||
     (reasoningEffort !== null &&

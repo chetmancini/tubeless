@@ -1,5 +1,5 @@
-import type { GraphRun, GraphStep } from "./input.js";
-import type { StudioChildStep } from "../../shared/schema.js";
+import type { GraphStep } from "./input.js";
+import { producedStepOutput, tripsFailureGate } from "../step-outcome.js";
 
 export type EdgeState =
   | "active"
@@ -12,10 +12,6 @@ export type EdgeState =
 
 export type EdgeKind = "input" | "optional" | "gate";
 
-/** Internal selection identity; definition-only graphs have no recorded run ID. */
-export const graphRunId = (run: GraphRun): string => run.runId ?? `definition:${run.pipelineId}`;
-
-/** Group a step's planned dependencies by source, in required, optional, gate order. */
 export function incomingEdges(step: GraphStep): Map<string, EdgeKind[]> {
   const edges = new Map<string, EdgeKind[]>();
   const add = (ids: readonly string[] | undefined, kind: EdgeKind) => {
@@ -25,21 +21,6 @@ export function incomingEdges(step: GraphStep): Map<string, EdgeKind[]> {
   add(step.optionalDependencies, "optional");
   add(step.skipAfterFailureOf, "gate");
   return edges;
-}
-
-/** Child runs a step started, bounded by the recorded per-step total. */
-export function childStepTotal(
-  childSteps: readonly StudioChildStep[],
-  stepId: string,
-  fallback: number
-): number {
-  const match = childSteps.find((entry) => entry.stepId === stepId);
-  return match ? Math.max(match.count, fallback) : fallback;
-}
-
-/** Completed steps and policy skips publish an output that consumers receive. */
-function producedOutput(step: GraphStep): boolean {
-  return step.status === "completed" || step.skipReason === "policy";
 }
 
 /**
@@ -54,11 +35,11 @@ export function edgeState(
   target: GraphStep
 ): EdgeState {
   const gate = kinds.includes("gate");
-  const failed = source.status === "failed" || source.status === "cancelled";
+  const failed = tripsFailureGate(source.status);
   if (gate && failed) return "tripped";
   if (target.status === undefined || target.status === "planned") return "candidate";
   if (kinds.length === 1 && gate) return "settled";
-  if (!producedOutput(source)) return failed ? "blocked" : "unused";
+  if (!producedStepOutput(source)) return failed ? "blocked" : "unused";
   if (target.status === "running") return "active";
   return target.status === "skipped" && target.skipReason !== "policy" ? "unused" : "used";
 }

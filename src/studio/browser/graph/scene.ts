@@ -1,17 +1,10 @@
 import type { PipelineStepProgressDetail } from "../../../core/pipeline.js";
 import type { StoredRunSummary } from "../../../run-store/run-history.js";
-import type { GraphDetail, GraphRun, GraphStep } from "./input.js";
+import { graphKey, graphRunId, type GraphDetail, type GraphRun, type GraphStep } from "./input.js";
 import { STUDIO_CHILD_PAGE_SIZE } from "../../shared/limits.js";
-import { compareChildRuns } from "../../shared/children.js";
+import { compareChildRuns, indexChildRunPages } from "../../shared/children.js";
 import type { StudioChildStep } from "../../shared/schema.js";
-import {
-  childStepTotal,
-  edgeState,
-  graphRunId,
-  incomingEdges,
-  type EdgeKind,
-  type EdgeState,
-} from "./dependencies.js";
+import { edgeState, incomingEdges, type EdgeKind, type EdgeState } from "./dependencies.js";
 import { layoutDag } from "./layout.js";
 
 const SLOT_WIDTH = 124;
@@ -103,9 +96,7 @@ interface SceneContext {
   /** Expanded child runs whose detail must be loaded and refreshed. */
   readonly wanted: Set<string>;
   readonly runs: Map<string, GraphRun>;
-  readonly children: Map<string, readonly StoredRunSummary[]>;
-  /** Direct-child totals per parent step. The children map holds only the drawn page. */
-  readonly childSteps: Map<string, readonly StudioChildStep[]>;
+  readonly childRunPages: Map<string, ReturnType<typeof indexChildRunPages>>;
   readonly summaries: Map<string, StoredRunSummary>;
 }
 
@@ -116,8 +107,7 @@ export interface GraphScene {
   readonly expandable: ReadonlySet<string>;
   readonly wanted: ReadonlySet<string>;
   readonly runs: ReadonlyMap<string, GraphRun>;
-  readonly children: ReadonlyMap<string, readonly StoredRunSummary[]>;
-  readonly childSteps: ReadonlyMap<string, readonly StudioChildStep[]>;
+  readonly childRunPages: ReadonlyMap<string, ReturnType<typeof indexChildRunPages>>;
   readonly summaries: ReadonlyMap<string, StoredRunSummary>;
 }
 
@@ -137,8 +127,7 @@ export function buildGraphScene(
     expandable: new Set(),
     wanted: new Set(),
     runs: new Map(),
-    children: new Map(),
-    childSteps: new Map(),
+    childRunPages: new Map(),
     summaries: new Map(),
   };
   const scene = buildRunScene(detail.run, detail.children ?? [], ctx, 0, detail.childSteps);
@@ -149,8 +138,7 @@ export function buildGraphScene(
     expandable: ctx.expandable,
     wanted: ctx.wanted,
     runs: ctx.runs,
-    children: ctx.children,
-    childSteps: ctx.childSteps,
+    childRunPages: ctx.childRunPages,
     summaries: ctx.summaries,
   };
 }
@@ -193,10 +181,10 @@ function buildExpansion(
     const label = runLabel(summary, tools);
     const expandable = ctx.canLoad && depth + 1 < MAX_DEPTH;
     if (expandable) ctx.expandable.add(summary.runId);
+    const key = graphKey("run", summary.runId);
     const expanded =
       expandable &&
-      (ctx.toggles.get(summary.runId) ??
-        autoExpand(ctx, summary.runId, summary.subtreeIsRunning && runningRuns === 1));
+      (ctx.toggles.get(key) ?? autoExpand(ctx, key, summary.subtreeIsRunning && runningRuns === 1));
     const load = expanded ? ctx.loads.get(summary.runId) : undefined;
     if (expanded) ctx.wanted.add(summary.runId);
     const graph =
@@ -288,13 +276,13 @@ function buildRunScene(
 ): RunScene {
   const runId = graphRunId(run);
   ctx.runs.set(runId, run);
-  ctx.children.set(runId, children);
-  ctx.childSteps.set(runId, childSteps);
+  const childRunPage = indexChildRunPages(children, childSteps);
+  ctx.childRunPages.set(runId, childRunPage);
   for (const child of children) ctx.summaries.set(child.runId, child);
   const stepById = new Map(run.steps.map((step) => [step.id, step]));
   const unplaced: StepScene[] = run.steps.map((step) => {
-    const key = `${runId}/${step.id}`;
-    const childRuns = children.filter((child) => child.origin?.stepId === step.id);
+    const key = graphKey("step", runId, step.id);
+    const { runs: childRuns, total: totalRuns } = childRunPage(step.id);
     const runItems = new Set(childRuns.map((child) => child.origin?.itemKey));
     // Single and iterate steps report their child runs' progress as details; the runs show it.
     const mode = step.nestedPipeline?.mode;
@@ -311,7 +299,6 @@ function buildRunScene(
     const unrecorded = step.nestedPipeline
       ? 0
       : Math.max(0, (step.progress?.detailCount ?? recorded.length) - recorded.length);
-    const totalRuns = childStepTotal(childSteps, step.id, childRuns.length);
     const itemCount = totalRuns + details.length;
     const expanded =
       itemCount > 0 &&
@@ -339,8 +326,8 @@ function buildRunScene(
     unplaced.map(({ key, width, height }) => ({ id: key, width, height })),
     run.steps.flatMap((step) =>
       [...incoming.get(step.id)!.keys()].map((from) => ({
-        from: `${runId}/${from}`,
-        to: `${runId}/${step.id}`,
+        from: graphKey("step", runId, from),
+        to: graphKey("step", runId, step.id),
       }))
     ),
     { columnGap: COLUMN_GAP, rowGap: ROW_GAP }

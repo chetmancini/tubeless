@@ -1,50 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { decideStepDisposition } from "./pipeline-disposition.js";
+import { decideStepDisposition, type DependencyState } from "./pipeline-disposition.js";
 import { compilePipelineGraph, stepEdges } from "./pipeline-graph.js";
 import type { AnyStep } from "./pipeline-steps.js";
-import type { PipelineStepReport } from "./pipeline-types.js";
-
-function completed(id: string): PipelineStepReport {
-  return {
-    attemptId: `${id}:attempt`,
-    id,
-    finishedAtMs: 1,
-    startedAtMs: 0,
-    status: "completed",
-  };
-}
-
-function failed(id: string): PipelineStepReport {
-  return {
-    attemptId: `${id}:attempt`,
-    error: {
-      code: "TUBELESS_STEP_FAILED",
-      kind: "step",
-      message: `${id} failed`,
-      phase: "execution",
-      stepId: id,
-    },
-    id,
-    finishedAtMs: 1,
-    startedAtMs: 0,
-    status: "failed",
-  };
-}
-
-function policySkipped(id: string): PipelineStepReport {
-  return {
-    id,
-    finishedAtMs: 1,
-    reason: "policy",
-    status: "skipped",
-  };
-}
 
 function disposition(
   step: AnyStep,
   options: {
     dryRun?: boolean;
-    reports?: readonly (readonly [string, PipelineStepReport])[];
+    dependencies?: readonly (readonly [string, DependencyState])[];
     selected?: boolean;
   } = {}
 ) {
@@ -52,7 +15,7 @@ function disposition(
   return decideStepDisposition({
     dryRun: options.dryRun ?? false,
     selected: options.selected ?? true,
-    reportsByStepId: new Map(options.reports),
+    dependencyStates: new Map(options.dependencies),
     step: graph.compiledByAuthorStep.get(step)!,
   });
 }
@@ -81,7 +44,7 @@ describe("step disposition", () => {
       skipAfterFailureOf: [gate],
     };
 
-    expect(disposition(step, { reports: [[gate.id, failed(gate.id)]] })).toEqual({
+    expect(disposition(step, { dependencies: [[gate.id, { status: "failed" }]] })).toEqual({
       dependencyId: "gate",
       kind: "skip",
       reason: "failed-dependency",
@@ -114,9 +77,9 @@ describe("step disposition", () => {
 
     expect(
       disposition(step, {
-        reports: [
-          [completedDependency.id, completed(completedDependency.id)],
-          [skippedDependency.id, policySkipped(skippedDependency.id)],
+        dependencies: [
+          [completedDependency.id, { status: "completed" }],
+          [skippedDependency.id, { status: "skipped", reason: "policy" }],
         ],
       })
     ).toEqual({ kind: "run" });

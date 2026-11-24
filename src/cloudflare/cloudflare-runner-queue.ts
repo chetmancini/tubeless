@@ -1,4 +1,3 @@
-import { storedRunEvent, type RunEventRecord } from "../run-store/run-store-sql.js";
 import type { RunnerStageObservation } from "./cloudflare-child-placement.js";
 import { HostedAttemptConflict } from "../hosting/attempt-store.js";
 import { decodeRunnerBatch } from "../hosting/attempt-batch.js";
@@ -14,7 +13,7 @@ import {
   type RunnerStageResult,
   type RunnerStageInput,
 } from "../hosting/runner-protocol.js";
-import { digestCollectorBody } from "../hosting/collector-protocol.js";
+import { sha256Hex } from "../utilities/sha256.js";
 import type { HostedExecutionReason } from "../hosting/execution-status.js";
 import type { StudioIngest } from "../hosting/run-contract.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
@@ -36,7 +35,7 @@ type QueueRow = {
 const lost = { active: false } as const;
 const cancelled = { error: "The remote stage was cancelled." } as const;
 const expired = { error: RUNNER_INTERRUPTED, interrupted: true } as const;
-const digestLease = (token: string) => digestCollectorBody(new TextEncoder().encode(token));
+const digestLease = (token: string) => sha256Hex(new TextEncoder().encode(token));
 function claimedJob(job: RunnerJob): ClaimedJob {
   if (job.kind === "root") {
     const { run: _run, ...identity } = job;
@@ -257,28 +256,27 @@ export class CloudflareRunnerQueue {
       // A sealed receipt proves an already committed batch, even after the parent consumes the result.
       const ledger = this.deps.store.attemptLedger;
       if (!row && lease?.job_json !== null) return { accepted: false };
-      if (ledger.replay(batch) !== undefined) return { accepted: true };
-      if (!row) return { accepted: false };
-
-      const latest = ledger.latest(batch.attemptId);
-      if (batch.sequence !== (latest?.sequence ?? -1) + 1) return { accepted: false };
+      const status = ledger.check(batch);
+      if (status.kind === "replay") return { accepted: true };
+      if (!row || status.kind === "gap") return { accepted: false };
       const { job } = row;
       const stage = job.kind === "stage" ? job.stage : undefined;
       if (stage && this.deps.store.executions.status(job.launchId)?.state !== "running")
         return { accepted: false };
-      const root = ledger.bind(
+      const root = ledger.bindBatch(
+        batch,
         {
-          attemptId: job.id,
           pipelineId: job.pipelineId,
           definitionId: job.definitionId,
           parentRunId: stage?.parentRunId,
           stepId: stage?.stepId,
         },
-        latest?.runId,
-        batch.events
+        status.runId
       );
-      const events =
-        latest === undefined ? this.#withRunnerLog(batch.events, job.id, root) : [...batch.events];
+      const firstBatch = status.runId === undefined;
+      const events = firstBatch
+        ? this.#withRunnerLog(batch.events, job.id, root)
+        : [...batch.events];
 
       if (!stage) {
         if (batch.report !== undefined)
@@ -296,7 +294,7 @@ export class CloudflareRunnerQueue {
         // Progress and nested histories arrive first. The terminal batch holds one event.
         const completion = batch.events[0];
         if (
-          latest === undefined ||
+          firstBatch ||
           batch.events.length !== 1 ||
           completion.name !== "pipeline.completed" ||
           completion.runId !== root
@@ -320,7 +318,6 @@ export class CloudflareRunnerQueue {
         else this.deps.events.append(events);
         this.#close(job.id, row.cancelled ? cancelled : { report }, true);
       }
-      ledger.record(batch, root);
       if (batch.report !== undefined) await this.deps.schedule();
       return { accepted: true };
     });
@@ -412,20 +409,11 @@ export class CloudflareRunnerQueue {
       .toArray()[0];
     if (!row) return { result: { error: "Unknown remote stage." }, events: [] };
     const runId = this.deps.store.attemptLedger.latest(id)?.runId;
-    // Only the bound root drives parent progress. Keep each RPC page bounded and skip log rows.
-    const rows =
+    const { events, hasMore } =
       runId === undefined
-        ? []
-        : (this.#sql
-            .exec(
-              `SELECT * FROM pipeline_run_events WHERE run_id = ? AND id > ?
-       AND event_name IN ('step.running', 'step.complete', 'step.skipped', 'step.cancelled', 'step.failed')
-       ORDER BY id LIMIT 32`,
-              runId,
-              afterId
-            )
-            .toArray() as unknown as RunEventRecord[]);
-    const events = rows.map(storedRunEvent);
+        ? { events: [], hasMore: false }
+        : this.deps.events.listChildProgress(runId, afterId);
+    if (hasMore) return { events, hasMore };
     if (typeof row.result_json !== "string") return { events };
     const result = JSON.parse(row.result_json) as RunnerStageResult;
     return {
@@ -435,18 +423,15 @@ export class CloudflareRunnerQueue {
   }
 
   activeStageRunIds(launchId: string): string[] {
-    return this.#sql
+    const stages = this.#sql
       .exec(
-        `SELECT (
-          SELECT batch.run_id FROM tubeless_attempt_batches AS batch
-          WHERE batch.attempt_id = stage.id ORDER BY batch.sequence DESC LIMIT 1
-        ) AS run_id FROM tubeless_runner_queue AS stage
-        WHERE stage.launch_id = ? AND stage.id <> stage.launch_id
-          AND stage.job_json IS NOT NULL AND stage.lease_digest IS NOT NULL`,
+        `SELECT id FROM tubeless_runner_queue
+         WHERE launch_id = ? AND id <> launch_id
+           AND job_json IS NOT NULL AND lease_digest IS NOT NULL`,
         launchId
       )
-      .toArray()
-      .flatMap(({ run_id }) => (typeof run_id === "string" ? [run_id] : []));
+      .toArray();
+    return this.deps.store.attemptLedger.runIds(stages.map(({ id }) => String(id)));
   }
 
   cancel(launchId: string, stageId?: string): void {

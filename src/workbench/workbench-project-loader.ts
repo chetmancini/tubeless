@@ -3,11 +3,11 @@ import * as path from "node:path";
 import {
   importModuleNamespace,
   isWorkbenchPipelineCommand,
+  loadPlanSourceModule,
   selectUniqueExport,
-  type WorkbenchPipeline,
   type WorkbenchPipelineCommand,
 } from "./pipeline-module.js";
-import { commandForPipeline } from "../hosting/hosting-commands.js";
+import { commandForPipeline, type HostablePipeline } from "../hosting/hosting-commands.js";
 import {
   isPipelineProject,
   type AnyProjectPipeline,
@@ -17,7 +17,6 @@ import {
 import { didYouMean } from "../utilities/suggest.js";
 import {
   errorMessage,
-  loadPlanSource,
   loadWorkbenchModule,
   shellWord,
   TUBELESS_WORKBENCH_EXIT_CODE,
@@ -38,7 +37,7 @@ export interface WorkbenchRegistration {
   readonly source: string;
   /** Pipeline id when available before loading the source. */
   readonly id?: string;
-  loadPlan(io: WorkbenchCliIo): Promise<{ view: WorkbenchPipeline } | LoadFailure>;
+  loadPlan(io: WorkbenchCliIo): Promise<{ view: HostablePipeline } | LoadFailure>;
   loadCommand(
     io: WorkbenchCliIo
   ): Promise<{ command: WorkbenchPipelineCommand; commandIo: WorkbenchCliIo } | LoadFailure>;
@@ -60,31 +59,31 @@ export function createModuleRegistration(
   exportName?: string
 ): WorkbenchRegistration {
   const resolvedPath = path.resolve(cwd, filePath);
+  const load = (io: WorkbenchCliIo) =>
+    loadWorkbenchModule(resolvedPath, io, (file) => loadPlanSourceModule(file, exportName));
   return {
     cwd,
     identity: `${resolvedPath}\0${exportName ?? ""}`,
     source: resolvedPath,
     async loadPlan(io) {
-      const loaded = await loadPlanSource(resolvedPath, exportName, { ...io, cwd });
+      const loaded = await load(io);
       if ("exitCode" in loaded) return loaded;
-      return {
-        view: loaded.source.kind === "command" ? loaded.source.command : loaded.source.pipeline,
-      };
+      return { view: loaded.kind === "command" ? loaded.command : loaded.pipeline };
     },
     async loadCommand(io) {
       const commandIo = { ...io, cwd };
-      const loaded = await loadPlanSource(resolvedPath, exportName, commandIo);
+      const loaded = await load(io);
       if ("exitCode" in loaded) return loaded;
-      if (loaded.source.kind === "command") {
-        return { command: loaded.source.command, commandIo };
+      if (loaded.kind === "command") {
+        return { command: loaded.command, commandIo };
       }
-      return derivePipelineCommand(loaded.source.pipeline, commandIo, "directly loaded");
+      return derivePipelineCommand(loaded.pipeline, commandIo, "directly loaded");
     },
   };
 }
 
 function derivePipelineCommand(
-  pipeline: WorkbenchPipeline,
+  pipeline: HostablePipeline,
   io: WorkbenchCliIo,
   source: "directly loaded" | "project"
 ): { command: WorkbenchPipelineCommand; commandIo: WorkbenchCliIo } | LoadFailure {
