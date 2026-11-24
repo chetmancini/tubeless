@@ -126,7 +126,11 @@ it("retries delayed history and lost acknowledgements without duplicating record
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it.each(["absent", "error", "hung"])("bounds %s deliveries and cleans its timers", async (mode) => {
+it.each([
+  { mode: "absent", deliveries: 5 },
+  { mode: "error", deliveries: 5 },
+  { mode: "hung", deliveries: 1 },
+])("bounds $mode deliveries and cleans its timers", async ({ mode, deliveries }) => {
   vi.useFakeTimers();
   const appendTranscript = vi.fn(async () => {
     if (mode === "hung") return new Promise<{ accepted: boolean }>(() => {});
@@ -137,7 +141,7 @@ it.each(["absent", "error", "hung"])("bounds %s deliveries and cleans its timers
   const rejected = expect(writer.write(transcriptRecord())).rejects.toThrow();
   await vi.advanceTimersByTimeAsync(5_001);
   await rejected;
-  expect(appendTranscript).toHaveBeenCalledTimes(mode === "hung" ? 1 : 5);
+  expect(appendTranscript).toHaveBeenCalledTimes(deliveries);
   expect(vi.getTimerCount()).toBe(0);
 });
 

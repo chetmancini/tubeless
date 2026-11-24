@@ -38,12 +38,16 @@ and re-runs tests; `make studio-check` fails when the served bundle does not mat
 its sources.
 
 Oxlint runs the Landmines rules configured in `.oxlintrc.json`. Tests should wait
-for observable events or use fake timers for timing assertions. The timeout
-allowlist records existing integration budgets by file and count. The Vitest
-diagnostics fixture deliberately exercises spec-file discovery and retries.
-Group related modules in a directory once three siblings would share a filename
-prefix. Update or remove an existing `no-prefix-cluster` allowance when its
-module count goes down.
+for observable events or use fake timers for timing assertions. Keep assertions
+unconditional and put expected values in the `test.each` case table. Reduce
+per-file allowances as conditional assertions, parameter branches, and timeout
+overrides are removed. The Vitest diagnostics fixture deliberately exercises
+spec-file discovery and retries.
+
+Split source files by responsibility before they exceed 500 lines. Existing
+longer files are capped at their recorded size. Group related modules in a
+directory once three siblings would share a filename prefix. Update or remove an
+existing `no-prefix-cluster` allowance when its module count goes down.
 
 ## Public API and docs
 

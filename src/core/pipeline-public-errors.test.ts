@@ -188,14 +188,6 @@ describe("definePipeline failures and cancellation", () => {
         stepId: "failing",
       },
     ]);
-    const failed = result.steps[0];
-    expect(failed?.status).toBe("failed");
-    if (failed?.status === "failed") {
-      expect(failed.error).toMatchObject({
-        code: "TUBELESS_STEP_FAILED",
-        sourceCode: "REQUEST_REJECTED",
-      });
-    }
     expect(result.steps[0]).toMatchObject({ status: "failed", error: result.errors[0] });
   });
 
