@@ -71,7 +71,7 @@ describe("Cloud structured failure handling", () => {
       ],
     });
   });
-  it("keeps the paired report, native exit and framework causes in machine JSON and keeps failure exit status", async () => {
+  it("keeps the paired report, native exit and framework causes in machine JSON", async () => {
     const result = readCheckReport(
       await readFile(
         new URL("../../../../fixtures/diagnostics/vitest-failure-v1.json", import.meta.url),
@@ -79,6 +79,7 @@ describe("Cloud structured failure handling", () => {
       )
     );
     expect(result.state).toBe("available");
+    if (result.state !== "available") throw new Error("Expected a decoded fixture report.");
     const framework = {
       message: "Vitest exited with code 1",
       code: "TUBELESS_STEP_FAILED",
@@ -124,6 +125,46 @@ describe("Cloud structured failure handling", () => {
     expect(output.diagnostics).toEqual(run.diagnostics);
     expect(output.steps[0].structuredError).toEqual(framework);
     expect(output.nativeCommands).toEqual(run.nativeCommands);
+
+    const inspected = {
+      ...run,
+      sourceIdentity: { selector: { kind: "main", commit: run.commit } },
+      omittedStructuredErrors: 2,
+      diagnostics: {
+        ...run.diagnostics,
+        reports: [
+          {
+            artifact: "vitest.check-report.json",
+            result: {
+              state: "available",
+              report: { ...result.report, completeness: "incomplete" },
+            },
+          },
+          { artifact: "invalid.check-report.json", result: { state: "malformed" } },
+        ],
+        omitted: 1,
+      },
+      artifacts: [{ name: "vitest.check-report.json", size: 22, contentType: "application/json" }],
+    } satisfies typeof baseRun;
+    const dependencies = service({ runs: [inspected] });
+    const machine = captureIo(io.cwd);
+    const args = ["inspect", run.id, "--workspace", "workspace"];
+    expect(await runCloud([...args, "--json"], machine, dependencies)).toBe(0);
+    expect(JSON.parse(machine.output.join(""))).toEqual(inspected);
+
+    const human = captureIo(io.cwd);
+    expect(await runCloud(args, human, dependencies)).toBe(0);
+    expect(human.output.join("")).toContain("test: failed");
+    expect(human.output.join("")).toContain("TUBELESS_STEP_FAILED, NATIVE_EXIT");
+    expect(human.output.join("")).toContain("assertion failure");
+    expect(human.output.join("")).toContain("Command check: exit 1");
+    expect(human.output.join("")).toContain("incomplete");
+    expect(human.output.join("")).toContain("invalid.check-report.json: malformed");
+    expect(human.output.join("")).toContain("Omitted reports: 1");
+    expect(human.output.join("")).toContain("Omitted structured errors: 2");
+    expect(human.output.join("")).toContain(
+      "vitest.check-report.json (22 bytes, application/json)"
+    );
   });
 
   it("accepts old string errors and rejects invalid new response shapes", () => {

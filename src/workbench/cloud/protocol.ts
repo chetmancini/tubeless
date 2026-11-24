@@ -20,13 +20,7 @@ export type CloudJsonValue =
 export type CloudRole = "owner" | "admin" | "member" | "viewer";
 export const CLOUD_INPUT_MAX_DEPTH = 128;
 export const CLOUD_INPUT_MAX_BYTES = 64 * 1024;
-export type CloudRunStatus =
-  | "queued"
-  | "running"
-  | "waiting"
-  | "completed"
-  | "failed"
-  | "cancelled";
+export type CloudRunStatus = (typeof RUN_STATUSES)[number];
 
 export interface CliWorkspace {
   id: string;
@@ -79,6 +73,7 @@ export interface CliRun {
   finishedAt?: number;
   durationMs: number;
   commit: string;
+  sourceIdentity?: Record<string, CloudJsonValue>;
   branch: string;
   trigger: "manual" | "push" | "rerun" | "schedule";
   schedule?: { id: string; name: string; scheduledAt: number; timezone: string };
@@ -384,6 +379,8 @@ export function parseCliRun(value: unknown): CliRun {
     optionalTimestamp(value.startedAt) &&
     optionalTimestamp(value.finishedAt) &&
     optionalText(value.error) &&
+    (value.sourceIdentity === undefined ||
+      (isJsonObject(value.sourceIdentity) && isCloudJsonValue(value.sourceIdentity))) &&
     isJsonObject(value.input) &&
     isCloudJsonValue(value.input) &&
     (value.result === undefined || isCloudJsonValue(value.result)) &&

@@ -10,6 +10,7 @@ import {
   isCloudToken,
   isCloudAutomationToken,
   isCloudIdempotencyKey,
+  isCloudRunStatus,
   parseCliError,
   parseCliPipelines,
   parseCliRun,
@@ -18,6 +19,7 @@ import {
   parseCloudDeviceError,
   parseCloudDeviceSession,
   type CliPipeline,
+  type CloudRunStatus,
   type CliRun,
   type CliRunRequest,
   type CliSession,
@@ -58,6 +60,13 @@ export interface CloudClientOptions {
   timeoutMs?: number;
 }
 
+export interface CliCancelResult {
+  runId: string;
+  status: CloudRunStatus;
+  /** True when the run had already reached a terminal state before cancellation. */
+  alreadyFinished: boolean;
+}
+
 export interface CloudClient {
   readonly host: string;
   session(): Promise<CliSession>;
@@ -65,6 +74,7 @@ export interface CloudClient {
   pipelines(workspaceId: string): Promise<CliPipeline[]>;
   run(workspaceId: string, request: CliRunRequest, idempotencyKey: string): Promise<CliRun>;
   getRun(workspaceId: string, runId: string): Promise<CliRun>;
+  cancelRun(workspaceId: string, runId: string): Promise<CliCancelResult>;
   requireRunFollowing(workspaceId: string, session?: CliSession): Promise<void>;
   followRun(
     workspaceId: string,
@@ -347,6 +357,21 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
         if (run.id !== runId) throw new Error("Cloud returned a different run.");
         return run;
       }),
+    cancelRun: async (workspace, runId) =>
+      requestJson(
+        `${runPath(workspace, runId)}/cancel`,
+        (value) => {
+          if (
+            !isJsonObject(value) ||
+            value.runId !== runId ||
+            !isCloudRunStatus(value.status) ||
+            typeof value.alreadyFinished !== "boolean"
+          )
+            throw new Error("Invalid Cloud cancellation receipt.");
+          return { runId, status: value.status, alreadyFinished: value.alreadyFinished };
+        },
+        { body: {} }
+      ),
     requireRunFollowing: async (workspace, discoveredSession) => {
       const capability =
         options.token && isCloudAutomationToken(options.token)

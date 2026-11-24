@@ -16,6 +16,16 @@ describe("Cloud automation commands", () => {
       expected: { id: "run-1", status: "completed", logs: [] },
     },
     {
+      args: ["inspect", "run-1", "--json"],
+      request: "GET /api/v1/workspaces/workspace/runs/run-1",
+      expected: { id: "run-1", status: "completed", result: { ok: true } },
+    },
+    {
+      args: ["cancel", "run-1", "--json"],
+      request: "POST /api/v1/workspaces/workspace/runs/run-1/cancel",
+      expected: { runId: "run-1", status: "cancelled", alreadyFinished: false },
+    },
+    {
       args: ["run", "--id", pipeline.id, "--detach", "--json"],
       request: "POST /api/v1/workspaces/workspace/runs",
       expected: { id: "run-1", pipelineId: pipeline.id, status: "queued" },
@@ -23,7 +33,9 @@ describe("Cloud automation commands", () => {
   ])(
     "uses an injected automation bearer for $request without session or keychain access",
     async ({ args, expected, request }) => {
-      const dependencies = service();
+      const dependencies = service({
+        cancellation: { runId: "run-1", status: "cancelled", alreadyFinished: false },
+      });
       const fetcher = dependencies.fetch;
       const token = "tlc_ci_v1.test-only-automation-bearer";
       const store = { get: vi.fn(), set: vi.fn(), delete: vi.fn() };
@@ -47,14 +59,17 @@ describe("Cloud automation commands", () => {
     }
   );
 
-  it("requires an explicit automation workspace without requesting a session", async () => {
-    const dependencies = service();
-    dependencies.env.TUBELESS_TOKEN = "tlc_ci_v1.test-only";
-    const io = captureIo(await fixture());
-    expect(await runCloud(["list"], io, dependencies)).toBe(2);
-    expect(dependencies.calls).toEqual([]);
-    expect(io.errors.join("")).toContain("--workspace");
-  });
+  it.each([{ args: ["list"] }, { args: ["inspect", "run-1"] }, { args: ["cancel", "run-1"] }])(
+    "requires an explicit automation workspace for $args without requesting a session",
+    async ({ args }) => {
+      const dependencies = service();
+      dependencies.env.TUBELESS_TOKEN = "tlc_ci_v1.test-only";
+      const io = captureIo(await fixture());
+      expect(await runCloud(args, io, dependencies)).toBe(2);
+      expect(dependencies.calls).toEqual([]);
+      expect(io.errors.join("")).toContain("--workspace");
+    }
+  );
 
   it.each([
     [401, "unauthenticated"],

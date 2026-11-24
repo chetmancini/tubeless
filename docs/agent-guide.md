@@ -194,8 +194,11 @@ manifest decoder for data-only inspection.
   suggest `Did you mean …?`; apply the hint instead of guessing. Full reference:
   [CLI](./cli.md), [Studio](./studio.md).
 - Cloud automation injects `TUBELESS_TOKEN` and passes `--workspace`. Use
-  `--idempotency-key` to retry an uncertain admission. Once a run ID is known,
-  use `cloud follow <run-id> --json` and resume with the cursor in
+  `--idempotency-key` to retry an uncertain admission. Use `cloud inspect <run-id> --json`
+  for a retained snapshot and `cloud cancel <run-id> --json` for explicit
+  cancellation with `read` and `cancel` scopes. Inspect again if cancellation
+  could not be confirmed. To wait for the outcome, use `cloud follow <run-id> --json`
+  and resume with the cursor in
   `cloud_follow_error.recovery` on stderr. For older services, attach with
   `--poll`. See [Cloud CLI](./cli.md#tubeless-cloud).
 

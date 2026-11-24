@@ -105,13 +105,12 @@ export async function runRemote(
             if (request.kind === "runner")
               throw new Error("Select a self-hosted Cloudflare remote to enroll a Bun runner.");
             const { host, workspaceId: workspace } = destination;
-            if (request.kind === "cancel") {
-              const { cloudOutput } = await import("./cloud/output.js");
-              throw new Error(
-                `Cancel this run in Tubeless Cloud: ${cloudOutput().runUrl(host, workspace, request.executionId)}`
-              );
-            }
-            if (values.poll && (request.kind === "run" ? request.detach : !request.follow))
+            if (
+              values.poll &&
+              (request.kind === "run"
+                ? request.detach
+                : request.kind === "status" && !request.follow)
+            )
               throw new Error("Use --poll with an attached run or remote status --follow.");
             const observation = { kind: values.poll ? ("poll" as const) : ("stream" as const) };
             const { runCloudCommand } = await import("./cloud/command/index.js");
@@ -128,11 +127,12 @@ export async function runRemote(
                         input: request,
                         mode: request.detach ? undefined : observation,
                       }
-                    : {
-                        kind: "logs",
-                        runId: request.executionId,
-                        mode: request.follow ? observation : undefined,
-                      },
+                    : request.kind === "status" && request.follow
+                      ? { kind: "logs", runId: request.executionId, mode: observation }
+                      : {
+                          kind: request.kind === "status" ? "inspect" : "cancel",
+                          runId: request.executionId,
+                        },
               },
               commandIo,
               dependencies

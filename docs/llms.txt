@@ -25,6 +25,7 @@ Agent setup:
 Guides:
 
 - CLI commands, flags, and exit codes: ./cli.md
+- Inspect or cancel an existing Cloud run: ./cli.md#inspect-or-cancel-a-run
 - Follow an existing Cloud run or resume after a disconnect: ./cli.md#follow-and-read-results
 - Reproduce a pinned Cloud Node check: ./reproduction-manifest.md
 - Local Studio and gateway hosting: ./studio.md

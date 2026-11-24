@@ -69,7 +69,7 @@ const STORE_OPTION = {
   completion: "file",
 } as const;
 
-const CLOUD_SERVICE_COMMANDS = ["list", "run", "follow", "logs"] as const;
+const CLOUD_SERVICE_COMMANDS = ["list", "run", "inspect", "cancel", "follow", "logs"] as const;
 
 const PIPELINE_POSITIONAL = {
   min: 1,
@@ -376,27 +376,26 @@ Sign in to Tubeless Cloud with an expiring first-party session.
   cloud: {
     name: "cloud",
     description: "Run and inspect Cloud pipelines or reproduce a check locally",
-    usage: `Usage: tubeless cloud <list|run|follow|logs|reproduce> [options]
+    usage: `Usage: tubeless cloud <list|run|inspect|cancel|follow|logs|reproduce> [options]
 
   list [--json]
   run <pipeline-name-or-slug> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach|--poll] [--json]
   run --id <cloud-pipeline-id> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach|--poll] [--json]
+  inspect <run-id> [--json]
+  cancel <run-id> [--json]
   follow <run-id> [--cursor <cursor>|--poll] [--json]
   logs <run-id> [--follow [--cursor <cursor>|--poll]] [--json]
   reproduce --execute <manifest.json>
 
 Cloud service commands accept --workspace <id> and --host <origin>.
-Use a listed slug or an exact name. Quote names containing spaces.
 Run streams progress and output by default; --detach returns the admission.
-Follow attaches to an existing run. Ctrl-C stops observation. To cancel the
-run itself, use the Cloud dashboard. Use --poll for older Cloud services.
-Automation uses TUBELESS_TOKEN and an explicit --workspace. Known --id with
---detach needs run scope only; names, listing, logs and waiting need read scope.
-Use --ref for a GitHub branch, tag or commit; omission uses the configured branch HEAD.
-Use --source for an advanced source selector and --idempotency-key to
-retry the same pipeline/input/source after an uncertain admission.
-Remote runs use Cloud-admitted source. Local edits and modules are never loaded.
-Set up and load pipelines in the Cloud dashboard.
+Inspect reads the retained run. Cancel requests cancellation and reports status.
+Ctrl-C stops observation and leaves the run active. Use --poll on older services.
+Automation uses TUBELESS_TOKEN and --workspace. Run --id with --detach needs run scope.
+Inspection and observation need read scope. Cancellation needs cancel and read.
+Use --ref or --source to select GitHub source. The default is the branch HEAD.
+Reuse --idempotency-key with the same pipeline/input/source after uncertain admission.
+Set up pipelines in the Cloud dashboard. Cloud runs use the admitted GitHub source.
 
 Reproduce runs a saved manifest locally without Cloud login. It emits JSON and
 requires Git, Node 24 and Bun 1.4.4 on PATH. Only execute revisions you trust.
@@ -493,6 +492,7 @@ requires Git, Node 24 and Bun 1.4.4 on PATH. Only execute revisions you trust.
 
 Use a saved Tubeless Cloud or Cloudflare remote from any directory. For direct
 Cloudflare Access service authentication set CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET.
+For a saved Cloud remote, status inspects a run and cancel requests cancellation.
 `,
     subcommands: ["connect", "create", "list", "run", "status", "cancel", "runner"],
     options: {

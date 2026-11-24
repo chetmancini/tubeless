@@ -374,6 +374,8 @@ describe("tubeless __complete", () => {
 
   it.each([
     ["cloud", "list", ["--host", "--workspace", "--json", "--help"]],
+    ["cloud", "inspect", ["--host", "--workspace", "--json", "--help"]],
+    ["cloud", "cancel", ["--host", "--workspace", "--json", "--help"]],
     ["cloud", "reproduce", ["--execute", "--help"]],
     [
       "cloud",
@@ -436,6 +438,8 @@ describe("tubeless __complete", () => {
     ["cloud", "list", "--detach"],
     ["cloud", "logs", "--detach"],
     ["cloud", "run", "--follow"],
+    ["cloud", "inspect", "--follow"],
+    ["cloud", "cancel", "--poll"],
     ["cloud", "list", "--execute"],
     ["cloud", "reproduce", "--json"],
     ["auth", "status", "--no-browser"],

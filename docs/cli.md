@@ -620,8 +620,10 @@ For self-hosted execution, `--host <origin>` still works directly.
 
 Foreground runs and `remote status <run-id> --follow` stream logs and progress
 from Tubeless Cloud. Use `--poll` to follow on Cloud deployments without streaming
-support. Cancel a Cloud run from the dashboard link. Self-hosted remotes use the
-execution status and cancellation described below.
+support. For a saved Cloud remote, `remote status <run-id>` returns the same
+snapshot as `cloud inspect`, and `remote cancel <run-id>` returns the same receipt
+as `cloud cancel`. Both use the host and workspace from the profile. With
+`--follow --json`, status returns the log summary described below.
 
 ## Self-hosted Cloudflare executions
 
@@ -649,6 +651,7 @@ tubeless auth login
 tubeless cloud list
 tubeless cloud run orders-sync --input-file input.json
 tubeless cloud run orders-sync --detach --json
+tubeless cloud inspect <run-id> --json
 tubeless cloud follow <run-id> --workspace <workspace-id> --json
 tubeless cloud logs <run-id> --follow
 tubeless auth logout
@@ -669,7 +672,7 @@ development). Credentials are isolated by full origin.
 - For headless use, set `TUBELESS_TOKEN` to a session or a Cloud automation token. It
   overrides stored credentials and is never saved or printed. Automation tokens
   require `--workspace` and are issued, scoped, and revoked in the dashboard.
-  `auth status` is for interactive sessions; use `cloud list` or `cloud logs` to check
+  `auth status` is for interactive sessions. Use `cloud list` or `cloud inspect` to check
   automation access.
 - `auth logout` revokes a stored session; remove an environment token yourself.
 
@@ -688,10 +691,9 @@ A run-only automation grant should skip listing and detach:
 tubeless cloud run --id <cloud-pipeline-id> --workspace <workspace-id> --detach --json
 ```
 
-Listing, name resolution, logs, and foreground waiting need read scope; submission
-needs run scope. Automation scopes do not grant remote cancellation or artifact
-downloads. If admission succeeds but following is denied, the diagnostic keeps the
-run ID: do not submit another job to recover the result.
+Listing, name resolution, inspection, logs, and foreground waiting need read scope.
+Submission needs run scope. If admission succeeds but following is denied, use the
+run ID from the diagnostic to recover the result with a read credential.
 
 **Source.** Without a selector, Cloud runs the HEAD of the pipeline's configured
 branch; the CLI never inspects your checkout. The admitted commit SHA is printed with
@@ -741,6 +743,33 @@ key conflicts, and a replay returns the original admission receipt, not later
 status. Never reuse an uncertain key for new work, and never start a fresh run to
 retry an uncertain admission.
 
+### Inspect or cancel a run
+
+```sh
+tubeless cloud inspect <run-id> --workspace <workspace-id> --json
+tubeless cloud cancel <run-id> --workspace <workspace-id> --json
+```
+
+`cloud inspect` makes a single read and returns the retained run at its current
+status. JSON includes the admitted source identity when available, steps, retained
+logs, result, structured errors, diagnostics and artifact metadata. Optional fields
+and diagnostic omission or completeness markers follow the Cloud run projection.
+A successful read exits `0` at any run status. Use `cloud follow` to wait for a
+terminal outcome and get the corresponding execution exit code.
+
+`cloud cancel` sends one cancellation request. Interactive sessions need write
+access to the workspace. Automation tokens need both `cancel` and `read` scopes
+and access to the pipeline. Cloud applies its existing restrictions on cancelling
+deployment runs with an automation token.
+
+A successful response exits `0` and returns `{runId, status, alreadyFinished}`.
+`alreadyFinished: true` means the run was terminal before this request. Otherwise
+the request was accepted and `status` reports the state Cloud observed. Settlement
+can lag, or the run can finish while cancellation is in progress. If the response
+is lost or unusable, inspect the run under the same host and workspace before
+deciding whether to issue another request. The CLI sends a single POST per
+invocation.
+
 ### Follow and read results
 
 Foreground `cloud run`, `cloud follow <run-id>`, and `cloud logs <run-id> --follow`
@@ -748,7 +777,7 @@ stream progress and output from the same Cloud run. `waiting` keeps the
 observation open while the run waits for human input in the dashboard. The CLI
 reconnects from the last processed cursor and reads the complete retained run
 once after the terminal event. Ctrl-C stops local observation and leaves the Cloud
-run active. Use the dashboard to cancel the run.
+run active. Use `cloud cancel <run-id>` to request cancellation explicitly.
 
 Use `--detach --json` to return the admission and read its `.id` in scripts. If
 observation stops after admission, attach to that ID under the same host,
@@ -788,10 +817,11 @@ keeps its `{id, pipelineId, status, logs}` shape. Human output neutralizes termi
 controls in remote text. JSON retains remote data with the active bearer redacted
 from output.
 
-Cloud exit codes are `0` for success or detached admission, `1` for usage,
-`2` for credentials, workspace selection or observation errors, `4` for invalid
-JSON or requests, `6` for rejected admission or failed execution, and `7` for
-remote cancellation or local interruption. A remotely interrupted run keeps
+Cloud exit codes are `0` for a successful operation, `1` for usage,
+`2` for missing runs, credentials, workspace selection, transport or observation
+errors, `4` for invalid JSON or requests, `6` for quota or rate limits, rejected
+admission or failed execution, and `7` for a followed cancellation or local
+interruption. A remotely interrupted run keeps
 `status: "failed"` and its diagnostic. In JSON mode, stderr also reports
 `{"type":"cloud_follow_terminal","outcome":"interrupted"}`.
 
