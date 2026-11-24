@@ -1,3 +1,4 @@
+import { decodeJournalValue, encodeJournalValue } from "./journal-value.js";
 import { encodePlainJson } from "../utilities/plain-json.js";
 
 import { isAuthoredPipelineId, RUN_MODEL_VERSION } from "../core/pipeline-ids.js";
@@ -66,6 +67,8 @@ export type RunnerClaim = {
   readonly job: RunnerJob;
   readonly token: string;
   readonly remainingMs: number;
+  /** Fresh trace identity for each claim of a recoverable root. */
+  readonly recoveryAttemptId?: string;
 };
 
 export type RunnerStageResult =
@@ -109,6 +112,21 @@ export function decodeRunnerClaim(
     value.job.definitionId !== manifest[value.job.pipelineId]
   )
     throw new Error("The Worker returned an incompatible runner claim.");
+  if (value.recoveryAttemptId !== undefined && !isLaunchIdentifier(value.recoveryAttemptId))
+    throw new Error("The Worker returned an invalid recovery attempt.");
+  if (value.job.kind === "root") {
+    const run = value.job.run;
+    if (
+      !isJsonObject(run) ||
+      run.launchId !== value.job.launchId ||
+      run.commandId !== value.job.pipelineId ||
+      (value.recoveryAttemptId === undefined
+        ? run.recoveryDefinitionId !== undefined
+        : run.recoveryDefinitionId !== value.job.definitionId)
+    )
+      throw new Error("The Worker returned an invalid root claim.");
+  } else if (value.recoveryAttemptId !== undefined)
+    throw new Error("Execution journal leases are available for root claims.");
   // The authenticated host supplies the pinned job; execution validates the command inputs.
   return value as unknown as RunnerClaim;
 }
@@ -221,4 +239,51 @@ export function runnerValue(value: unknown, label: string): unknown {
   if (bytes.byteLength > RUNNER_VALUE_BYTES)
     throw new TypeError(`${label} must fit within 64 KiB.`);
   return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+// Budget for a bounded path and for a lossless value escaped inside a JSON string.
+export const RUNNER_JOURNAL_BYTES = 3 * RUNNER_VALUE_BYTES + 2_048;
+export const RUNNER_JOURNAL_VERSION = 1;
+
+export type RunnerJournalOperation =
+  | { readonly operation: "bind"; readonly path: string[]; readonly value: unknown }
+  | { readonly operation: "complete"; readonly path: string[]; readonly value: unknown }
+  | {
+      readonly operation: "begin";
+      readonly path: string[];
+      readonly value: unknown;
+      readonly boundary: "effect" | "orchestration";
+      readonly intentId: string;
+    };
+
+export function decodeRunnerJournalOperation(
+  launchId: string,
+  message: Record<string, unknown>
+): RunnerJournalOperation {
+  const { path, operation, data, boundary, intentId } = message;
+  if (
+    !Array.isArray(path) ||
+    path.length < 4 ||
+    path[0] !== "v1" ||
+    path[1] !== "execution" ||
+    path[2] !== launchId ||
+    !path.every((part) => typeof part === "string") ||
+    typeof data !== "string"
+  )
+    throw new TypeError("Invalid journal path or value.");
+  let value: unknown;
+  try {
+    value = decodeJournalValue(data);
+    if (encodeJournalValue(value) !== data) throw new TypeError();
+  } catch {
+    throw new TypeError("Invalid journal value encoding.");
+  }
+  if (operation === "bind" || operation === "complete") return { operation, path, value };
+  if (
+    operation === "begin" &&
+    (boundary === "effect" || boundary === "orchestration") &&
+    isLaunchIdentifier(intentId)
+  )
+    return { operation, path, value, boundary, intentId };
+  throw new TypeError("Invalid runner journal operation.");
 }

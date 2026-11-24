@@ -80,7 +80,7 @@ export interface CloudflareAppOptions<TEnv = unknown> {
   readonly deploymentId?: string;
   /** Input values saved in Studio history, by command id and parameter key. Defaults to none. */
   readonly recordInputs?: LaunchInputPolicy;
-  /** Recover interrupted versioned Worker pipelines under their original execution ID. */
+  /** Recover interrupted versioned Worker and Bun roots under their original execution ID. */
   readonly recoverInterruptedRuns?: boolean;
   /** Registered pipelines that run on the enrolled local Bun runner. Others run on the Worker. */
   readonly localRunner?: {

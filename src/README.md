@@ -213,9 +213,11 @@ Only boundaries that are not obvious from names are listed.
   durable admission to browser start acknowledgements. `execution-store-sqlite.ts`
   persists pending deliveries, cancellation intent, and terminal outcomes under the
   launch ID. Verified Access actors reach Studio via private Worker RPC.
-- For opt-in recovery, `execution-journal-sqlite.ts` owns fenced intent and result
-  records in each Cloudflare run object. Studio fences root history by generation,
-  and the runner queue reconciles journaled stage IDs with independently leased Bun attempts.
+- For opt-in recovery, `execution-journal-sqlite.ts` owns intent and result records.
+  Worker roots store them in their run object and fence history in Studio by
+  generation. Bun roots store them in Studio, where the runner queue checks the
+  active lease in the journal transaction. The queue also reconciles journaled
+  stage IDs with independently leased Bun child attempts.
 - The collector and attempt ledger live in `hosting/collector/` and
   `hosting/attempt/`. Claim uncertainty never
   authorizes execution, and delivery failure never declares termination.
@@ -223,8 +225,9 @@ Only boundaries that are not obvious from names are listed.
   `cloudflare-run-contract.ts` holds the deadline and host-failure vocabulary
   without loading execution. `cloudflare-execution-api.ts` serves the authenticated
   execution contract separately from the Studio browser protocol.
-  `cloudflare-runner-queue.ts` owns Bun claims, cancellation and the attempt lease
-  in the Studio object. `runner-protocol.ts` in hosting defines the shared handoff.
+  `cloudflare-runner-queue.ts` owns Bun dispatch and settlement. Its claim handler
+  manages leases and journal operations in the Studio object.
+  `runner-protocol.ts` in hosting defines the shared handoff.
   Collector and Bun ingestion use `attempt/ledger-sqlite.ts` for run binding,
   sequence checks and batch receipts. Bun commits a child's terminal event and its
   result together. The parent receives that result after reading stage progress.

@@ -167,8 +167,7 @@ export function createHostedLaunchAdmission(input: {
       ]);
     const target = input.localPipelines?.has(commandId) ? "local" : undefined;
     const normalized = normalizedValues(resolved.values);
-    const recovery =
-      input.recoverInterruptedRuns && target === undefined && normalized.dryRun !== true;
+    const recovery = input.recoverInterruptedRuns && normalized.dryRun !== true;
     const identity = recovery
       ? commands.get(commandId)?.command.plan().definition?.identity
       : undefined;

@@ -1,5 +1,7 @@
 import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt/batch.js";
 import { createLaunchTracing } from "../hosting/launch-tracing.js";
+import type { PipelineExecutionJournal } from "../core/pipeline-types.js";
+import { decodeJournalValue, encodeJournalValue } from "../hosting/journal-value.js";
 import {
   hostedCommandContext,
   hostedProjectCommands,
@@ -7,6 +9,8 @@ import {
 } from "../hosting/hosting-commands.js";
 import {
   RUNNER_HEARTBEAT_MS,
+  RUNNER_JOURNAL_BYTES,
+  RUNNER_JOURNAL_VERSION,
   RUNNER_LEASE_MS,
   RUNNER_PATH,
   RUNNER_REPLY_BYTES,
@@ -62,7 +66,11 @@ function runnerTransport(fetcher: typeof fetch, host: string, headers: Headers):
     });
     let result: unknown;
     try {
-      const bytes = await readBoundedBody(response.body, RUNNER_REPLY_BYTES, deadline);
+      const bytes = await readBoundedBody(
+        response.body,
+        operation === "journal" ? RUNNER_JOURNAL_BYTES : RUNNER_REPLY_BYTES,
+        deadline
+      );
       result = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch (error) {
       if (response.ok) throw error;
@@ -80,6 +88,64 @@ function runnerTransport(fetcher: typeof fetch, host: string, headers: Headers):
   };
 }
 
+function remoteJournal(options: {
+  key: string;
+  token: string;
+  send: Send;
+  signal: AbortSignal;
+  abandon(error: unknown): void;
+}): PipelineExecutionJournal {
+  const { key, token, send, signal, abandon } = options;
+  const write = async (
+    operation: "bind" | "begin" | "complete",
+    path: readonly string[],
+    value: unknown,
+    intent?: { boundary: "effect" | "orchestration"; intentId: string }
+  ) => {
+    const body = JSON.stringify({
+      id: key,
+      token,
+      operation,
+      path,
+      data: encodeJournalValue(value),
+      ...intent,
+    });
+    try {
+      const response = await withRetry(() => send("journal", body, signal), {
+        signal,
+        shouldRetry: retryable,
+      });
+      if (response.accepted === true) return response;
+    } catch (error) {
+      if (retryable(error)) abandon(error);
+      throw error;
+    }
+    const error = new Error("The Worker no longer accepts this journal lease.");
+    abandon(error);
+    throw error;
+  };
+  return {
+    key,
+    bind: async (path, binding) => {
+      await write("bind", path, binding);
+    },
+    begin: async (path, inputs, boundary) => {
+      const response = await write("begin", path, inputs, {
+        boundary,
+        intentId: crypto.randomUUID(),
+      });
+      if (response.status === "new" || response.status === "incomplete")
+        return { status: response.status };
+      if (response.status === "completed" && typeof response.data === "string")
+        return { status: "completed", value: decodeJournalValue(response.data) };
+      throw new Error("The Worker returned an invalid journal acknowledgement.");
+    },
+    complete: async (path, value) => {
+      await write("complete", path, value);
+    },
+  };
+}
+
 async function executeClaim(options: {
   claim: RunnerClaim;
   startedAt: number;
@@ -90,7 +156,7 @@ async function executeClaim(options: {
   signal: AbortSignal;
 }): Promise<void> {
   const {
-    claim: { job, token, remainingMs },
+    claim: { job, token, remainingMs, recoveryAttemptId },
     startedAt,
     pipeline,
     entry,
@@ -101,8 +167,13 @@ async function executeClaim(options: {
   const lease = JSON.stringify({ id: job.id, token });
   const controller = new AbortController();
   const keepAlive = new AbortController();
-  const cancelled = () =>
-    controller.abort(new DOMException("The runner was stopped.", "AbortError"));
+  const abandon = (error: unknown) => {
+    // Local loss of ownership leaves recovery to the coordinator. Remote cancellation
+    // still drains under the live lease and reports its terminal state when possible.
+    if (recoveryAttemptId !== undefined) keepAlive.abort(error);
+    controller.abort(error);
+  };
+  const cancelled = () => abandon(new DOMException("The runner was stopped.", "AbortError"));
   signal.addEventListener("abort", cancelled, { once: true });
   if (signal.aborted) cancelled();
   const remaining = remainingMs - (performance.now() - startedAt);
@@ -115,7 +186,7 @@ async function executeClaim(options: {
   const renew = (requestStarted: number) => {
     clearTimeout(expiry);
     expiry = setTimeout(
-      () => controller.abort(new Error("The local runner could not confirm its lease.")),
+      () => abandon(new Error("The local runner could not confirm its lease.")),
       Math.max(0, RUNNER_LEASE_MS - (performance.now() - requestStarted))
     );
   };
@@ -127,7 +198,7 @@ async function executeClaim(options: {
       try {
         const response = await send("heartbeat", lease, keepAlive.signal);
         if (response.active !== true) {
-          controller.abort(new Error("The local runner claim expired."));
+          abandon(new Error("The local runner claim expired."));
           return;
         }
         renew(requestStarted);
@@ -140,8 +211,9 @@ async function executeClaim(options: {
     }
   };
   const heartbeat = maintainLease().catch((error: unknown) => {
-    if (!keepAlive.signal.aborted) controller.abort(error);
+    if (!keepAlive.signal.aborted) abandon(error);
   });
+  const attemptId = recoveryAttemptId ?? job.id;
   let nextSequence = 0;
   const sendBatch = async (body: Uint8Array) => {
     const ack = await withRetry(() => send("events", body, keepAlive.signal, token), {
@@ -155,10 +227,14 @@ async function executeClaim(options: {
   };
   const exporter = new BatchingTraceExporter(
     async (_sequence, events) => {
-      for (const body of encodeAttemptBatches(job.id, nextSequence, events.map(boundHostedEvent)))
+      for (const body of encodeAttemptBatches(
+        attemptId,
+        nextSequence,
+        events.map(boundHostedEvent)
+      ))
         await sendBatch(body);
     },
-    { maxEvents: 50, maxDelayMs: 250, onFailure: (error) => controller.abort(error) }
+    { maxEvents: 50, maxDelayMs: 250, onFailure: abandon }
   );
   try {
     let terminalBatch: Uint8Array | undefined;
@@ -183,7 +259,22 @@ async function executeClaim(options: {
           output: io,
           controller,
           exporter,
+          ...(recoveryAttemptId === undefined
+            ? {}
+            : {
+                recovery: {
+                  deadlineAtMs: Date.now() + remaining,
+                  journal: remoteJournal({
+                    key: job.launchId,
+                    token,
+                    send,
+                    signal: keepAlive.signal,
+                    abandon,
+                  }),
+                },
+              }),
         });
+        if (recoveryAttemptId !== undefined && run.history.status === "complete") return;
         result =
           run.history.status === "complete"
             ? null
@@ -245,6 +336,7 @@ async function executeClaim(options: {
       await exporter.flush().catch(() => {});
       result = errorMessage(error).slice(0, 2_000);
     }
+    if (keepAlive.signal.aborted) return;
     if (terminalBatch) {
       await sendBatch(terminalBatch);
     } else {
@@ -287,7 +379,10 @@ export async function runRemoteRunner(options: {
     throw new Error(
       "The runner project needs at least one pipeline with an implementationVersion."
     );
-  const poll = boundedRunnerJson({ manifest }, "Runner manifest");
+  const poll = boundedRunnerJson(
+    { manifest, journalVersion: RUNNER_JOURNAL_VERSION },
+    "Runner manifest"
+  );
   headers.set("x-tubeless-project", runnerProjectHeader(loaded.project.id));
   headers.set("x-tubeless-deployment", deploymentId);
   const send = runnerTransport(fetcher, host, headers);

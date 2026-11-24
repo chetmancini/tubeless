@@ -1,3 +1,4 @@
+import { CloudflareRunnerClaims, digestRunnerLease } from "./cloudflare-runner-claims.js";
 import type { RunnerStageObservation } from "./cloudflare-child-placement.js";
 import { HostedAttemptConflict } from "../hosting/attempt/store.js";
 import { decodeRunnerBatch } from "../hosting/attempt/batch.js";
@@ -6,49 +7,21 @@ import {
   boundedRunnerJson,
   decodeRunnerReport,
   RUNNER_INTERRUPTED,
-  RUNNER_LEASE_MS,
-  RUNNER_DRAIN_MS,
-  type RunnerClaim,
   type RunnerJob,
   type RunnerStageResult,
-  type RunnerStageInput,
 } from "../hosting/runner-protocol.js";
-import { sha256Hex } from "../utilities/sha256.js";
 import type { HostedExecutionReason } from "../hosting/execution-status.js";
 import type { StudioIngest } from "../hosting/run-contract.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import type { DurableRunStore } from "./cloudflare-run-store.js";
 
-type ClaimedJob =
-  | Omit<Extract<RunnerJob, { kind: "root" }>, "run">
-  | (Omit<Extract<RunnerJob, { kind: "stage" }>, "stage"> & {
-      stage: Omit<RunnerStageInput, "input" | "controls"> & { dryRun: boolean };
-    });
-
-type QueueRow = {
-  job: ClaimedJob;
-  deadlineAtMs: number;
-  cancelled: boolean;
-};
-
-const lost = { active: false } as const;
 const cancelled = { error: "The remote stage was cancelled." } as const;
 const expired = { error: RUNNER_INTERRUPTED, interrupted: true } as const;
-const digestLease = (token: string) => sha256Hex(new TextEncoder().encode(token));
-function claimedJob(job: RunnerJob): ClaimedJob {
-  if (job.kind === "root") {
-    const { run: _run, ...identity } = job;
-    return identity;
-  }
-  const {
-    stage: { input: _input, controls, ...parent },
-    ...identity
-  } = job;
-  return { ...identity, stage: { ...parent, dryRun: controls.dryRun === true } };
-}
 
 export class CloudflareRunnerQueue {
+  readonly claims: CloudflareRunnerClaims;
+
   constructor(
     private readonly deps: {
       storage: DurableStorageLike;
@@ -72,20 +45,24 @@ export class CloudflareRunnerQueue {
       cancelled INTEGER NOT NULL DEFAULT 0,
       incompatible INTEGER NOT NULL DEFAULT 0,
       result_json TEXT,
-      recovery_binding TEXT
+      recovery_binding TEXT,
+      recovery_attempt_id TEXT
     )`);
-    if (
-      !deps.storage.sql
-        .exec("PRAGMA table_info(tubeless_runner_queue)")
-        .toArray()
-        .some(({ name }) => name === "recovery_binding")
-    )
+    const columns = deps.storage.sql.exec("PRAGMA table_info(tubeless_runner_queue)").toArray();
+    if (!columns.some(({ name }) => name === "recovery_binding"))
       deps.storage.sql.exec("ALTER TABLE tubeless_runner_queue ADD COLUMN recovery_binding TEXT");
+    if (!columns.some(({ name }) => name === "recovery_attempt_id"))
+      deps.storage.sql.exec(
+        "ALTER TABLE tubeless_runner_queue ADD COLUMN recovery_attempt_id TEXT"
+      );
+    deps.storage.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS tubeless_runner_recovery_attempt
+      ON tubeless_runner_queue(recovery_attempt_id) WHERE recovery_attempt_id IS NOT NULL`);
     deps.storage.sql.exec(
       `CREATE INDEX IF NOT EXISTS tubeless_runner_launch ON tubeless_runner_queue(launch_id)`
     );
     deps.storage.sql.exec(`CREATE INDEX IF NOT EXISTS tubeless_runner_queued
       ON tubeless_runner_queue(deployment_id, pipeline_id, definition_id) WHERE job_json IS NOT NULL AND lease_digest IS NULL`);
+    this.claims = new CloudflareRunnerClaims(deps);
   }
 
   get #sql() {
@@ -135,124 +112,27 @@ export class CloudflareRunnerQueue {
     return "runner_waiting";
   }
 
-  async claim(
-    deploymentId: string,
-    manifest: ReadonlyMap<string, string>
-  ): Promise<{ claim?: RunnerClaim; diagnostic?: string }> {
-    return this.deps.storage.transaction(async () => {
-      const now = this.deps.now();
-      const entries = JSON.stringify(Object.fromEntries(manifest));
-      this.#sql.exec(
-        `WITH compatibility AS (
-          SELECT q.id, CAST(NOT EXISTS (
-            SELECT 1 FROM json_each(?) m WHERE m.key = q.pipeline_id AND m.value = q.definition_id
-          ) AS INTEGER) AS incompatible
-          FROM tubeless_runner_queue q WHERE q.deployment_id = ? AND q.job_json IS NOT NULL AND q.lease_digest IS NULL
-        )
-        UPDATE tubeless_runner_queue
-        SET incompatible = compatibility.incompatible FROM compatibility
-        WHERE tubeless_runner_queue.id = compatibility.id AND tubeless_runner_queue.incompatible <> compatibility.incompatible`,
-        entries,
-        deploymentId
-      );
-      const row = this.#sql
-        .exec(
-          `SELECT q.job_json FROM tubeless_runner_queue q
-         JOIN json_each(?) m ON m.key = q.pipeline_id AND m.value = q.definition_id
-         WHERE q.deployment_id = ? AND q.job_json IS NOT NULL AND q.lease_digest IS NULL
-           AND (q.deadline_at_ms IS NULL OR q.deadline_at_ms > ?)
-         ORDER BY q.rowid LIMIT 1`,
-          entries,
-          deploymentId,
-          now
-        )
-        .toArray()[0];
-      if (!row) {
-        const waiting = this.#sql
-          .exec(
-            `SELECT deployment_id, pipeline_id FROM tubeless_runner_queue
-           WHERE job_json IS NOT NULL AND lease_digest IS NULL ORDER BY rowid LIMIT 1`
-          )
-          .toArray()[0];
-        return waiting
-          ? {
-              diagnostic:
-                waiting.deployment_id !== deploymentId
-                  ? "Waiting work requires a different deployment revision."
-                  : `Runner is missing the compatible definition for ${String(waiting.pipeline_id)}.`,
-            }
-          : {};
-      }
-      const job = JSON.parse(String(row.job_json)) as RunnerJob;
-      const token = crypto.randomUUID();
-      const deadlineAtMs = job.kind === "stage" ? job.deadlineAtMs : now + job.run.maxRunDurationMs;
-      if (job.kind === "root" && !(await this.deps.ingest.admit(job.launchId)).admitted) {
-        this.#close(job.id);
-        return {};
-      }
-      this.#sql.exec(
-        `UPDATE tubeless_runner_queue SET job_json = ?, lease_digest = ?, lease_until_ms = ?, deadline_at_ms = ? WHERE id = ?`,
-        // Retain attempt metadata and drop the offered inputs as soon as the claim commits.
-        JSON.stringify(claimedJob(job)),
-        await digestLease(token),
-        Math.min(now + RUNNER_LEASE_MS, deadlineAtMs + RUNNER_DRAIN_MS),
-        deadlineAtMs,
-        job.id
-      );
-      await this.deps.schedule();
-      return { claim: { job, token, remainingMs: deadlineAtMs - now } };
-    });
-  }
-
-  #lease(id: string, leaseDigest: string, deploymentId: string) {
-    return this.#sql
-      .exec(
-        "SELECT * FROM tubeless_runner_queue WHERE id = ? AND lease_digest = ? AND deployment_id = ?",
-        id,
-        leaseDigest,
-        deploymentId
-      )
-      .toArray()[0];
-  }
-
-  #active(row: Record<string, unknown> | undefined): QueueRow | undefined {
-    if (!row || row.job_json === null || Number(row.lease_until_ms) <= this.deps.now())
-      return undefined;
-    return {
-      job: JSON.parse(String(row.job_json)) as ClaimedJob,
-      cancelled: row.cancelled === 1,
-      deadlineAtMs: Number(row.deadline_at_ms),
-    };
-  }
-
-  async heartbeat(id: string, token: string, deploymentId: string) {
-    const leaseDigest = await digestLease(token);
-    return this.deps.storage.transaction(async () => {
-      const row = this.#active(this.#lease(id, leaseDigest, deploymentId));
-      if (!row) return lost;
-      const leaseUntil = Math.min(
-        this.deps.now() + RUNNER_LEASE_MS,
-        row.deadlineAtMs + RUNNER_DRAIN_MS
-      );
-      this.#sql.exec(
-        "UPDATE tubeless_runner_queue SET lease_until_ms = ? WHERE id = ?",
-        leaseUntil,
-        id
-      );
-      await this.deps.schedule();
-      return { active: true, cancelled: row.cancelled } as const;
-    });
-  }
-
   async append(
     token: string,
     deploymentId: string,
     bytes: Uint8Array
   ): Promise<{ accepted: boolean }> {
-    const [batch, leaseDigest] = await Promise.all([decodeRunnerBatch(bytes), digestLease(token)]);
+    const [batch, leaseDigest] = await Promise.all([
+      decodeRunnerBatch(bytes),
+      digestRunnerLease(token),
+    ]);
     return this.deps.storage.transaction(async () => {
-      const lease = this.#lease(batch.attemptId, leaseDigest, deploymentId);
-      const row = this.#active(lease);
+      const lease = this.#sql
+        .exec(
+          `SELECT * FROM tubeless_runner_queue WHERE lease_digest = ? AND deployment_id = ?
+         AND (recovery_attempt_id = ? OR (recovery_attempt_id IS NULL AND id = ?))`,
+          leaseDigest,
+          deploymentId,
+          batch.attemptId,
+          batch.attemptId
+        )
+        .toArray()[0];
+      const row = this.claims.active(lease);
       // A sealed receipt proves an already committed batch, even after the parent consumes the result.
       const ledger = this.deps.store.attemptLedger;
       if (!row && lease?.job_json !== null) return { accepted: false };
@@ -275,7 +155,7 @@ export class CloudflareRunnerQueue {
       );
       const firstBatch = status.runId === undefined;
       const events = firstBatch
-        ? this.#withRunnerLog(batch.events, job.id, root)
+        ? this.#withRunnerLog(batch.events, batch.attemptId, root)
         : [...batch.events];
 
       if (!stage) {
@@ -284,6 +164,14 @@ export class CloudflareRunnerQueue {
         // Rejected writes roll back their new run bindings.
         if (!(await this.deps.ingest.appendEvents(job.launchId, batch.sequence, events)).accepted)
           throw new HostedAttemptConflict("events");
+        if (
+          row.recoveryAttemptId &&
+          events.some((event) => event.name === "pipeline.completed" && event.runId === root)
+        ) {
+          this.#close(job.id, undefined, true);
+          this.claims.clearJournal(job.launchId);
+          await this.deps.schedule();
+        }
       } else if (batch.report === undefined) {
         if (
           batch.events.some((event) => event.name === "pipeline.completed" && event.runId === root)
@@ -342,9 +230,9 @@ export class CloudflareRunnerQueue {
   }
 
   async finish(id: string, token: string, deploymentId: string, result: unknown) {
-    const leaseDigest = await digestLease(token);
+    const leaseDigest = await digestRunnerLease(token);
     return this.deps.storage.transaction(async () => {
-      const row = this.#active(this.#lease(id, leaseDigest, deploymentId));
+      const row = this.claims.active(this.claims.lease(id, leaseDigest, deploymentId));
       if (!row) return { accepted: false };
       const { job } = row;
       if (job.kind === "root") {
@@ -354,9 +242,12 @@ export class CloudflareRunnerQueue {
           typeof result === "string"
             ? result.slice(0, 2_000)
             : "The local runner did not record a terminal run.";
+        if (row.recoveryAttemptId && row.cancelled)
+          this.deps.store.admitRecovery(job.launchId, undefined, []);
         if (this.deps.store.executions.status(job.launchId)?.state === "running")
           await this.deps.ingest.reportFailure(job.launchId, error);
         this.#close(id);
+        if (row.recoveryAttemptId) this.claims.clearJournal(job.launchId);
       } else {
         if (typeof result !== "string")
           throw new TypeError("Remote stage results belong in the terminal trace batch.");
@@ -435,6 +326,10 @@ export class CloudflareRunnerQueue {
   }
 
   cancel(launchId: string, stageId?: string): void {
+    if (stageId === undefined && this.claims.isWaitingForRecovery(launchId)) {
+      this.deps.store.admitRecovery(launchId, undefined, []);
+      this.claims.clearJournal(launchId);
+    }
     this.#sql.exec(
       `UPDATE tubeless_runner_queue SET cancelled = 1,
         job_json = CASE WHEN lease_digest IS NOT NULL THEN job_json END,
@@ -484,7 +379,8 @@ export class CloudflareRunnerQueue {
     const now = this.deps.now();
     const due = this.#sql
       .exec(
-        `SELECT id, launch_id, json_extract(job_json, '$.kind') AS kind, lease_digest FROM tubeless_runner_queue
+        `SELECT id, launch_id, json_extract(job_json, '$.kind') AS kind, lease_digest,
+                recovery_attempt_id, deadline_at_ms, cancelled FROM tubeless_runner_queue
        WHERE job_json IS NOT NULL AND COALESCE(lease_until_ms, deadline_at_ms) <= ?`,
         now
       )
@@ -493,8 +389,14 @@ export class CloudflareRunnerQueue {
       const id = String(row.id);
       const launchId = String(row.launch_id);
       if (row.kind === "root") {
-        await this.deps.ingest.reportFailure(launchId, RUNNER_INTERRUPTED, "runner_interrupted");
-        this.#close(id);
+        await this.#expireRoot(
+          id,
+          launchId,
+          row.recovery_attempt_id,
+          Number(row.deadline_at_ms),
+          row.cancelled === 1,
+          now
+        );
       } else {
         this.#failStage(
           launchId,
@@ -505,5 +407,31 @@ export class CloudflareRunnerQueue {
         );
       }
     }
+  }
+
+  async #expireRoot(
+    id: string,
+    launchId: string,
+    recoveryAttemptId: unknown,
+    deadlineAtMs: number,
+    cancelled: boolean,
+    now: number
+  ): Promise<void> {
+    if (typeof recoveryAttemptId === "string") {
+      if (cancelled) this.deps.store.admitRecovery(launchId, undefined, []);
+      if (this.deps.store.executions.status(launchId)?.state === "running" && deadlineAtMs > now) {
+        const previous = this.deps.store.attemptLedger.latest(recoveryAttemptId)?.runId;
+        if (previous)
+          this.deps.events.append(this.deps.store.interruptRuns(previous, RUNNER_INTERRUPTED, now));
+        this.#sql.exec(
+          "UPDATE tubeless_runner_queue SET lease_digest = NULL, lease_until_ms = NULL WHERE id = ?",
+          id
+        );
+        return;
+      }
+    }
+    await this.deps.ingest.reportFailure(launchId, RUNNER_INTERRUPTED, "runner_interrupted");
+    this.#close(id);
+    if (typeof recoveryAttemptId === "string") this.claims.clearJournal(launchId);
   }
 }

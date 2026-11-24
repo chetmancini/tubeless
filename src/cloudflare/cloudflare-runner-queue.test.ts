@@ -4,10 +4,16 @@ import runnerProject from "../../examples/cloudflare/runner-placement/runner.pro
 import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
 import { StudioObjectCore } from "./cloudflare-studio.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
-import { RUNNER_LEASE_MS, RUNNER_PATH, runnerProjectHeader } from "../hosting/runner-protocol.js";
+import {
+  RUNNER_LEASE_MS,
+  RUNNER_JOURNAL_VERSION,
+  RUNNER_PATH,
+  runnerProjectHeader,
+} from "../hosting/runner-protocol.js";
 import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt/batch.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
+import { encodeJournalValue } from "../hosting/journal-value.js";
 
 const http = "http://localhost";
 const projectId = "runner-placement";
@@ -61,6 +67,8 @@ it("keeps queued local work when upgrading the launch and runner tables", async 
   if (!receipt.accepted) throw new Error(receipt.errors.join("\n"));
   storage.sql.exec("ALTER TABLE tubeless_launches DROP COLUMN recovery_generation");
   storage.sql.exec("ALTER TABLE tubeless_runner_queue DROP COLUMN recovery_binding");
+  storage.sql.exec("DROP INDEX tubeless_runner_recovery_attempt");
+  storage.sql.exec("ALTER TABLE tubeless_runner_queue DROP COLUMN recovery_attempt_id");
 
   const upgraded = openStudio(storage, () => 1000, true);
   expect(upgraded.getExecution(receipt.launchId)).toMatchObject({
@@ -71,6 +79,83 @@ it("keeps queued local work when upgrading the launch and runner tables", async 
   expect(await response.json()).toMatchObject({
     claim: { job: { launchId: receipt.launchId, run: { values: { text: "waiting" } } } },
   });
+});
+
+it("retains the root deadline and fences journal access across recovery, then cancels queued work", async () => {
+  const storage = createFakeDurableStorage();
+  let now = 1000;
+  const open = () => openStudio(storage, () => now, true);
+  let studio = open();
+  const receipt = await studio.launch({
+    projectId,
+    deploymentId,
+    commandId: transformId,
+    idempotencyKey: "recover-local",
+    values: { text: "original" },
+  });
+  if (!receipt.accepted) throw new Error(receipt.errors.join("\n"));
+  const id = receipt.launchId;
+  const request = async (op: string, body: unknown) =>
+    (await studio.serveRunner(runnerRequest(op, body))).json();
+  const claim = () => request("claim", { manifest, journalVersion: RUNNER_JOURNAL_VERSION });
+  expect(await request("claim", { manifest })).toEqual({
+    diagnostic: "Waiting work requires a runner with execution journal support.",
+  });
+  const { claim: original } = await claim();
+  const path = ["v1", "execution", id, "pipeline", transformId, "step", "transform"];
+  const begin = {
+    id,
+    token: original.token,
+    operation: "begin",
+    path,
+    intentId: "retry",
+    boundary: "effect",
+    data: encodeJournalValue({ zero: -0 }),
+  };
+  expect(await request("journal", begin)).toEqual({ accepted: true, status: "new" });
+  expect(await request("journal", begin)).toEqual({ accepted: true, status: "new" });
+  const complete = { ...begin, operation: "complete", data: encodeJournalValue(undefined) };
+  expect(await request("journal", complete)).toEqual({ accepted: true });
+
+  now += RUNNER_LEASE_MS + 1;
+  studio = open();
+  await studio.alarm();
+  expect(studio.getExecution(id)).toMatchObject({ state: "queued", reason: "runner_waiting" });
+  const { claim: next } = await claim();
+  expect(next).toMatchObject({
+    job: { launchId: id, run: { values: { text: "original" } } },
+    remainingMs: original.remainingMs - RUNNER_LEASE_MS - 1,
+  });
+  expect(next.recoveryAttemptId).not.toBe(original.recoveryAttemptId);
+  expect(await request("journal", complete)).toEqual({ accepted: false });
+  expect(await request("journal", { ...begin, token: next.token })).toEqual({
+    accepted: true,
+    status: "completed",
+    data: encodeJournalValue(undefined),
+  });
+  const foreign = await studio.serveRunner(
+    runnerRequest("journal", {
+      ...begin,
+      token: next.token,
+      path: ["v1", "execution", "foreign", "step"],
+    })
+  );
+  expect(foreign.status).toBe(400);
+  const conflict = await studio.serveRunner(
+    runnerRequest("journal", {
+      ...begin,
+      token: next.token,
+      data: encodeJournalValue({ zero: 0 }),
+    })
+  );
+  expect(conflict.status).toBe(409);
+
+  now += RUNNER_LEASE_MS + 1;
+  await studio.alarm();
+  expect(studio.getExecution(id)).toMatchObject({ state: "queued" });
+  expect(await studio.cancelExecution(id)).toMatchObject({ state: "cancelled" });
+  expect(await claim()).toEqual({});
+  expect(storage.sql.exec("SELECT * FROM tubeless_run_journal").toArray()).toEqual([]);
 });
 
 it("fences duplicate claims and an expired attempt, cancels queued work, and rejects invalid stage results", async () => {

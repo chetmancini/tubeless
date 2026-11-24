@@ -1,13 +1,17 @@
 import type { CloudflareRunnerQueue } from "./cloudflare-runner-queue.js";
 import { CollectorInputError, COLLECTOR_BATCH_BYTES } from "../hosting/collector/protocol.js";
 import { HostedAttemptConflict } from "../hosting/attempt/store.js";
-import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
+import { HostedJournalConflict } from "../hosting/execution-journal-sqlite.js";
 import {
+  decodeRunnerJournalOperation,
+  RUNNER_JOURNAL_BYTES,
+  RUNNER_JOURNAL_VERSION,
   RUNNER_PATH,
   RUNNER_VALUE_BYTES,
   parseRunnerManifest,
   runnerProjectHeader,
 } from "../hosting/runner-protocol.js";
+import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 import { errorResponse } from "../studio/server/http.js";
 import { isJsonObject } from "../utilities/canonical-json.js";
 import { BodyLimitError, readBoundedBody } from "../utilities/read-body.js";
@@ -44,7 +48,11 @@ export async function serveRunnerRequest(
   try {
     const bytes = await readBoundedBody(
       request.body,
-      path === "/events" ? COLLECTOR_BATCH_BYTES : RUNNER_VALUE_BYTES,
+      path === "/events"
+        ? COLLECTOR_BATCH_BYTES
+        : path === "/journal"
+          ? RUNNER_JOURNAL_BYTES
+          : RUNNER_VALUE_BYTES,
       request.signal
     );
     let response: unknown;
@@ -60,12 +68,23 @@ export async function serveRunnerRequest(
         const compatible = new Map(
           [...manifest].filter(([id, definition]) => definitions.get(id) === definition)
         );
-        response = await queue.claim(deploymentId, compatible);
+        response = await queue.claims.claim(
+          deploymentId,
+          compatible,
+          payload.journalVersion === RUNNER_JOURNAL_VERSION
+        );
       } else {
         if (!isLaunchIdentifier(payload.id) || !isLaunchIdentifier(payload.token))
           throw new TypeError("Invalid runner lease.");
         if (path === "/heartbeat")
-          response = await queue.heartbeat(payload.id, payload.token, deploymentId);
+          response = await queue.claims.heartbeat(payload.id, payload.token, deploymentId);
+        else if (path === "/journal")
+          response = await queue.claims.journal(
+            payload.id,
+            payload.token,
+            deploymentId,
+            decodeRunnerJournalOperation(payload.id, payload)
+          );
         else if (path === "/finish" && Object.hasOwn(payload, "result"))
           response = await queue.finish(payload.id, payload.token, deploymentId, payload.result);
         else
@@ -95,6 +114,13 @@ export async function serveRunnerRequest(
         "runner_event_conflict",
         "The runner events do not match the claimed run.",
         "Inspect the lease and run history."
+      );
+    if (error instanceof HostedJournalConflict)
+      return errorResponse(
+        409,
+        "runner_journal_conflict",
+        error.message,
+        "Check the recovery inputs and runner project."
       );
     if (
       error instanceof TypeError ||
