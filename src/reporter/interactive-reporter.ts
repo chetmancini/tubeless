@@ -12,13 +12,8 @@ import type {
 import { hasVisibleStepProgress } from "../core/progress.js";
 import { PIPELINE_FINALIZE_STEP_ID } from "../core/pipeline-step-metadata.js";
 import { STEP_LOG_SCOPE, type StepScopedLogger } from "../core/step-log-scope.js";
-import {
-  elapsedToken,
-  shimmerToken,
-  SPINNER_TOKEN,
-  MIN_LOG_PANE_COLUMNS,
-} from "./live-ticker-frame.js";
-import { createLiveTicker, type LiveTicker } from "./live-ticker.js";
+import { elapsedToken, shimmerToken, SPINNER_TOKEN, MIN_LOG_PANE_COLUMNS } from "./live/frame.js";
+import { createLiveTicker, type LiveTicker } from "./live/ticker.js";
 import {
   createReporterTheme,
   createRunReporter,

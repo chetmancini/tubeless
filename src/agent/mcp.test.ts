@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { createPipelineTestRuntime } from "../testing/testing.js";
@@ -197,28 +198,32 @@ describe("MCP servers", () => {
   });
 
   it("speaks Streamable HTTP with session headers, event streams, pings, and cancellation", async () => {
-    const { url, close, fake, requests } = await serveFakeMcpHttp();
+    const { url, close, fake, received, requests } = await serveFakeMcpHttp();
     open.push({ close });
     const mcp = await connectMcpServers({
       remote: { url, headers: { Authorization: "Bearer token" } },
     });
     open.push(mcp);
+    const replied = once(received, "reply");
     const done = await createPipelineTestRuntime().runOrThrow(
       callingAgent(mcp.tools, [{ tool: "remote__echo", input: { text: "x", times: 3 } }]),
       {}
     );
     expect(done).toMatchObject([{ ok: true, value: { content: [{ text: "xxx" }] } }]);
     // Server requests on a response stream are answered like those on stdio.
-    await vi.waitFor(() =>
-      expect(fake.responses).toEqual([{ jsonrpc: "2.0", id: "server-ping", result: {} }])
-    );
+    await replied;
+    expect(fake.responses).toEqual([{ jsonrpc: "2.0", id: "server-ping", result: {} }]);
 
     const runtime = createPipelineTestRuntime();
+    const slowCall = once(received, "tools/call");
+    const cancelled = once(received, "notifications/cancelled");
     const running = runtime.run(callingAgent(mcp.tools, [{ tool: "remote__slow", input: {} }]), {});
-    await vi.waitFor(() => expect(fake.calls).toContainEqual({ name: "slow", args: {} }));
+    await slowCall;
+    expect(fake.calls).toContainEqual({ name: "slow", args: {} });
     runtime.abort("operator stopped");
     expect((await running).status).toBe("cancelled");
-    await vi.waitFor(() => expect(fake.cancelled).toHaveLength(1));
+    await cancelled;
+    expect(fake.cancelled).toHaveLength(1);
 
     await mcp.close();
     expect(requests[0]).toMatchObject({ method: "initialize", session: undefined });
@@ -244,8 +249,10 @@ describe("MCP servers", () => {
       { tool: "remote__echo", input: { text: "x", times: 3 } },
     ]);
     const expected = [{ ok: true, value: { content: [{ text: "xxx" }] } }];
+    const replied = once(server.received, "reply");
     expect(await createPipelineTestRuntime().runOrThrow(agent, {})).toMatchObject(expected);
-    await vi.waitFor(() => expect(server.fake.responses).toHaveLength(1));
+    await replied;
+    expect(server.fake.responses).toHaveLength(1);
     const start = server.requests.length;
     server.expireSession();
     expect(await createPipelineTestRuntime().runOrThrow(agent, {})).toMatchObject(expected);

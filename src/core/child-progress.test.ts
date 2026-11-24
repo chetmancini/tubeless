@@ -7,7 +7,7 @@ import {
   type PipelineStepStatus,
 } from "./pipeline.js";
 import { createPipelineReporter } from "../reporter/interactive-reporter.js";
-import { renderTerminal } from "../reporter/live-ticker.test-support.js";
+import { renderTerminal } from "../reporter/live/ticker.test-support.js";
 import { createMappedChildProgress, createSingleChildProgress } from "./child-progress.js";
 
 const log = { log() {}, warn() {}, error() {} };

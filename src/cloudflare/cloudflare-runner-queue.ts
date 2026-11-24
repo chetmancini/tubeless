@@ -1,6 +1,6 @@
 import type { RunnerStageObservation } from "./cloudflare-child-placement.js";
-import { HostedAttemptConflict } from "../hosting/attempt-store.js";
-import { decodeRunnerBatch } from "../hosting/attempt-batch.js";
+import { HostedAttemptConflict } from "../hosting/attempt/store.js";
+import { decodeRunnerBatch } from "../hosting/attempt/batch.js";
 import type { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
 import {
   boundedRunnerJson,

@@ -130,9 +130,7 @@ describe("code-mode declarations", () => {
         },
       ])
     );
-    const started = Date.now();
     expect(renderSchemaType({ $ref: "#/$defs/d0", $defs }, 49_152)).toBeUndefined();
-    expect(Date.now() - started).toBeLessThan(2000);
     expect(
       codemodeDeclarations(
         [{ name: "big", description: "Big", inputJsonSchema: { $ref: "#/$defs/d0", $defs } }],

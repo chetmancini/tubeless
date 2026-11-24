@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "import"],
+  "jsPlugins": [{ "name": "landmines", "specifier": "@interfere/landmines" }],
   "options": {
     "typeAware": true
   },
@@ -141,9 +142,90 @@
     "import/no-cycle": "error",
     "import/no-mutable-exports": "error",
     "import/no-self-import": "error",
-    "import/no-unassigned-import": "error"
+    "import/no-unassigned-import": "error",
+    "landmines/no-clipboard-read-text": "error",
+    "landmines/no-cold-import-in-test": "error",
+    "landmines/no-elapsed-time-bound": "error",
+    "landmines/no-fixed-sleep": "error",
+    "landmines/no-flake-masking": [
+      "error",
+      {
+        "allow": {
+          "scripts/check-release-commit.test.ts": 2,
+          "scripts/cut-release.test.ts": 1,
+          "scripts/eval-agent.test.ts": 4,
+          "src/agent/codemode.test.ts": 2,
+          "src/agent/durability-process.test.ts": 1,
+          "src/agent/mcp-stdio.test.ts": 1,
+          "src/agent/mcp.test.ts": 1,
+          "src/check/node-check.test.ts": 4,
+          "src/cloudflare/cloudflare-app.test.ts": 2,
+          "src/cloudflare/cloudflare-launch-app.test.ts": 3,
+          "src/cloudflare/cloudflare-runner.test.ts": 4,
+          "src/core/execution-journal-process.test.ts": 1,
+          "src/node/vitest-report.test.ts": 1,
+          "src/run-store/run-store-sqlite.test.ts": 1,
+          "src/testing/dagster.example.test.ts": 1,
+          "src/testing/step-functions.example.test.ts": 1,
+          "src/testing/step-output/recovery.example.test.ts": 2,
+          "src/testing/temporal.example.test.ts": 1,
+          "src/workbench/agent/history.test.ts": 1,
+          "src/workbench/collector/host.test.ts": 1,
+          "src/workbench/collector/worker.test.ts": 1,
+          "src/workbench/transcript-history.test.ts": 1,
+          "src/workbench/workbench-reproduce.test.ts": 1,
+          "src/workbench/workbench-ui-integration.test.ts": 3,
+          "src/workbench/workbench-ui.test.ts": 1
+        }
+      }
+    ],
+    "landmines/no-imported-mutation": "error",
+    "landmines/no-inline-hex-encoding": "error",
+    "landmines/no-prefix-cluster": [
+      "error",
+      {
+        "allow": {
+          "examples/agent-*": 20,
+          "examples/step-*": 4,
+          "examples/yaml-*": 3,
+          "src/agent/checkpoint-*": 7,
+          "src/agent/codemode-*": 7,
+          "src/agent/default-*": 8,
+          "src/agent/mcp-*": 6,
+          "src/agent/model-*": 5,
+          "src/agent/openai-*": 4,
+          "src/agent/provider-*": 10,
+          "src/agent/tool-*": 4,
+          "src/core/child-*": 13,
+          "src/core/execution-*": 5,
+          "src/core/pipeline-*": 46,
+          "src/hosting/execution-*": 3,
+          "src/hosting/launch-*": 7,
+          "src/node/worker-*": 3,
+          "src/testing/agent-*": 4,
+          "src/utilities/cache-*": 3
+        }
+      }
+    ],
+    "landmines/no-project-max-workers": "error",
+    "landmines/no-self-container-query": "error",
+    "landmines/no-shared-signal": "error",
+    "landmines/no-silent-catch": "error",
+    "landmines/no-stale-render-assertion": "error",
+    "landmines/no-styling-class-assertion": "error",
+    "landmines/no-unsignaled-poll": "error",
+    "landmines/package-exports": "error",
+    "landmines/strict-msw": "error",
+    "landmines/test-file-names": "error"
   },
   "overrides": [
+    {
+      "files": ["fixtures/diagnostics/vitest/failure.spec.ts"],
+      "rules": {
+        "landmines/no-flake-masking": "off",
+        "landmines/test-file-names": "off"
+      }
+    },
     {
       "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.ts"],
       "rules": {

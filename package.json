@@ -79,6 +79,7 @@
     "@cloudflare/vite-plugin": "2.0.0-rc.3",
     "@dagster-io/dagster-pipes": "0.1.0",
     "@inngest/test": "1.0.0",
+    "@interfere/landmines": "0.3.1",
     "@temporalio/activity": "1.26.0",
     "@temporalio/client": "1.26.0",
     "@temporalio/testing": "1.26.0",

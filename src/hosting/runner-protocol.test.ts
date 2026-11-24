@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { createSteps, definePipeline } from "../core/pipeline.js";
-import { decodeRunnerBatch, encodeAttemptBatches } from "./attempt-batch.js";
+import { decodeRunnerBatch, encodeAttemptBatches } from "./attempt/batch.js";
 import { decodeRunnerReport, parseRunnerManifest, runnerChildControls } from "./runner-protocol.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 

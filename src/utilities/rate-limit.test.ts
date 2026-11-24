@@ -1,12 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RateLimiter } from "./rate-limit.js";
 
 describe("RateLimiter", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("resolves immediately for the first call", async () => {
+    vi.useFakeTimers();
     const limiter = new RateLimiter(1000);
-    const start = Date.now();
-    await limiter.wait();
-    expect(Date.now() - start).toBeLessThan(50);
+    const first = limiter.wait();
+    expect(vi.getTimerCount()).toBe(0);
+    await first;
   });
 
   it("spaces out consecutive calls by the interval", async () => {
@@ -25,15 +30,15 @@ describe("RateLimiter", () => {
     await vi.advanceTimersByTimeAsync(50);
     await second;
     expect(resolved).toBe(true);
-    vi.useRealTimers();
   });
 
   it.each([0, -1])("does not wait when intervalMs is %p", async (intervalMs) => {
+    vi.useFakeTimers();
     const limiter = new RateLimiter(intervalMs);
     await limiter.wait();
-    const start = Date.now();
-    await limiter.wait();
-    expect(Date.now() - start).toBeLessThan(50);
+    const second = limiter.wait();
+    expect(vi.getTimerCount()).toBe(0);
+    await second;
   });
 
   it.each([NaN, Infinity, -Infinity])("rejects a non-finite intervalMs of %p", (intervalMs) => {
@@ -59,7 +64,6 @@ describe("RateLimiter", () => {
     await vi.advanceTimersByTimeAsync(10);
     controller.abort("stop");
     await assertion;
-    vi.useRealTimers();
   });
 
   it("reclaims a sequential slot after a pending wait is aborted", async () => {
@@ -85,7 +89,6 @@ describe("RateLimiter", () => {
     await vi.advanceTimersByTimeAsync(1);
     await third;
     expect(resolved).toBe(true);
-    vi.useRealTimers();
   });
 
   it("reclaims the later concurrent reservation when it is aborted", async () => {
@@ -123,7 +126,6 @@ describe("RateLimiter", () => {
     await vi.advanceTimersByTimeAsync(1);
     await third;
     expect(thirdResolved).toBe(true);
-    vi.useRealTimers();
   });
 
   it("spaces overlapping successful waits by the interval", async () => {
@@ -155,6 +157,5 @@ describe("RateLimiter", () => {
     await vi.advanceTimersByTimeAsync(1);
     await second;
     expect(secondResolved).toBe(true);
-    vi.useRealTimers();
   });
 });

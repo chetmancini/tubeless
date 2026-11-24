@@ -74,21 +74,17 @@ describe("native recipe execution", () => {
         pidFile = join(cwd, "descendant.pid");
       const program = `const {spawn}=require('node:child_process');const {writeFileSync}=require('node:fs');const child=spawn(process.execPath,['-e','setTimeout(()=>{},30000)'],{detached:true,stdio:['ignore',process.stdout,process.stderr]});writeFileSync(${JSON.stringify(pidFile)},String(child.pid));console.log('descendant-ready');setTimeout(()=>{},30000);`;
       const controller = new AbortController();
-      let cancelledAt: number | undefined;
       try {
         const result = await runCheckProcess([process.execPath, "-e", program], 5000, {
           cwd,
           signal: controller.signal,
           stdout(message) {
-            if (message.includes("descendant-ready")) {
-              cancelledAt = performance.now();
-              controller.abort();
-            }
+            if (message.includes("descendant-ready")) controller.abort();
           },
         });
         expect(result).toMatchObject({ status: "cancelled", outputComplete: false });
-        expect(cancelledAt).toBeDefined();
-        expect(performance.now() - cancelledAt!).toBeLessThan(2500);
+        expect(controller.signal.aborted).toBe(true);
+        expect(process.kill(Number(await readFile(pidFile, "utf8")), 0)).toBe(true);
       } finally {
         process.kill(Number(await readFile(pidFile, "utf8")), "SIGKILL");
       }

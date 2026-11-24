@@ -216,7 +216,8 @@ Only boundaries that are not obvious from names are listed.
 - For opt-in recovery, `execution-journal-sqlite.ts` owns fenced intent and result
   records in each Cloudflare run object. Studio fences root history by generation,
   and the runner queue reconciles journaled stage IDs with independently leased Bun attempts.
-- The collector (`collector-*`, `attempt-*`) is internal. Claim uncertainty never
+- The collector and attempt ledger live in `hosting/collector/` and
+  `hosting/attempt/`. Claim uncertainty never
   authorizes execution, and delivery failure never declares termination.
 - Cloudflare composes hosting, Studio and storage inside Durable Objects.
   `cloudflare-run-contract.ts` holds the deadline and host-failure vocabulary
@@ -224,7 +225,7 @@ Only boundaries that are not obvious from names are listed.
   execution contract separately from the Studio browser protocol.
   `cloudflare-runner-queue.ts` owns Bun claims, cancellation and the attempt lease
   in the Studio object. `runner-protocol.ts` in hosting defines the shared handoff.
-  Collector and Bun ingestion use `attempt-ledger-sqlite.ts` for run binding,
+  Collector and Bun ingestion use `attempt/ledger-sqlite.ts` for run binding,
   sequence checks and batch receipts. Bun commits a child's terminal event and its
   result together. The parent receives that result after reading stage progress.
   Explicit child composition calls an internal host capability when configured.
@@ -241,7 +242,8 @@ Only boundaries that are not obvious from names are listed.
   `workbench-bin.ts` is the direct entry and reserves JSON stdout before loading
   application modules.
 - `workbench/cloud/` never imports selected pipeline files and stays outside public
-  runtime entrypoints. `workbench/agent/` holds the REPL, provider resolution and
+  runtime entrypoints. `workbench/collector/` supervises collector workers.
+  `workbench/agent/` holds the REPL, provider resolution and
   prompt/session sequencing over `createAgentSession`.
 - Studio launcher and launch sessions receive a trace exporter. The local launch
   session owns the admission acknowledgement and exposes its exporter to the
@@ -249,21 +251,21 @@ Only boundaries that are not obvious from names are listed.
 
 ### Reporter
 
-`interactive-reporter.ts` owns lifecycle and redraw; `live-ticker.ts` owns worker
-startup, fallback and shutdown; `live-ticker-frame.ts` is pure rendering through an
+`interactive-reporter.ts` owns lifecycle and redraw; `live/ticker.ts` owns worker
+startup, fallback and shutdown; `live/frame.ts` is pure rendering through an
 injected writer. `reporter-format.ts` owns shared labels and duration formatting.
-`live-ticker-protocol.ts` owns worker messages and the shared-memory output lock.
+`live/protocol.ts` owns worker messages and the shared-memory output lock.
 Only a worker exit permits clearing an abandoned lock.
 
 ### History and Studio
 
 - `run-store/run-store.ts` defines storage contracts and coordinates incremental
-  projection. `run-projection.ts`, `definition-projection.ts` and `agent-projection.ts`
+  projection. `run-projection.ts`, `definition/projection.ts` and `agents/projection.ts`
   own their projections; none imports agent execution or a storage adapter.
 - `run-store-reader.ts` owns cursor pagination for CLI history and Studio. Consumers
   control backpressure and close the reader.
 - `run-store/ndjson-artifact.ts` validates finished files for trace and transcript
-  readers; `agent-transcript-sql.ts` shares schema and page semantics between SQLite
+  readers; `agents/transcript/sql.ts` shares schema and page semantics between SQLite
   and Durable Objects, whose adapters own transactions.
 - `studio/server/state.ts` serializes reads and history clearing; reset caches only
   after the maintenance adapter succeeds. `handler.ts` fixes request order:

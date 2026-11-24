@@ -50,15 +50,20 @@ export const commands = new Map(
 export function ingest(admit: StudioIngest["admit"] = async () => ({ admitted: true })) {
   const batches: { sequence: number; events: PipelineTraceEvent[] }[] = [];
   const failures: string[] = [];
+  let markReceived!: () => void;
+  const firstBatch = new Promise<void>((resolve) => {
+    markReceived = resolve;
+  });
   const studio: StudioIngest = {
     admit,
     appendEvents: async (_launchId, sequence, events) => {
       batches.push({ sequence, events });
+      markReceived();
       return { accepted: true };
     },
     reportFailure: async (_launchId, message) => void failures.push(message),
   };
-  return { studio, batches, failures };
+  return { studio, batches, failures, firstBatch };
 }
 export const job = (values: Record<string, unknown>): RunJob => ({
   launchId: "l1",

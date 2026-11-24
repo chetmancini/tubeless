@@ -26,8 +26,8 @@ import {
   importAgentTranscriptRows,
   listAgentTranscriptRows,
   type TranscriptSql,
-} from "../run-store/agent-transcript-sql.js";
-import { sameTranscriptRun } from "../run-store/agent-transcript-page.js";
+} from "../run-store/agents/transcript/sql.js";
+import { sameTranscriptRun } from "../run-store/agents/transcript/page.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 
 export interface DurableRunStore extends PipelineRunEventReader {

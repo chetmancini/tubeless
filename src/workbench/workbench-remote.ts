@@ -114,7 +114,7 @@ export async function runRemote(
             if (values.poll && (request.kind === "run" ? request.detach : !request.follow))
               throw new Error("Use --poll with an attached run or remote status --follow.");
             const observation = { kind: values.poll ? ("poll" as const) : ("stream" as const) };
-            const { runCloudCommand } = await import("./cloud/command.js");
+            const { runCloudCommand } = await import("./cloud/command/index.js");
             return await runCloudCommand(
               {
                 host,

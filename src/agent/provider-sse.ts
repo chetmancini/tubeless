@@ -1,4 +1,5 @@
 import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
+import { cancelBody } from "../utilities/read-body.js";
 import { MAX_RESPONSE_BYTES } from "./provider-limits.js";
 import { record } from "./provider-schema.js";
 import { utf8ByteLength } from "./provider-utf8.js";
@@ -14,7 +15,7 @@ export async function* readProviderEvents(
     !response.body ||
     !response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")
   ) {
-    void response.body?.cancel().catch(() => {});
+    cancelBody(response.body);
     throw new Error(`${provider} did not return an event stream`);
   }
   const reader = response.body.getReader();
@@ -97,7 +98,7 @@ export async function* readProviderEvents(
       }
     }
   } finally {
-    void reader.cancel().catch(() => {});
+    cancelBody(reader);
     reader.releaseLock();
   }
 }

@@ -27,7 +27,7 @@ import {
 } from "./protocol.js";
 import { terminalSafeText } from "../workbench-shared.js";
 import { redactCloudText } from "./credentials.js";
-import { BodyLimitError, readBoundedBody } from "../../utilities/read-body.js";
+import { BodyLimitError, cancelBody, readBoundedBody } from "../../utilities/read-body.js";
 import {
   FOLLOW_MEDIA_TYPE,
   isFollowCursor,
@@ -228,7 +228,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
         response.redirected ||
         (response.status >= 300 && response.status < 400)
       ) {
-        void response.body?.cancel().catch(() => {});
+        cancelBody(response.body);
         signal.throwIfAborted();
         throw new CloudClientError(
           "Cloud redirects are rejected; select the service origin with --host.",
@@ -382,7 +382,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
             .trim()
             .toLowerCase();
           if (mediaType !== FOLLOW_MEDIA_TYPE || !response.body) {
-            void response.body?.cancel().catch(() => {});
+            cancelBody(response.body);
             throw new CloudClientError(
               "Cloud returned an invalid run-following content type or body.",
               "invalid_response",

@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import { runWorkbenchCli } from "../workbench.js";
 import { captureIo } from "../workbench.test-support.js";
 import { openSqlitePipelineRunStore } from "../../run-store/run-store-sqlite.js";
-import type { AgentHistory } from "../../run-store/agent-history.js";
+import type { AgentHistory } from "../../run-store/agents/history.js";
 import { formatAgentHistory } from "./history.js";
 
 it.each([

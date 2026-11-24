@@ -1,7 +1,8 @@
+import { once } from "node:events";
 import { pathToFileURL } from "node:url";
 import { Writable } from "node:stream";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import * as fs from "node:fs";
+import { mkdir, open, readFile, symlink, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { openSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
@@ -15,6 +16,11 @@ import {
   writeActualPipelineCommandModule,
   writeModule,
 } from "./workbench.test-support.js";
+
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof fs>();
+  return { ...actual, createWriteStream: vi.fn(actual.createWriteStream) };
+});
 
 describe("workbench run integration", () => {
   it("prefers an explicit pipeline command and runs arguments after the boundary", async () => {
@@ -158,7 +164,7 @@ describe("workbench run integration", () => {
     expect(io.errors.join("")).toMatch(/broken pipe|Error/i);
   });
 
-  it.skipIf(!existsSync("/dev/full"))(
+  it.skipIf(!fs.existsSync("/dev/full"))(
     "fails the run when --trace writes to a full device",
     async () => {
       const { directory } = await writeActualPipelineCommandModule();
@@ -413,8 +419,8 @@ describe("workbench run integration", () => {
     }
 
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
-    expect(existsSync(storePath)).toBe(true);
-    expect(existsSync(tracePath)).toBe(true);
+    expect(fs.existsSync(storePath)).toBe(true);
+    expect(fs.existsSync(tracePath)).toBe(true);
     expect(io.errors.join("")).not.toMatch(/same path/i);
   });
 
@@ -481,15 +487,39 @@ describe("workbench run integration", () => {
     await execFileAsync("mkfifo", [fifo]);
     const controller = new AbortController();
     const io = { ...captureIo(directory), signal: controller.signal };
-    const command = runWorkbenchCli(
-      ["run", "--trace", fifo, "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
-      io
-    );
-    // FIFO write-open has no readiness event until a reader connects.
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    controller.abort();
-    await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
-    expect(io.output.join("")).not.toContain("completed:hello");
+    let markOpening!: (stream: fs.WriteStream) => void;
+    const opening = new Promise<fs.WriteStream>((resolve) => {
+      markOpening = resolve;
+    });
+    const { createWriteStream } = await vi.importActual<typeof fs>("node:fs");
+    const spy = vi.mocked(fs.createWriteStream).mockImplementation((...args) => {
+      const stream = createWriteStream(...args);
+      if (args[0] === fifo) markOpening(stream);
+      return stream;
+    });
+    try {
+      const command = runWorkbenchCli(
+        ["run", "--trace", fifo, "pipeline.mjs", "--", "--message", "hello", "--target", "work"],
+        io
+      );
+      const stream = await opening;
+      const closed = once(stream, "close");
+      try {
+        expect(stream.pending).toBe(true);
+        controller.abort();
+        await expect(command).resolves.toBe(TUBELESS_WORKBENCH_EXIT_CODE.cancellation);
+        expect(io.output.join("")).not.toContain("completed:hello");
+      } finally {
+        const reader = await open(fifo, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+        try {
+          await closed;
+        } finally {
+          await reader.close();
+        }
+      }
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("cancels a backpressured --trace - write when the workbench signal aborts", async () => {

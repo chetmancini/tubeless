@@ -1,7 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Miniflare, NoOpLog, type WorkerdStructuredLog } from "miniflare";
+import {
+  Miniflare,
+  NoOpLog,
+  Response as MiniflareResponse,
+  type WorkerOptions,
+  type WorkerdStructuredLog,
+} from "miniflare";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, onTestFailed, vi } from "vitest";
 import { manifestModules } from "./cloudflare-workerd.test-support.js";
 
@@ -218,16 +224,16 @@ beforeAll(async () => {
         dev: {
           outboundService: {
             type: "fetcher",
-            handler: async (request: Request) =>
+            handler: async (request) =>
               request.url === `${ISSUER}/cdn-cgi/access/certs`
-                ? Response.json({ keys: [jwk] })
-                : new Response("Outbound requests are blocked in tests.", { status: 502 }),
+                ? MiniflareResponse.json({ keys: [jwk] })
+                : new MiniflareResponse("Outbound requests are blocked in tests.", { status: 502 }),
           },
         },
       },
     ],
   });
-  const gateWorker = (name: string, env: Record<string, unknown>) => ({
+  const gateWorker = (name: string, env: WorkerOptions["config"]["env"]): WorkerOptions => ({
     config: {
       name,
       compatibilityDate: "2026-10-01",

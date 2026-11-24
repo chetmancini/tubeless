@@ -3,7 +3,7 @@ import type { StoredDefinitionSummary } from "../../../run-store/run-history.js"
 import type { StudioApi, StudioDefinitionRuns } from "../transport.js";
 import { MetadataDetails, MetadataExplorer } from "./metadata.js";
 import { useCallback, useState } from "preact/hooks";
-import { compareDefinitions } from "../../../run-store/definition-diff.js";
+import { compareDefinitions } from "../../../run-store/definition/diff.js";
 import type { StoredPipelineDefinition } from "../../../run-store/run-store.js";
 import { useStudioResource, type StudioResource } from "../resource.js";
 import { definitionKey as key, useDefinitionResource } from "../definition-resource.js";

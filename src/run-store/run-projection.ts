@@ -2,7 +2,7 @@ import type { PipelineDefinitionIdentity } from "../core/pipeline-types.js";
 import type { PipelineTraceError } from "../tracing/tracing-contracts.js";
 import { RUN_MODEL_VERSION } from "../core/pipeline-ids.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
-import { AgentProjection } from "./agent-projection.js";
+import { AgentProjection } from "./agents/projection.js";
 import { copyStepPlan } from "./step-plan-projection.js";
 import type {
   StoredPipelineEvent,
