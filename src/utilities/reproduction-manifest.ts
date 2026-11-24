@@ -109,7 +109,7 @@ export async function decodeReproductionManifest(value: unknown): Promise<Reprod
     );
     if (!Array.isArray(manifest.diagnostics) || manifest.diagnostics.length > expected.size)
       throw new TypeError("Invalid reproduction manifest diagnostic references.");
-    result.diagnostics = manifest.diagnostics.map((value) => {
+    result.diagnostics = Array.from(manifest.diagnostics, (value) => {
       const ref = fields(value, ["stepId", "artifact"], "diagnostic reference");
       const stepId = match(ref.stepId, identifier, "diagnostic step ID");
       const artifact = `${stepId}.check-report.json`;

@@ -54,18 +54,20 @@ function toolchain(value: unknown): NodeCheckPlan["toolchain"] {
     throw new TypeError("Supported toolchain: Node 24, Bun 1.4.4.");
   return { node: "24", bun: "1.4.4" };
 }
+const CHECK_ID = /^[a-z][a-z0-9-]{0,47}$/;
+
 function prerequisites(value: unknown): string[] {
   if (
     !Array.isArray(value) ||
     value.length > 16 ||
-    !value.every((id): id is string => typeof id === "string") ||
+    !value.every((id): id is string => typeof id === "string" && CHECK_ID.test(id)) ||
     new Set(value).size !== value.length
   )
     throw new TypeError("Check dependencies must be unique IDs.");
   return [...value];
 }
 function checkOptions(raw: Record<string, unknown>): Required<CheckOptions> {
-  if (typeof raw.id !== "string" || !/^[a-z][a-z0-9-]{0,47}$/.test(raw.id) || raw.id === "install")
+  if (typeof raw.id !== "string" || !CHECK_ID.test(raw.id) || raw.id === "install")
     throw new TypeError("Checks require simple IDs; install is reserved.");
   return {
     id: raw.id,
@@ -226,6 +228,14 @@ export function resolveNodeCheckPlan(configuration: unknown, packageJson: unknow
   return plan(tools, config.maxConcurrency === undefined ? 1 : config.maxConcurrency, commands);
 }
 
+function matchesCommandWords(value: unknown, expected: readonly string[]): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    expected.every((word, index) => value[index] === word)
+  );
+}
+
 function decodeCommand(value: unknown): NodeCheckCommand {
   const header = record(value, "command");
   const keys = ["kind", "id", "argv", "dependsOn", "timeoutMs", "reason"];
@@ -257,8 +267,8 @@ function decodeCommand(value: unknown): NodeCheckCommand {
     raw.id !== command.id ||
     raw.timeoutMs !== command.timeoutMs ||
     raw.reason !== command.reason ||
-    JSON.stringify(raw.dependsOn) !== JSON.stringify(command.dependsOn) ||
-    JSON.stringify(raw.argv) !== JSON.stringify(command.argv)
+    !matchesCommandWords(raw.dependsOn, command.dependsOn) ||
+    !matchesCommandWords(raw.argv, command.argv)
   )
     throw new TypeError("Command differs from the supported execution plan.");
   return command;

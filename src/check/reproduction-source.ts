@@ -1,31 +1,22 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { lstat, mkdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ReproductionManifest } from "../utilities/reproduction-manifest.js";
-import { runCheckProcess } from "./process.js";
+import { captureCheckProcess, runCheckProcess } from "./process.js";
 
 /** Fetch only the pinned GitHub object. Caller Git configuration is available only during fetch. */
 export async function prepareReproductionSource(
-  manifest: ReproductionManifest,
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  signal: AbortSignal
+  { source, repository }: Pick<ReproductionManifest, "source" | "repository">,
+  { cwd, env, signal }: { cwd: string; env: NodeJS.ProcessEnv; signal: AbortSignal }
 ): Promise<void> {
-  const { source, repository } = manifest;
-  const gitEnv = { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
-  const fetchEnv = {
-    PATH: env.PATH,
-    TMPDIR: env.TMPDIR,
-    HOME: process.env.HOME,
-    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
-    SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK,
-    GIT_ALLOW_PROTOCOL: "https:ssh",
-    GIT_TERMINAL_PROMPT: "0",
+  const local = {
+    cwd,
+    signal,
+    env: { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
   };
-  const git = async (args: string[], failure: string, fetch = false): Promise<string> => {
-    let output = "";
-    const outcome = await runCheckProcess(
+  const git = async (args: string[], failure: string): Promise<string> => {
+    const result = await captureCheckProcess(
       [
         "git",
         "-c",
@@ -44,37 +35,25 @@ export async function prepareReproductionSource(
         "core.protectNTFS=true",
         ...args,
       ],
-      fetch ? 120_000 : 30_000,
-      {
-        cwd,
-        signal,
-        log: {
-          log: (chunk) => {
-            if (!fetch) output += String(chunk);
-          },
-          warn() {},
-          error() {},
-        },
-      },
-      fetch ? fetchEnv : gitEnv
+      30_000,
+      local
     );
     signal.throwIfAborted();
-    if (
-      outcome.status !== "exited" ||
-      outcome.exitCode !== 0 ||
-      (!fetch && !outcome.outputComplete)
-    )
+    if (result.status === "spawn-failed") throw new Error("Git is required on PATH.");
+    if (result.status !== "exited" || result.exitCode !== 0 || !result.outputComplete)
       throw new Error(failure);
-    return output.trim();
+    return result.stdout;
   };
 
-  await git(["--version"], "Git is required on PATH.");
   await git(
     ["init", "-q", "--template=", "--object-format=sha1"],
     "Cannot initialize the temporary Git checkout."
   );
-  await git(
+  const fetched = await runCheckProcess(
     [
+      "git",
+      "-c",
+      "core.hooksPath=/dev/null",
       "-c",
       "http.followRedirects=false",
       "fetch",
@@ -87,22 +66,34 @@ export async function prepareReproductionSource(
       `https://github.com/${repository.fullName}.git`,
       source.commit,
     ],
-    `Cannot fetch recorded commit ${source.commit}. Check Git access and whether the revision is still available.`,
-    true
+    120_000,
+    {
+      cwd,
+      signal,
+      env: {
+        PATH: env.PATH,
+        TMPDIR: env.TMPDIR,
+        HOME: process.env.HOME,
+        XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
+        SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK,
+        GIT_ALLOW_PROTOCOL: "https:ssh",
+        GIT_TERMINAL_PROMPT: "0",
+      },
+    }
   );
-  if (
-    (await git(
-      ["rev-parse", "--verify", `${source.commit}^{commit}`],
-      "Recorded commit is unavailable."
-    )) !== source.commit
-  )
+  signal.throwIfAborted();
+  if (fetched.status !== "exited" || fetched.exitCode !== 0)
+    throw new Error(
+      `Cannot fetch recorded commit ${source.commit}. Check Git access and whether the revision is still available.`
+    );
+  const identity = await git(
+    ["rev-parse", `${source.commit}^{commit}`, `${source.commit}^{tree}`],
+    "Cannot read the recorded Git commit and tree."
+  );
+  const [commit, tree] = identity.split("\n");
+  if (commit !== source.commit)
     throw new Error("Fetched Git commit does not match the recorded commit.");
-  if (
-    (await git(
-      ["rev-parse", "--verify", `${source.commit}^{tree}`],
-      "Recorded Git tree is unavailable."
-    )) !== source.treeSha
-  )
+  if (tree !== source.treeSha)
     throw new Error("Fetched Git tree does not match the recorded tree SHA.");
 
   const modes = await git(
@@ -125,6 +116,9 @@ export async function prepareReproductionSource(
   await git(["add", "--renormalize", "--", "."], "Cannot verify the materialized Git tree.");
   if ((await git(["write-tree"], "Cannot verify the materialized Git tree.")) !== source.treeSha)
     throw new Error("Local checkout does not match the recorded Git tree.");
+
+  // Cloud runs with the archived files. Keep checkout metadata out of the recipe's cwd.
+  await rm(join(cwd, ".git"), { recursive: true });
 
   const stat = async (name: string) =>
     lstat(join(cwd, name)).catch((error: unknown) => {

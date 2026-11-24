@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveNodeCheckPlan, decodeNodeCheckPlan } from "./node-check-plan.js";
 const fixture = new URL("../../scripts/fixtures/node-check/", import.meta.url);
 const config = JSON.parse(readFileSync(new URL("tubeless.check.json", fixture), "utf8"));
@@ -88,6 +88,18 @@ it("decodes transported plans without accepting modified argv or dependencies", 
   const tampered = structuredClone(plan);
   tampered.commands[1].argv = ["publish"];
   expect(decodeNodeCheckPlan(tampered)).toBeUndefined();
+});
+
+it("compares transported argv as bounded string arrays without serializing it", () => {
+  const plan = resolveNodeCheckPlan(config, manifest);
+  const command = plan.commands[0];
+  const serialize = vi.fn(() => command.argv);
+  const malformed = {
+    ...plan,
+    commands: [{ ...command, argv: { toJSON: serialize } }, ...plan.commands.slice(1)],
+  };
+  expect(decodeNodeCheckPlan(malformed)).toBeUndefined();
+  expect(serialize).not.toHaveBeenCalled();
 });
 
 it("matches the paired Cloud command-plan fixture", () => {

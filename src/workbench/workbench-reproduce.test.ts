@@ -7,6 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import {
   digestNodeCheckPlan,
   parseReproductionManifest,
+  type ReproductionManifest,
 } from "../utilities/reproduction-manifest.js";
 import { runWorkbenchCli, TUBELESS_WORKBENCH_EXIT_CODE as exit } from "./workbench.js";
 
@@ -77,7 +78,8 @@ it.runIf(process.platform !== "win32" && process.versions.node.startsWith("24.")
     const root = temporaryRoot();
     const cwd = join(root, "repository");
     const bin = join(root, "bin");
-    mkdirSync(cwd);
+    const scratch = join(cwd, "scratch");
+    mkdirSync(scratch, { recursive: true });
     mkdirSync(bin);
     const gitPath = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
     const bunPath = execFileSync("which", ["bun"], { encoding: "utf8" }).trim();
@@ -109,6 +111,7 @@ it.runIf(process.platform !== "win32" && process.versions.node.startsWith("24.")
     writeFileSync(join(cwd, "untracked.txt"), "untracked file\n");
 
     const fetchLog = join(root, "fetch.log");
+    const bunProbes = join(root, "bun-probes.log");
     const marker = randomUUID();
     const isolated =
       'test -z "${TUBELESS_TOKEN}${CF_ACCESS_CLIENT_SECRET}${CLOUDFLARE_API_TOKEN}${NODE_OPTIONS}" || exit 19';
@@ -122,36 +125,42 @@ case " $* " in
     export GIT_ALLOW_PROTOCOL=file
     exec "${gitPath}" -c "url.file://${cwd}.insteadOf=https://github.com/${manifest.repository.fullName}.git" "$@"
     ;;
-  *) exec "${gitPath}" "$@" ;;
+  *) printf '%s\n' 'Fixture Git warning' >&2; exec "${gitPath}" "$@" ;;
 esac
 `,
       { mode: 0o700 }
     );
-    writeFileSync(
-      join(bin, "bun"),
-      `#!/bin/sh
+    for (const [tool, executable] of [
+      ["bun", bunPath],
+      ["node", process.execPath],
+    ]) {
+      const checkBun =
+        tool === "bun"
+          ? `case "$1" in
+  --version) printf '%s\\n' probe >> "${bunProbes}" ;;
+  install) test ! -e .git && ! git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 18 ;;
+esac`
+          : "";
+      writeFileSync(
+        join(bin, tool),
+        `#!/bin/sh
 ${isolated}
-exec "${bunPath}" "$@"
+if [ "$1" = --version ]; then printf '%s\\n' 'Fixture tool warning' >&2; fi
+${checkBun}
+exec "${executable}" "$@"
 `,
-      { mode: 0o700 }
-    );
-    // Test the selected Node binary, even when the outer process finds Node through a shim.
-    writeFileSync(
-      join(bin, "node"),
-      `#!/bin/sh
-${isolated}
-exec "${process.execPath}" "$@"
-`,
-      { mode: 0o700 }
-    );
+        { mode: 0o700 }
+      );
+    }
     vi.stubEnv("PATH", [bin, process.env.PATH].join(delimiter));
+    vi.stubEnv("TMPDIR", scratch);
     vi.stubEnv("TUBELESS_TOKEN", marker);
     vi.stubEnv("CF_ACCESS_CLIENT_SECRET", marker);
     vi.stubEnv("CLOUDFLARE_API_TOKEN", marker);
     vi.stubEnv("NODE_OPTIONS", marker);
 
     const path = join(cwd, "manifest.json");
-    const run = async (input: unknown) => {
+    const run = async (input: ReproductionManifest) => {
       writeFileSync(path, JSON.stringify(input));
       const output = await invoke(cwd, "--execute", "manifest.json");
       expect(output.stderr + output.stdout).not.toContain(marker);
@@ -198,6 +207,7 @@ exec "${process.execPath}" "$@"
     expect(
       reproduced.execution.commands.filter(({ id }: { id: string }) => id === "test")
     ).toHaveLength(1);
+    expect(readFileSync(bunProbes, "utf8")).toBe("probe\n");
     expect(readFileSync(fetchLog, "utf8").trim().split("\n").slice(-2)).toEqual([
       `https://github.com/${manifest.repository.fullName}.git`,
       manifest.source.commit,
@@ -207,35 +217,42 @@ exec "${process.execPath}" "$@"
     expect(readFileSync(join(cwd, "untracked.txt"), "utf8")).toBe("untracked file\n");
     expect(git("rev-parse", "HEAD")).not.toBe(manifest.source.commit);
 
-    const wrongTree = structuredClone(manifest);
-    wrongTree.source.treeSha = "0".repeat(40);
-    expect(await run(wrongTree)).toMatchObject({
-      code: exit.validation,
-      stdout: "",
-      stderr: expect.stringContaining("does not match the recorded tree SHA"),
-    });
-    const wrongLock = structuredClone(manifest);
-    wrongLock.source.lockfile.digest = "A".repeat(43);
-    expect(await run(wrongLock)).toMatchObject({
-      code: exit.validation,
-      stdout: "",
-      stderr: expect.stringContaining("does not match the recorded lockfile digest"),
-    });
-    const wrongPlan = structuredClone(manifest);
-    wrongPlan.nodeCheck.plan.maxConcurrency = 2;
-    wrongPlan.nodeCheck.digest = await digestNodeCheckPlan(wrongPlan.nodeCheck.plan);
-    expect(await run(wrongPlan)).toMatchObject({
-      code: exit.validation,
-      stdout: "",
-      stderr: expect.stringContaining("does not match the recorded plan digest"),
-    });
-    const missing = structuredClone(manifest);
-    missing.source.commit = "0".repeat(40);
-    expect(await run(missing)).toMatchObject({
-      code: exit.validation,
-      stdout: "",
-      stderr: expect.stringContaining("Cannot fetch recorded commit"),
-    });
+    const invalid = [
+      [
+        "does not match the recorded tree SHA",
+        (input: ReproductionManifest) => {
+          input.source.treeSha = "0".repeat(40);
+        },
+      ],
+      [
+        "does not match the recorded lockfile digest",
+        (input: ReproductionManifest) => {
+          input.source.lockfile.digest = "A".repeat(43);
+        },
+      ],
+      [
+        "does not match the recorded plan digest",
+        async (input: ReproductionManifest) => {
+          input.nodeCheck.plan.maxConcurrency = 2;
+          input.nodeCheck.digest = await digestNodeCheckPlan(input.nodeCheck.plan);
+        },
+      ],
+      [
+        "Cannot fetch recorded commit",
+        (input: ReproductionManifest) => {
+          input.source.commit = "0".repeat(40);
+        },
+      ],
+    ] as const;
+    for (const [message, mutate] of invalid) {
+      const input = structuredClone(manifest);
+      await mutate(input);
+      expect(await run(input), message).toMatchObject({
+        code: exit.validation,
+        stdout: "",
+        stderr: expect.stringContaining(message),
+      });
+    }
   },
   60_000
 );

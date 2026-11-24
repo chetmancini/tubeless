@@ -16,12 +16,14 @@ The command fetches one full commit SHA from the recorded GitHub repository
 into a temporary checkout. Git uses your configured credential helpers or SSH
 agent. If the revision is unavailable to your Git account, the command fails.
 It verifies the commit, Git tree, checked-out file contents, `bun.lock` digest
-and resolved Node check plan before launching the recipe. The temporary
-directory is removed on completion, failure or handled cancellation.
+and resolved Node check plan before launching the recipe. It removes Git
+metadata after verifying the checkout, so the recipe sees the same tracked
+files as a Cloud source archive. The temporary directory is removed on
+completion, failure or handled cancellation.
 
 Recipe subprocesses get a fresh home and temporary directory and use the local
-tools on PATH. They run with `CI=true`, `CF_SEND_TELEMETRY=false` and `NO_COLOR=1`. Git and check subprocesses receive no Cloud environment
-credentials. The command leaves your working files alone. The Cloud image
+tools on PATH. They run with `CI=true`, `CF_SEND_TELEMETRY=false` and `NO_COLOR=1`.
+Git and check subprocesses receive no Cloud environment credentials. The command leaves your working files alone. The Cloud image
 digest appears in the result as original-run metadata. The reproduction runs
 as a host process, with local filesystem and network permissions. Choose
 source and dependencies you trust accordingly. The local OS, architecture and

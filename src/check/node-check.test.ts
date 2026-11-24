@@ -23,14 +23,7 @@ async function fixture() {
 
 function stubBunVersion(version: string) {
   // Keep fixture installs and checks native while controlling toolchain admission.
-  const runNativeProcess = checkProcess.runCheckProcess;
-  return vi.spyOn(checkProcess, "runCheckProcess").mockImplementation((argv, timeout, context) => {
-    if (argv[0] === "bun" && argv[1] === "--version") {
-      context.log.log(version);
-      return Promise.resolve({ status: "exited", exitCode: 0, signal: null, outputComplete: true });
-    }
-    return runNativeProcess(argv, timeout, context);
-  });
+  return vi.spyOn(checkProcess, "readCheckToolVersion").mockResolvedValue(version);
 }
 
 describe("native recipe execution", () => {
@@ -41,7 +34,7 @@ describe("native recipe execution", () => {
     try {
       Object.defineProperty(process, "platform", { value: "win32" });
       await expect(runNodeCheck(plan, { cwd, log })).rejects.toThrow("POSIX host");
-      await expect(runCheckProcess(["/must-not-launch"], 1000, { cwd, log })).rejects.toThrow(
+      await expect(runCheckProcess(["/must-not-launch"], 1000, { cwd })).rejects.toThrow(
         "Windows is unsupported"
       );
     } finally {
@@ -49,7 +42,7 @@ describe("native recipe execution", () => {
     }
   });
   it("preserves nonzero exits, timeouts, cancellation and spawn failure", async () => {
-    const context = { cwd: process.cwd(), log };
+    const context = { cwd: process.cwd() };
     expect(
       await runCheckProcess([process.execPath, "-e", "process.exit(7)"], 1000, context)
     ).toMatchObject({ status: "exited", exitCode: 7 });
@@ -80,14 +73,11 @@ describe("native recipe execution", () => {
         const result = await runCheckProcess([process.execPath, "-e", program], 5000, {
           cwd,
           signal: controller.signal,
-          log: {
-            ...log,
-            log(message) {
-              if (String(message).includes("descendant-ready")) {
-                cancelledAt = performance.now();
-                controller.abort();
-              }
-            },
+          stdout(message) {
+            if (message.includes("descendant-ready")) {
+              cancelledAt = performance.now();
+              controller.abort();
+            }
           },
         });
         expect(result).toMatchObject({ status: "cancelled", outputComplete: false });
@@ -187,20 +177,18 @@ describe("native recipe execution", () => {
         new URL("../../fixtures/diagnostics/vitest-json-v5.json", import.meta.url),
         "utf8"
       );
-      vi.spyOn(checkProcess, "runCheckProcess").mockImplementation(
-        async (argv, _timeout, context) => {
-          if (argv[0] === "bun" && argv[1] === "--version") context.log.log(plan.toolchain.bun);
-          if (argv.some((arg) => arg.endsWith("vitest.mjs"))) {
-            await writeFile(
-              join(cwd, ".tubeless-reports/vitest.json"),
-              rawReport.replaceAll("/fixture/", `${cwd}/`)
-            );
-            controller.abort();
-            return { status: "cancelled", exitCode: null, signal: null, outputComplete: false };
-          }
-          return { status: "exited", exitCode: 0, signal: null, outputComplete: true };
+      stubBunVersion(plan.toolchain.bun);
+      vi.spyOn(checkProcess, "runCheckProcess").mockImplementation(async (argv) => {
+        if (argv.some((arg) => arg.endsWith("vitest.mjs"))) {
+          await writeFile(
+            join(cwd, ".tubeless-reports/vitest.json"),
+            rawReport.replaceAll("/fixture/", `${cwd}/`)
+          );
+          controller.abort();
+          return { status: "cancelled", exitCode: null, signal: null, outputComplete: false };
         }
-      );
+        return { status: "exited", exitCode: 0, signal: null, outputComplete: true };
+      });
       const result = await runNodeCheck(plan, {
         cwd,
         log,
@@ -228,11 +216,7 @@ describe("native recipe execution", () => {
       expect(result.run.status).toBe("failed");
       expect(result.run.errors[0]?.message).toContain(`requires Bun ${plan.toolchain.bun}`);
       expect(result.commands).toEqual([]);
-      expect(probe).toHaveBeenCalledExactlyOnceWith(
-        ["bun", "--version"],
-        expect.any(Number),
-        expect.anything()
-      );
+      expect(probe).toHaveBeenCalledExactlyOnceWith("bun", expect.anything());
     }
   );
   it.runIf(process.versions.node.startsWith("24."))(
@@ -240,10 +224,12 @@ describe("native recipe execution", () => {
     async () => {
       const cwd = await fixture();
       const controller = new AbortController();
-      const probe = vi.spyOn(checkProcess, "runCheckProcess").mockImplementationOnce(async () => {
-        controller.abort("stop version probe");
-        return { status: "cancelled", exitCode: null, signal: null, outputComplete: false };
-      });
+      const probe = vi
+        .spyOn(checkProcess, "readCheckToolVersion")
+        .mockImplementationOnce(async () => {
+          controller.abort("stop version probe");
+          return undefined;
+        });
       const result = await runNodeCheck(await readNodeCheckPlan(cwd), {
         cwd,
         log,

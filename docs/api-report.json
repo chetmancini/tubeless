@@ -419,7 +419,7 @@
     {
       "declaration": "./dist/check/node-check.d.ts",
       "exports": ["NodeCheckExecution", "readNodeCheckPlan", "runNodeCheck"],
-      "sha256": "26b048288ed63edf2a2cebe754735880b096a5ef0a95d3f250334f2b4eb2f882",
+      "sha256": "ea29e2bbed95041065efa80c2b245a495b3c22ba0f654d296bb9244efcf928f8",
       "specifier": "tubeless/node/check"
     }
   ],

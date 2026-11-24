@@ -5,11 +5,26 @@ import {
   digestNodeCheckPlan,
   type ReproductionManifest,
 } from "../utilities/reproduction-manifest.js";
-import { runCheckProcess } from "./process.js";
-import { executeNodeCheck, readNodeCheckPlan } from "./recipe.js";
+import { readNodeCheckPlan } from "./node-check.js";
+import { readCheckToolVersion, runCheckProcess } from "./process.js";
+import { executeNodeCheckPlan } from "./recipe.js";
 import { prepareReproductionSource } from "./reproduction-source.js";
 
-const silent = { log() {}, error() {}, warn() {} };
+function requireToolVersion(
+  tool: "node" | "bun",
+  required: string,
+  version: string | undefined
+): string {
+  if (version === undefined)
+    throw new Error(
+      `Reproduction requires ${tool} ${required} on PATH. Could not read its version.`
+    );
+  if ((tool === "node" ? version.split(".")[0] : version) !== required)
+    throw new Error(
+      `Reproduction requires ${tool === "node" ? "Node" : "Bun"} ${required}. Found ${version}.`
+    );
+  return version;
+}
 
 /** Run the admitted recipe with local tools, a temporary checkout and a fresh environment. */
 export async function reproduceCheck(manifest: ReproductionManifest, signal: AbortSignal) {
@@ -30,48 +45,19 @@ export async function reproduceCheck(manifest: ReproductionManifest, signal: Abo
       CI: "true",
       CF_SEND_TELEMETRY: "false",
       NO_COLOR: "1",
+      GIT_CEILING_DIRECTORIES: root,
     };
+    const location = { cwd, env, signal };
     const { nodeCheck, runtime: recorded } = manifest;
-    const probe = async (tool: "node" | "bun", required: string): Promise<string> => {
-      let output = "";
-      const result = await runCheckProcess(
-        [tool, "--version"],
-        5000,
-        {
-          cwd,
-          signal,
-          log: {
-            ...silent,
-            log: (chunk) => {
-              output += String(chunk);
-            },
-          },
-        },
-        env
-      );
-      signal.throwIfAborted();
-      const version = output.trim().replace(/^v/, "");
-      if (
-        result.status !== "exited" ||
-        result.exitCode !== 0 ||
-        !result.outputComplete ||
-        !/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.+-]{1,64})?$/.test(version)
-      )
-        throw new Error(
-          `Reproduction requires ${tool} ${required} on PATH. Could not read its version.`
-        );
-      return version;
-    };
-    const node = await probe("node", nodeCheck.plan.toolchain.node);
-    if (node.split(".")[0] !== nodeCheck.plan.toolchain.node)
-      throw new Error(
-        `Reproduction requires Node ${nodeCheck.plan.toolchain.node}. Found ${node}.`
-      );
-    const bun = await probe("bun", nodeCheck.plan.toolchain.bun);
-    if (bun !== nodeCheck.plan.toolchain.bun)
-      throw new Error(`Reproduction requires Bun ${nodeCheck.plan.toolchain.bun}. Found ${bun}.`);
+    const [nodeVersion, bunVersion] = await Promise.all([
+      readCheckToolVersion("node", location),
+      readCheckToolVersion("bun", location),
+    ]);
+    signal.throwIfAborted();
+    const node = requireToolVersion("node", nodeCheck.plan.toolchain.node, nodeVersion);
+    const bun = requireToolVersion("bun", nodeCheck.plan.toolchain.bun, bunVersion);
 
-    await prepareReproductionSource(manifest, cwd, env, signal);
+    await prepareReproductionSource(manifest, location);
     const plan = await readNodeCheckPlan(cwd).catch(() => {
       throw new Error("Pinned source has an unsupported Node check configuration.");
     });
@@ -87,12 +73,8 @@ export async function reproduceCheck(manifest: ReproductionManifest, signal: Abo
         : []
     );
     signal.throwIfAborted();
-    const execution = await executeNodeCheck(
-      plan,
-      { cwd, signal, log: silent },
-      {
-        runtime: { nodeVersion: node, env },
-      }
+    const execution = await executeNodeCheckPlan(plan, { cwd, signal }, (command, step) =>
+      runCheckProcess(command.argv, command.timeoutMs, { cwd, env, signal: step.signal })
     );
     return {
       version: 1,

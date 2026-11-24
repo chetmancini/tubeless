@@ -30,7 +30,7 @@ Package: `tubeless`
 | `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
 | `tubeless/check-plan`            | `./dist/utilities/node-check-plan.d.ts`        | `23fef204664df9348fcfab6d1d87dd782f58d75cd9b61a868793d246ba80fb10` |                6 |
 | `tubeless/reproduction-manifest` | `./dist/utilities/reproduction-manifest.d.ts`  | `2825c1d3fcbaa6c456f6cb20d078990b10170d2f14520c64cbfeaecb5743b30f` |                5 |
-| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `26b048288ed63edf2a2cebe754735880b096a5ef0a95d3f250334f2b4eb2f882` |                3 |
+| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `ea29e2bbed95041065efa80c2b245a495b3c22ba0f654d296bb9244efcf928f8` |                3 |
 
 ## Symbols
 
@@ -409,12 +409,12 @@ Package: `tubeless`
 
 | Symbol                                                                                                            | Description                                                                                    |
 | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`decodeNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L267)  | Decode the bounded command contract directly; arbitrary argv and execution kinds are rejected. |
-| [`isNodeCheckReportPath`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L93) | Report files are confined to one dedicated directory; no absolute or traversing paths.         |
+| [`decodeNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L277)  | Decode the bounded command contract directly; arbitrary argv and execution kinds are rejected. |
+| [`isNodeCheckReportPath`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L95) | Report files are confined to one dedicated directory; no absolute or traversing paths.         |
 | [`NodeCheckCommand`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L19)      | One resolved native command, with metadata appropriate to its execution kind.                  |
 | [`NodeCheckConfig`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L2)        | Portable, deliberately restricted Node 24 / Bun 1.4.4 check recipe.                            |
 | [`NodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L26)         | All commands, dependency edges and script bodies are part of admission identity.               |
-| [`resolveNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L184) | Resolve data only.                                                                             |
+| [`resolveNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L186) | Resolve data only.                                                                             |
 
 ### `tubeless/reproduction-manifest`
 
@@ -428,8 +428,8 @@ Package: `tubeless`
 
 ### `tubeless/node/check`
 
-| Symbol                                                                                            | Description                                                                                |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [`NodeCheckExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/recipe.ts#L21) | Original pipeline result, independent native outcomes and collected test-report envelopes. |
-| [`readNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/check/recipe.ts#L29)  | Load only JSON and a committed Bun text lock.                                              |
-| [`runNodeCheck`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L8)    | Execute an admitted plan with the ordinary Tubeless scheduler.                             |
+| Symbol                                                                                                | Description                                                                                |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`NodeCheckExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L14) | Original pipeline result, independent native outcomes and collected test-report envelopes. |
+| [`readNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L22)  | Load only JSON and a committed Bun text lock.                                              |
+| [`runNodeCheck`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L51)       | Execute an admitted plan with the ordinary Tubeless scheduler.                             |
