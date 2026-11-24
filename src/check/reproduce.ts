@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join } from "node:path";
 import {
@@ -13,7 +13,8 @@ import { prepareReproductionSource } from "./reproduction-source.js";
 /** Run the admitted recipe with local tools, a temporary checkout and a fresh environment. */
 export async function reproduceCheck(manifest: ReproductionManifest, signal: AbortSignal) {
   if (process.platform === "win32") throw new Error("Reproduction requires a POSIX host.");
-  const root = await mkdtemp(join(tmpdir(), "tubeless-reproduce-"));
+  // Vitest reports physical paths, so the subprocess and report adapter need the same root.
+  const root = await mkdtemp(join(await realpath(tmpdir()), "tubeless-reproduce-"));
   try {
     const cwd = join(root, "source");
     const home = join(root, "home");
