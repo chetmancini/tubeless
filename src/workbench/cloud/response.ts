@@ -1,5 +1,9 @@
-import { awaitWithAbort } from "../../utilities/abort.js";
-import { BodyLimitError, cancelBody, readBoundedBody } from "../../utilities/read-body.js";
+import {
+  BodyLimitError,
+  cancelBody,
+  consumeBody,
+  readBoundedBody,
+} from "../../utilities/read-body.js";
 import {
   parseReproductionManifest,
   REPRODUCTION_MANIFEST_MAX_BYTES,
@@ -11,16 +15,15 @@ const RESPONSE_LIMIT = 4 * 1024 * 1024;
 
 export async function responseJson(response: Response, signal: AbortSignal): Promise<unknown> {
   if (!response.headers.get("content-type")?.toLowerCase().includes("application/json")) {
-    await response.body?.cancel().catch(() => {});
+    cancelBody(response.body);
     throw new CloudClientError(
       "Cloud returned a non-JSON response.",
       "invalid_response",
       response.status
     );
   }
-  const declaredLength = response.headers.get("content-length");
-  if (declaredLength !== null && Number(declaredLength) > RESPONSE_LIMIT) {
-    await response.body?.cancel().catch(() => {});
+  if (Number(response.headers.get("content-length")) > RESPONSE_LIMIT) {
+    cancelBody(response.body);
     throw new CloudClientError(
       "Cloud response exceeds the size limit.",
       "invalid_response",
@@ -57,22 +60,13 @@ export async function writeArtifact(
 ): Promise<void> {
   if (!body) return;
   refreshTimeout();
-  const reader = body.getReader();
-  try {
-    for (;;) {
-      signal.throwIfAborted();
-      const chunk = await awaitWithAbort(reader.read(), signal, "Artifact download").catch(() => {
-        throw new CloudClientError("Cloud artifact transfer was interrupted.", "transport_error");
-      });
-      if (chunk.done) return;
-      signal.throwIfAborted();
-      if (chunk.value.byteLength > 0) refreshTimeout();
-      await write(chunk.value);
-    }
-  } finally {
-    cancelBody(reader);
-    reader.releaseLock();
-  }
+  await consumeBody(body, signal, (chunk) => {
+    if (chunk.byteLength > 0) refreshTimeout();
+    return write(chunk);
+  }).catch((error: unknown) => {
+    if (error instanceof CloudClientError) throw error;
+    throw new CloudClientError("Cloud artifact transfer was interrupted.", "transport_error");
+  });
 }
 
 export async function readManifest(

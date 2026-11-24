@@ -1,7 +1,20 @@
 import { setTimeout as delay } from "node:timers/promises";
+import type { CloudClient } from "./client.js";
 import type { CloudCredentialStore } from "./credentials.js";
-import { CloudClientError } from "./protocol.js";
+import type { cloudOutput } from "./output.js";
+import { CloudClientError, type CliSession } from "./protocol.js";
 import { errorMessage, terminalSafeText, type WorkbenchCliIo } from "../workbench-shared.js";
+
+export interface CloudContext {
+  client: CloudClient;
+  workspace: string;
+  session?: CliSession;
+  io: WorkbenchCliIo;
+  signal: AbortSignal;
+  json: boolean;
+  output: ReturnType<typeof cloudOutput>;
+  sleep: typeof cloudSleep;
+}
 
 /** Small I/O seams keep CLI tests away from production and the machine keychain. */
 export interface CloudCommandDependencies {
@@ -25,9 +38,7 @@ export function cloudErrorExit(
   text = terminalSafeText
 ): number {
   io.stderr.write(
-    signal.aborted
-      ? "Stopped following Cloud activity. Remote work continues.\n"
-      : `Error: ${text(errorMessage(error))}\n`
+    signal.aborted ? "Cloud request interrupted.\n" : `Error: ${text(errorMessage(error))}\n`
   );
   return cloudErrorCode(error, signal);
 }
