@@ -1,6 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none" role="img" aria-label="Tubeless — Typed, agentic pipelines">
   <defs>
-    <style>@import url("https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700&amp;family=IBM+Plex+Sans:wght@500&amp;display=swap");</style>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500&amp;display=swap");
+      /* Arial Narrow is the header wordmark on cloud.tubeless.io. Liberation Sans Narrow (OFL) is the embedded fallback when that system font is absent. */
+      @font-face {
+        font-family: "Liberation Sans Narrow";
+        src: url("data:font/ttf;base64,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") format("truetype");
+        font-weight: 700;
+        font-style: normal;
+      }
+    </style>
     <radialGradient id="light">
       <stop stop-color="#e4e9d7" stop-opacity=".6"/>
       <stop offset="1" stop-color="#f7f5ed" stop-opacity="0"/>
@@ -46,7 +55,7 @@
     <circle cx="976" cy="492" r="8" fill="#f7f5e9"/>
     <rect x="559" y="107" width="82" height="26" rx="13" fill="#d5b35f" stroke="#a58231" stroke-width="2"/>
     <g id="wordmark">
-      <g transform="translate(312.5 216.1) scale(3.7)">
+      <g transform="translate(316.4 228.6) scale(3.7)">
         <g stroke="#141b18" stroke-width="1.15">
           <path d="M16.2 10.19 19.2 4.99" />
           <path d="M18.4 14h6" />
@@ -60,8 +69,8 @@
         <path d="M14 1.85v3.55" stroke="#d0a94b" stroke-width="2.15" />
         <circle cx="14" cy="2.05" r="1.2" fill="#d0a94b" />
       </g>
-      <text x="448.1" y="312.7" fill="#141b18" font-family="'Big Shoulders Display', 'Arial Narrow', sans-serif" font-size="112" font-weight="700" letter-spacing="14">TUBELESS</text>
-      <text x="600" y="386.8" text-anchor="middle" fill="#3a4840" font-family="'IBM Plex Sans', Arial, sans-serif" font-size="46" font-weight="500" letter-spacing=".5">Typed, agentic pipelines</text>
+      <text x="445.9" y="310.1" fill="#141b18" font-family="'Arial Narrow', 'Liberation Sans Narrow', Impact, sans-serif" font-size="86.3" font-weight="700" letter-spacing="0.1em">TUBELESS</text>
+      <text x="600" y="378.2" text-anchor="middle" fill="#3a4840" font-family="'IBM Plex Sans', Arial, sans-serif" font-size="46" font-weight="500" letter-spacing=".5">Typed, agentic pipelines</text>
     </g>
   </g>
   <g aria-hidden="true">
