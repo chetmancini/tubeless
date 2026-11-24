@@ -266,9 +266,11 @@ manifest decoder for data-only inspection.
   launch entry points. A Worker pipeline can hand off a listed `fromPipeline`
   child. Keep Node-only handlers in the separate runner project. See
   [runner placement](./deploy-cloudflare.md#place-work-on-a-local-bun-runner).
-- Enable `recoverInterruptedRuns` for versioned Worker-root launches that need
-  to restore acknowledged steps after a restart. Unconfirmed effects stop the
-  execution for reconciliation. See [Worker recovery](./deploy-cloudflare.md#recover-an-interrupted-worker-execution).
+- Enable `recoverInterruptedRuns` for versioned Worker and Bun roots that need
+  to restore acknowledged steps after a restart. Run the Bun CLI from the
+  original project directory and the same release. Unconfirmed effects stop
+  the execution for reconciliation. See [Worker recovery](./deploy-cloudflare.md#recover-an-interrupted-worker-execution)
+  and [Bun recovery](./deploy-cloudflare.md#recover-an-interrupted-bun-root).
 - Never put secrets in `cloudflare.config.ts` text bindings. Every user Access
   admits sees all history and commands.
 

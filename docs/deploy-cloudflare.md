@@ -315,14 +315,15 @@ its running parent and can wait until the parent's deadline. Studio's run
 details show the root runner and link stage runs under the parent step. Open the
 stage to see its runner attempt, logs, and progress.
 
-A lost active lease closes the attempt as interrupted. Root executions show
-`outcome_unknown` with `runner_interrupted` when no terminal trace was confirmed.
-A waiting parent with recovery disabled fails if its child loses the lease.
+A lost active lease closes the attempt as interrupted. Without recovery, root
+executions show `outcome_unknown` with `runner_interrupted` when no terminal
+trace was confirmed. A waiting parent with recovery disabled fails if its child
+loses the lease.
 
 ## Recover an interrupted Worker execution
 
 Set `recoverInterruptedRuns: true` on `createCloudflareApp` to journal trusted
-launches whose root runs on the Worker. Use an immutable `deploymentId` and set
+launches whose root runs on the Worker or on Bun. Use an immutable `deploymentId` and set
 `implementationVersion` on the root and its child pipelines. Submit with the same
 CLI, Studio, or `app.launch` entry points. Repeating a submission with the same
 idempotency key and parameters returns the original execution ID.
@@ -352,13 +353,33 @@ the failed step in Studio, and the stage dispatch ID in the Bun error to reconci
 external effects before submitting under a new key. Tubeless keeps downstream steps
 blocked and honors a recorded cancellation after restart.
 
-The Worker journal accepts plain data with no shared or circular references,
+The journal accepts plain data with no shared or circular references,
 including explicit `undefined` and negative zero. Each encoded binding or result
 is limited to 64 KiB. The Bun handoff retains its JSON value limits. Put effects
 in step handlers and keep option mapping and finalizers free of effects because
-orchestration can re-enter them. Dry runs skip the journal. Bun-owned top-level
-commands continue to use runner lease semantics. See the
+orchestration can re-enter them. Dry runs skip the journal. See the
 [execution journal contract](./execution-journal.md).
+
+### Recover an interrupted Bun root
+
+The same option enables recovery for commands placed on Bun. Deploy the Worker
+and upgrade the Bun CLI together. A runner without journal support leaves
+recoverable roots queued and reports that it needs an upgrade.
+
+Studio preserves the launch inputs and journal while the execution is open.
+After losing a lease, Tubeless queues another attempt with the original deadline.
+Restart the enrolled runner with the same project directory, deployment ID, and
+compatible implementations. Studio links the attempts under the original
+execution ID. Acknowledged steps restore their results. An ordinary effect with
+recorded intent and no committed result surfaces `outcome_unknown` and leaves its
+dependents blocked. Cancelling a queued recovery prevents another claim.
+
+Keep the runner credential on the machine that owns the project's local data.
+Step outputs can reference files, so a replacement must also have the required
+files and environment in its working directory. The Studio journal stores the
+encoded step values until terminal settlement. Recovery for a Bun root uses
+its own journal. A Bun child placed by a Worker still uses the stage handoff
+described above.
 
 ### Smoke test a deployed Worker and Bun runner
 
@@ -440,17 +461,18 @@ while launches are active; nothing expires automatically.
 
 ## Run limits
 
-**A run executes inside one Durable Object alarm, so it has at most 15 minutes of
-wall time.** Tubeless aborts at 14 minutes so it can record its own failure. Set a
+**A Worker attempt executes inside a Durable Object alarm with a 15-minute
+wall-time limit.** Tubeless budgets up to 14 minutes for the execution. Set a
 shorter limit with `createCloudflareApp(project, { limits: { maxRunDurationMs } })`
-(at most 840,000 ms). Waiting for a launch to start does not consume it.
+(at most 840,000 ms). The budget starts with the first attempt on either runner.
 
 - **CPU:** 30 seconds by default; Workers Paid allows up to 5 minutes via
   `limits: { cpuMs: 300_000 }` in `cloudflare.config.ts` (commented out in the
   scaffold). I/O waits do not count. Use Workers Paid for real pipelines.
 - **Recorded text:** log, progress, skip and error text beyond 65,536 characters is
   truncated in history (Durable Object row limit); local history keeps it all.
-- **No crash resume:** a run that is cut off is recorded as failed.
+- **Crash recovery:** opt in with `recoverInterruptedRuns`. Attempts share the
+  original execution deadline.
 
 To fit the limit, keep heavy steps short and split work across steps and fan-out
 items; put a long single step behind [`fromRemote`](./remote-step-composition.md); or

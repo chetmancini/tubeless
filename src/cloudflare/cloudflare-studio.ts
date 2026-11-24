@@ -153,9 +153,15 @@ export class StudioObjectCore implements CloudflareStudioIngest {
     if (!status) return undefined;
     if (status.target === undefined && this.deps.localPipelines !== undefined)
       return { ...status, target: "cloudflare" as const };
-    if (status.target !== "local" || status.state !== "queued") return status;
+    if (status.target !== "local") return status;
+    if (
+      status.state !== "queued" &&
+      !(status.state === "running" && this.#runners.claims.isWaitingForRecovery(launchId))
+    )
+      return status;
     return {
       ...status,
+      state: "queued" as const,
       reason: this.#runners.queuedReason(
         launchId,
         this.deps.deploymentId,

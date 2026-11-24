@@ -267,7 +267,7 @@ export class SqliteHostedLaunchStore
   /** Caller owns this transaction together with cancellation cleanup. */
   admitRecovery(
     launchId: string,
-    generation: number,
+    generation: number | undefined,
     activeStageRunIds: readonly string[]
   ): "admitted" | "closed" | "cancelled" {
     const launch = this.#get(launchId);
@@ -275,11 +275,11 @@ export class SqliteHostedLaunchStore
       !launch ||
       launch.ownership !== "trusted" ||
       TERMINAL.has(launch.state) ||
-      launch.recoveryGeneration === undefined ||
-      generation <= launch.recoveryGeneration
+      launch.recoveryGeneration === undefined
     )
       return "closed";
-
+    const nextGeneration = generation ?? launch.recoveryGeneration + 1;
+    if (nextGeneration <= launch.recoveryGeneration) return "closed";
     if (this.executions.status(launchId)?.cancellationRequested) {
       if (launch.runId)
         this.events.append(
@@ -298,14 +298,14 @@ export class SqliteHostedLaunchStore
       this.events.append(
         this.interruptRuns(
           launch.runId,
-          "Worker attempt interrupted. Recovery uses the execution journal.",
+          "Execution attempt interrupted. Recovery uses the execution journal.",
           this.now(),
           activeStageRunIds
         )
       );
     this.storage.sql.exec(
       "UPDATE tubeless_launches SET recovery_generation = ?, run_id = NULL, state = 'starting', last_batch = -1 WHERE launch_id = ?",
-      generation,
+      nextGeneration,
       launchId
     );
     return "admitted";

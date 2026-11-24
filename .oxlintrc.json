@@ -149,7 +149,6 @@
         "allow": {
           "scripts/eval-agent.mjs": 668,
           "src/cli/cli-parser.ts": 817,
-          "src/cloudflare/cloudflare-runner-queue.ts": 509,
           "src/core/child-execution.ts": 574,
           "src/core/pipeline-steps.ts": 571,
           "src/core/pipeline-types.ts": 700,
@@ -204,7 +203,6 @@
           "src/agent/transcript.test.ts": 3,
           "src/cli/cli.test.ts": 1,
           "src/cloudflare/cloudflare-app.test.ts": 4,
-          "src/cloudflare/cloudflare-runner.test.ts": 4,
           "src/core/child-progress-external.test.ts": 3,
           "src/core/child-progress.test.ts": 12,
           "src/core/execution-journal-process.test.ts": 1,

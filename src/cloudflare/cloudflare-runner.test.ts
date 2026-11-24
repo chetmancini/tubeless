@@ -79,6 +79,17 @@ beforeAll(async () => {
       const { TubelessStudio: BaseStudio, TubelessRun } = app.durableObjects;
       export { TubelessRun };
       export class TubelessStudio extends BaseStudio {
+        constructor(state, env) {
+          super(state, env);
+          this.storage = state.storage;
+        }
+        async expireRootLease(launchId) {
+          this.storage.sql.exec(
+            "UPDATE tubeless_runner_queue SET lease_until_ms = 0 WHERE id = ? AND recovery_attempt_id IS NOT NULL",
+            launchId
+          );
+          await super.alarm();
+        }
         async readStage(launchId, id, afterId) {
           const observation = await super.readStage(launchId, id, afterId);
           if (!observation.result) return observation;
@@ -101,6 +112,11 @@ beforeAll(async () => {
       if (path === "/_test/launch") {
         const { id, command, values } = await request.json();
         return Response.json(await app.launch(env, command, values, { idempotencyKey: id, trigger: "schedule" }));
+      }
+      if (path === "/_test/expire-root-lease") {
+        const { launchId } = await request.json();
+        await env.TUBELESS_STUDIO.getByName("default").expireRootLease(launchId);
+        return Response.json({ expired: true });
       }
       return worker.fetch(request, env);
     } };`;
@@ -212,6 +228,10 @@ const runnerPost = (
 it("keeps local launches queued, pins claims, and joins the real mixed example in Studio", async () => {
   await call("/_test/seed");
   const local = await launch("local", transformId, { text: " triggered " });
+  const previewLocal = await launch("preview-local", transformId, {
+    text: "preview",
+    dryRun: true,
+  });
   const mixed = await launch("mixed", "fetch-transform-publish", { text: "source.txt" });
   await vi.waitFor(async () =>
     expect(await getExecution(mixed)).toMatchObject({ state: "running" })
@@ -276,14 +296,15 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
   const controller = new AbortController();
   let rejectedAttempt = false;
   let stageDeliveries = 0;
-  let sawParentProgress = false;
+  let parentProgress: unknown;
+  let committedStageReply: unknown;
   const worker = inWorkerd("runner");
   const fetcher: typeof fetch = async (url, init) => {
     const path = new URL(String(url)).pathname;
     if (
       path.endsWith("/finish") &&
       typeof init?.body === "string" &&
-      JSON.parse(init.body).id === local
+      JSON.parse(init.body).id === previewLocal
     ) {
       rejectedAttempt = true;
       return Response.json({ message: "Attempt-specific rejection" }, { status: 400 });
@@ -295,30 +316,23 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
     ) {
       stageDeliveries++;
       if (stageDeliveries === 1) {
-        await vi.waitFor(
+        parentProgress = await vi.waitFor(
           async () => {
             const { state, runId } = await getExecution(mixed);
-            expect(state).toBe("running");
+            if (state !== "running") throw new Error("The parent is not running.");
             const detail = await (await call(`/api/runs/${runId}`)).json();
-            expect(detail.run.steps).toContainEqual(
-              expect.objectContaining({
-                id: "transform-locally",
-                status: "running",
-                progress: expect.objectContaining({
-                  details: [
-                    expect.objectContaining({ id: "transform", label: "Local file ready" }),
-                  ],
-                }),
-              })
+            const step = detail.run.steps.find(
+              (step: { id: string }) => step.id === "transform-locally"
             );
+            if (!step?.progress?.details) throw new Error("The parent has no child progress.");
+            return step;
           },
           { timeout: 2_500 }
         );
-        sawParentProgress = true;
         throw new Error("Lost request before commit");
       }
       if (stageDeliveries === 2) {
-        expect(await (await worker(url, init)).json()).toEqual({ accepted: true });
+        committedStageReply = await (await worker(url, init)).json();
         throw new Error("Lost response after commit");
       }
     }
@@ -348,7 +362,12 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
     expect(rejectedAttempt).toBe(true);
     expect(err.join("")).toContain("Attempt-specific rejection");
     await vi.waitFor(() => expect(stageDeliveries).toBe(3));
-    expect(sawParentProgress).toBe(true);
+    expect(parentProgress).toMatchObject({
+      id: "transform-locally",
+      status: "running",
+      progress: { details: [{ id: "transform", label: "Local file ready" }] },
+    });
+    expect(committedStageReply).toEqual({ accepted: true });
     expect(await (await call("/_test/published")).text()).toBe("EXAMPLE TEXT");
     expect(await readFile(join(temp, "normalized.txt"), "utf8")).toBe("EXAMPLE TEXT");
     const { runId } = await getExecution(mixed);
@@ -529,17 +548,16 @@ it("recreates workerd and the Bun runner after a committed stage loses its respo
   await call("/_test/seed?text=recovery%20committed");
   const id = await launch("recover-committed", "fetch-transform-publish", { text: "source.txt" });
   holdStageResults.add(id);
-  let committed = false;
+  let committed: unknown;
   const stop = await startFaultRunner(async (reply, url, init) => {
     if (!isTerminalBatch(url, init)) return reply();
     if (!committed) {
-      expect(await (await reply()).json()).toEqual({ accepted: true });
-      committed = true;
+      committed = await (await reply()).json();
     }
     throw new Error("Drop completion response after Studio commits");
   });
   try {
-    await vi.waitFor(() => expect(committed).toBe(true), { timeout: 10_000 });
+    await vi.waitFor(() => expect(committed).toEqual({ accepted: true }), { timeout: 10_000 });
   } finally {
     await stop();
   }
@@ -651,3 +669,78 @@ it("surfaces an unknown stage after the runner writes and loses its lease before
     await stopRecreated();
   }
 }, 40_000);
+
+it.each([
+  { committed: true, expected: { state: "completed" }, completeReply: { accepted: true } },
+  {
+    committed: false,
+    expected: { state: "outcome_unknown", reason: "journal_outcome_unknown" },
+    completeReply: undefined,
+  },
+])(
+  "recovers a Bun root after losing a journal reply (committed=$committed)",
+  async ({ committed, expected, completeReply }) => {
+    const text = `BUN ROOT ${expected.state.toUpperCase()}`;
+    const id = await launch(`root-${expected.state}`, transformId, { text });
+    let completion: unknown;
+    let lostBegin: string | undefined;
+    let committedCompletion: unknown;
+    const beginReplies: unknown[] = [];
+    const stop = await startFaultRunner(async (reply, url, init) => {
+      if (!url.pathname.endsWith("/journal") || typeof init?.body !== "string") return reply();
+      const body = JSON.parse(init.body);
+      if (body.operation === "begin" && lostBegin === undefined) {
+        beginReplies.push(await (await reply()).json());
+        lostBegin = init.body;
+        throw new Error("Lost begin response");
+      }
+      if (init.body === lostBegin) {
+        const response = await reply();
+        beginReplies.push(await response.clone().json());
+        return response;
+      }
+      if (body.operation !== "complete") return reply();
+      if (committed) committedCompletion = await (await reply()).json();
+      completion = body;
+      throw new Error("Lost journal completion reply");
+    });
+    let originalRunId: string | undefined;
+    try {
+      await vi.waitFor(() => expect(completion).toBeDefined(), { timeout: 8_000 });
+      await vi.waitFor(async () => {
+        const current = await getExecution(id);
+        expect(current.runId).toEqual(expect.any(String));
+        originalRunId = current.runId;
+      });
+      expect(beginReplies).toEqual([
+        { accepted: true, status: "new" },
+        { accepted: true, status: "new" },
+      ]);
+      expect(committedCompletion).toEqual(completeReply);
+      expect(await writeCount(text)).toBe(1);
+    } finally {
+      await stop();
+    }
+
+    await runtime.dispose();
+    runtime = recreateRuntime();
+    const expired = await call("/_test/expire-root-lease", jsonBody({ launchId: id }));
+    expect(await expired.json()).toEqual({ expired: true });
+    expect(await getExecution(id)).toMatchObject({ state: "queued", reason: "runner_waiting" });
+    const stopRecreated = await startFaultRunner((reply) => reply());
+    try {
+      await vi.waitFor(async () => expect(await getExecution(id)).toMatchObject(expected));
+      const current = await getExecution(id);
+      expect(current.runId).not.toBe(originalRunId);
+      expect(await writeCount(text)).toBe(1);
+      expect(await (await runnerPost("journal", completion)).json()).toEqual({ accepted: false });
+      const detail = await (await call(`/api/runs/${current.runId}`)).json();
+      expect(detail.launch).toMatchObject({
+        launchId: id,
+        recoveryRunIds: [current.runId, originalRunId],
+      });
+    } finally {
+      await stopRecreated();
+    }
+  }
+);
