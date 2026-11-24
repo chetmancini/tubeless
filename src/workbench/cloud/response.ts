@@ -52,9 +52,11 @@ export async function responseJson(response: Response, signal: AbortSignal): Pro
 export async function writeArtifact(
   body: ReadableStream<Uint8Array> | null,
   signal: AbortSignal,
-  write: (bytes: Uint8Array) => Promise<void>
+  write: (bytes: Uint8Array) => Promise<void>,
+  refreshTimeout: () => void
 ): Promise<void> {
   if (!body) return;
+  refreshTimeout();
   const reader = body.getReader();
   try {
     for (;;) {
@@ -64,6 +66,7 @@ export async function writeArtifact(
       });
       if (chunk.done) return;
       signal.throwIfAborted();
+      if (chunk.value.byteLength > 0) refreshTimeout();
       await write(chunk.value);
     }
   } finally {

@@ -44,6 +44,12 @@ const RUN_ENVELOPE_LIMIT = 68 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const FOLLOW_REQUEST_TIMEOUT_MS = 35_000;
 
+type ReadResponse<T> = (
+  response: Response,
+  signal: AbortSignal,
+  refreshTimeout: () => void
+) => Promise<T>;
+
 export function isCloudTransportError(error: unknown): error is CloudClientError {
   return (
     error instanceof CloudClientError &&
@@ -151,7 +157,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
 
   const request = async <T>(
     path: string | URL,
-    read: (response: Response, signal: AbortSignal) => Promise<T>,
+    read: ReadResponse<T>,
     requestOptions: RequestOptions = {}
   ): Promise<T> => {
     const url = new URL(path, host);
@@ -213,7 +219,9 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
           response.status
         );
       }
-      return read(response, signal);
+      return read(response, signal, () => {
+        if (!signal.aborted) timer.refresh();
+      });
     };
     try {
       signal.throwIfAborted();
@@ -289,14 +297,10 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
   const workspacePath = (workspace: string) => `/api/v1/workspaces/${segment(workspace)}`;
   const runPath = (workspace: string, runId: string) =>
     `${workspacePath(workspace)}/runs/${segment(runId)}`;
-  const download = <T>(
-    path: string,
-    accept: string,
-    consume: (response: Response, signal: AbortSignal) => Promise<T>
-  ) =>
+  const download = <T>(path: string, accept: string, consume: ReadResponse<T>) =>
     request(
       path,
-      async (response, signal) => {
+      async (response, signal, refreshTimeout) => {
         if (!response.ok) throw responseError(response, await responseJson(response, signal));
         if (response.status !== 200) {
           cancelBody(response.body);
@@ -306,7 +310,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
             response.status
           );
         }
-        return consume(response, signal);
+        return consume(response, signal, refreshTimeout);
       },
       { accept }
     );
@@ -370,7 +374,8 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       download(
         `${runPath(workspace, runId)}/artifacts/${segment(name, "artifact name")}`,
         "*/*",
-        (response, signal) => writeArtifact(response.body, signal, write)
+        (response, signal, refreshTimeout) =>
+          writeArtifact(response.body, signal, write, refreshTimeout)
       ),
     getManifest: async (workspace, runId) =>
       download(

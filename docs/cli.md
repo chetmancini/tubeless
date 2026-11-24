@@ -785,7 +785,8 @@ remain after the underlying bytes are deleted.
 
 `cloud download` saves the original artifact bytes. Automation tokens need
 both `read` and `artifacts:read` and access to that pipeline. Cloud restricts
-automation access to production deployment artifacts.
+automation access to production deployment artifacts. The CLI times out an
+artifact transfer after 15 seconds without data.
 
 `cloud manifest` needs read access to an eligible retained portable Node check.
 The CLI validates the manifest version, run ID and 64 KiB limit before saving.
