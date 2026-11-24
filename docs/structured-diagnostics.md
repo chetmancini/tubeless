@@ -72,10 +72,11 @@ and `structuredErrors` run snapshots alongside the legacy `error` string: classi
 codes, stack, causes (four levels), validation issues, and fan-out details, each with
 `truncated: true` on loss. Run-level errors keep eight entries plus
 `omittedStructuredErrors`; each snapshot is capped at 12 KB
-(`projectStructuredErrors`, `STRUCTURED_ERROR_LIMITS`). `cloud run --json` preserves
-these fields.
+(`projectStructuredErrors`, `STRUCTURED_ERROR_LIMITS`). `cloud inspect --json`
+preserves these fields on a retained snapshot. Foreground `cloud run --json`
+and `cloud follow --json` return them after the run settles.
 
-The retained-run API response and hosted MCP `get_run` also include `diagnostics`: up
+CLI inspection, the retained-run API response and hosted MCP `get_run` include `diagnostics` with up
 to two report artifacts with their decoder state, plus `omitted`. `missing` means no
 report was uploaded for a captured run; `unavailable` means the record predates
 capture. Identities inside a report are untrusted claims; the enclosing run and

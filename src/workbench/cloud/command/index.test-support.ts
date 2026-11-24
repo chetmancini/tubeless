@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { afterEach, vi } from "vitest";
+import type { CliCancelResult } from "../client.js";
 import type { CliRun, CliPipeline, CliWorkspace } from "../protocol.js";
 
 export const host = "http://localhost:8787";
@@ -49,6 +50,7 @@ export function service(
     admissionStatus?: number;
     admissionError?: string;
     lostAcknowledgement?: boolean;
+    cancellation?: CliCancelResult;
   } = {}
 ) {
   const calls: { method: string; url: string; body?: unknown; key?: string }[] = [];
@@ -78,6 +80,8 @@ export function service(
         ],
       });
     if (url.pathname.endsWith("/pipelines")) return Response.json(options.pipelines ?? [pipeline]);
+    if (options.cancellation && url.pathname.endsWith(`/runs/${options.cancellation.runId}/cancel`))
+      return Response.json(options.cancellation);
     if (url.pathname.endsWith("/runs")) {
       if (options.admissionError)
         return Response.json(

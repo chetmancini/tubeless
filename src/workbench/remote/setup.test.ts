@@ -118,7 +118,8 @@ it("opens Cloudflare Access login on first connect and keeps the browser token o
 
 it("creates a Cloud remote from the selected workspace and routes runs through the Cloud client", async () => {
   const { io, env, errors, output } = await fixture();
-  const { fetch: fetcher, calls } = service();
+  const cancellation = { runId: "run-1", status: "running", alreadyFinished: false } as const;
+  const { fetch: fetcher, calls } = service({ cancellation });
   const deps = { env: { ...env, TUBELESS_TOKEN: "test-session-token" }, fetch: fetcher };
   expect(
     await runRemote(
@@ -135,11 +136,32 @@ it("creates a Cloud remote from the selected workspace and routes runs through t
     pipelineId: "cloud-orders",
   });
   expect(JSON.parse(output.at(-1) ?? "{}").id).toBe("run-1");
+  expect(await runRemote(["status", "run-1", "--remote", "cloud", "--json"], io, deps)).toBe(0);
+  expect(JSON.parse(output.at(-1) ?? "{}")).toMatchObject({
+    status: "completed",
+    result: { ok: true },
+  });
+  expect(calls.at(-1)).toMatchObject({
+    method: "GET",
+    url: "/api/v1/workspaces/workspace/runs/run-1",
+  });
+  expect(await runRemote(["cancel", "run-1", "--remote", "cloud", "--json"], io, deps)).toBe(0);
+  expect(JSON.parse(output.at(-1) ?? "{}")).toEqual(cancellation);
+  expect(calls.at(-1)).toMatchObject({
+    method: "POST",
+    url: "/api/v1/workspaces/workspace/runs/run-1/cancel",
+    body: {},
+  });
   expect(
     await runRemote(["status", "run-1", "--follow", "--poll", "--json"], io, deps),
     errors.join("")
   ).toBe(0);
-  expect(JSON.parse(output.at(-1) ?? "{}").status).toBe("completed");
+  expect(JSON.parse(output.at(-1) ?? "{}")).toEqual({
+    id: "run-1",
+    pipelineId: "cloud-orders",
+    status: "completed",
+    logs: [],
+  });
 });
 
 it("streams foreground runs and followed status through a saved Cloud remote", async () => {

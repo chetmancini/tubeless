@@ -11,6 +11,7 @@ import { resolveCloudCredential } from "../credentials.js";
 import { isFollowCursor } from "../follow-protocol.js";
 import { pollCloudRun, streamCloudRun, writeCloudLog, type ObservationContext } from "../follow.js";
 import { cloudOutput } from "../output.js";
+import { formatRunInspection } from "./inspect.js";
 import {
   prepareRunInput,
   CloudRunUsageError,
@@ -43,6 +44,7 @@ type ObservationMode = { kind: "stream"; cursor?: string } | { kind: "poll" };
 type PipelineSelector = { id: string } | { name: string };
 type CloudAction<Input = PreparedCloudRunInput> =
   | { kind: "list" }
+  | { kind: "inspect" | "cancel"; runId: string }
   | { kind: "logs"; runId: string; mode?: ObservationMode }
   | { kind: "follow"; runId: string; mode: ObservationMode }
   | {
@@ -69,8 +71,7 @@ function parseAction({
     return { kind: "reproduce", path: selector };
   }
 
-  const wanted =
-    command === "logs" || command === "follow" || (command === "run" && !values.id) ? 2 : 1;
+  const wanted = command === "list" || (command === "run" && values.id !== undefined) ? 1 : 2;
   if (positionals.length !== wanted)
     throw new CloudRunUsageError("Pass exactly the required command arguments.");
   if (values.workspace !== undefined && !values.workspace.trim())
@@ -91,6 +92,7 @@ function parseAction({
   }
 
   if (!selector.trim()) throw new CloudRunUsageError("Pass a nonempty run ID.");
+  if (command === "inspect" || command === "cancel") return { kind: command, runId: selector };
   if (command === "logs" && !values.follow) {
     if (values.poll || values.cursor !== undefined)
       throw new CloudRunUsageError("Pass --follow to observe an existing run with cloud logs.");
@@ -155,7 +157,7 @@ async function selectPipeline(
   return matches[0].id;
 }
 
-function admissionUncertain(error: unknown): boolean {
+function mutationUncertain(error: unknown): boolean {
   if (!(error instanceof CloudClientError)) return true;
   if (error.status === undefined && error.code === "invalid_request") return false;
   return error.status === undefined || error.status < 400 || error.status >= 500;
@@ -175,12 +177,34 @@ async function admitRun(
     });
   } catch (error) {
     // An unusable or interrupted POST response can follow successful admission.
-    if (admissionUncertain(error))
+    if (mutationUncertain(error))
       io.stderr.write(
         `Admission could not be confirmed. Workspace: ${output.text(workspace)}; idempotency key: ${output.text(key)}. Host: ${output.text(client.host)}; pipeline ID: ${output.text(pipelineId)}. Retry with --idempotency-key ${output.text(key)}, the same --id, --host and --workspace, and identical input and source selection (--ref or --source) under the same principal. Do not start a fresh run.\n`
       );
     throw error;
   }
+}
+
+async function cancelRun(context: CloudContext, runId: string): Promise<number> {
+  const { client, workspace, io, json, output, signal } = context;
+  signal.throwIfAborted();
+  const result = await client.cancelRun(workspace, runId).catch((error: unknown) => {
+    if (mutationUncertain(error))
+      io.stderr.write(
+        `Cancellation could not be confirmed for run ${output.text(runId)}. Check its current status with cloud inspect using the same host and workspace.\n`
+      );
+    throw error;
+  });
+  if (json) io.stdout.write(`${output.json(result)}\n`);
+  else {
+    const message = result.alreadyFinished
+      ? "Run had already finished"
+      : "Cancellation request accepted";
+    io.stdout.write(
+      `${message} for ${output.text(result.runId)}. Current status: ${result.status}.\n`
+    );
+  }
+  return 0;
 }
 
 function printResult(context: CloudContext, run: CliRun, format: "run" | "logs"): void {
@@ -272,6 +296,17 @@ async function executeAction(context: CloudContext, action: CloudAction): Promis
           );
       return 0;
     }
+    case "inspect": {
+      const run = await client.getRun(workspace, action.runId);
+      io.stdout.write(
+        json
+          ? `${output.json(run)}\n`
+          : formatRunInspection(run, output, output.runUrl(client.host, workspace, run.id))
+      );
+      return 0;
+    }
+    case "cancel":
+      return cancelRun(context, action.runId);
     case "logs": {
       if (action.mode) return observeRun(context, action.runId, action.mode, "logs");
       const run = await client.getRun(workspace, action.runId);
@@ -387,6 +422,10 @@ export async function runCloudCommand(
     );
   } catch (error) {
     if (error instanceof CloudRunUsageError) return writeUsageError(io, error.message, CLOUD_USAGE);
+    if (signal.aborted && (request.action.kind === "inspect" || request.action.kind === "cancel")) {
+      io.stderr.write("Cloud request interrupted.\n");
+      return cloudErrorCode(error, signal);
+    }
     return cloudErrorExit(error, io, signal, output.text);
   } finally {
     managed.cleanup();
