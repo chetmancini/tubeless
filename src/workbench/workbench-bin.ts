@@ -8,13 +8,14 @@
  */
 
 import { runWorkbenchCli, type WorkbenchCliIo } from "./workbench.js";
-import { parseRunArgs } from "./workbench-run.js";
+import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
+import { parseSubcommandArgs } from "./workbench-subcommand.js";
 
 const argv = process.argv.slice(2);
 let jsonRun = false;
 if (argv[0] === "run") {
   try {
-    jsonRun = parseRunArgs(argv.slice(1)).values.json === true;
+    jsonRun = parseSubcommandArgs(argv.slice(1), WORKBENCH_SPECS.run).values.json === true;
   } catch {
     // Let normal dispatch report invalid arguments without loading application code.
   }

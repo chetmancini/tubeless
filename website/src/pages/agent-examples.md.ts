@@ -1,6 +1,5 @@
 import type { APIRoute } from "astro";
-import recording from "../../public/agent-evaluation.json";
-import { RECORDING_CONTEXT, ROOT_INSTRUCTIONS } from "../data/agent-recordings";
+import { agentEvaluation } from "../data/agent-recordings";
 import { absUrl, githubBlob } from "../lib/paths";
 
 export const GET: APIRoute = () => new Response(`# Agent examples
@@ -13,12 +12,12 @@ Small test tasks that make an agent's execution easy to follow. See what it was 
 
 These four tasks cover edits, project instructions, and recovery from a missing file. They run in tiny, temporary workspaces; they do not measure performance on a real codebase.
 
-Each recording includes the original task, starting files, expected result, and independent checks. Recorded ${recording.completedAt}, model ${recording.model}, reasoning ${recording.reasoningEffort}. Browsing them makes no model calls.
+Each recording includes the original task, starting files, expected result, and independent checks. Recorded ${agentEvaluation.completedAt}, model ${agentEvaluation.model}, reasoning ${agentEvaluation.reasoningEffort}. Browsing them makes no model calls.
 
-These are historical runs using the [archived evaluator and model sources](${absUrl(recording.sourceSnapshot)}). They precede durable execution and execution environments.
+These are historical runs using the [archived evaluator and model sources](${absUrl(agentEvaluation.sourceSnapshot)}). They precede durable execution and execution environments.
 
-${recording.results.map(run => {
-  const context = RECORDING_CONTEXT[run.id];
+${agentEvaluation.results.map(run => {
+  const { context } = run;
   return `### ${context.title}
 
 Task given to the agent:
@@ -29,7 +28,7 @@ Starting workspace: ${context.setup}
 
 What success looks like: ${context.expected}
 
-${Object.entries({ "AGENTS.md": ROOT_INSTRUCTIONS, ...context.files }).map(([path, content]) => `Starting file: ${path}\n\n\`\`\`text\n${content}\n\`\`\``).join("\n\n")}
+${run.startingFiles.map(([path, content]) => `Starting file: ${path}\n\n\`\`\`text\n${content}\n\`\`\``).join("\n\n")}
 
 Result: ${run.passed ? "passed" : "failed"}; ${run.turns.length} turns. Independent check: ${run.verification}.`;
 }).join("\n\n")}

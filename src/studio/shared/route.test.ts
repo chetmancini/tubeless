@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseStudioRoute, sameStudioRoute, studioPage, studioRouteUrl } from "./route.js";
+import { parseStudioRoute, studioPage, studioRouteUrl } from "./route.js";
 
 const base = "https://example.test/admin/pipelines/";
 
@@ -32,10 +32,5 @@ describe("Studio routes", () => {
     expect(parseStudioRoute(href)).toEqual({ pipelineId: "a b", runId: "r/1", stepId: "s" });
     expect(studioRouteUrl(base + "?pipeline=p&tab=graph", {})).toBe(base);
     expect(studioRouteUrl(base, { stepId: "s", tab: "graph" })).toBe(base);
-  });
-
-  it("compares routes by every field", () => {
-    expect(sameStudioRoute({ runId: "r" }, { runId: "r" })).toBe(true);
-    expect(sameStudioRoute({ runId: "r" }, { runId: "r", stepId: "s" })).toBe(false);
   });
 });

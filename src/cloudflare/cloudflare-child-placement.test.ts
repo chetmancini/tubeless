@@ -47,7 +47,7 @@ afterEach(() => vi.useRealTimers());
 
 it("retries an unconfirmed stage dispatch using the same ID and generation", async () => {
   const readStage = vi.fn<RunnerStageStore["readStage"]>();
-  const { enqueueStage, run, report, store } = await fixture(readStage, 2);
+  const { enqueueStage, run, report } = await fixture(readStage, 2);
   enqueueStage.mockRejectedValueOnce(
     Object.assign(new Error("Studio restarted"), { retryable: true })
   );
@@ -57,25 +57,21 @@ it("retries an unconfirmed stage dispatch using the same ID and generation", asy
   expect(enqueueStage).toHaveBeenCalledTimes(2);
   expect(enqueueStage.mock.calls[1]).toEqual(enqueueStage.mock.calls[0]);
   expect(enqueueStage.mock.calls[0][1]).toBe(2);
-  expect(store).toHaveBeenCalledTimes(3);
 });
 
 it("recreates the Studio stub for a retryable read and queues the child once", async () => {
   vi.useFakeTimers();
   const fixtureRead = vi.fn<RunnerStageStore["readStage"]>();
-  const { store, run, report, enqueueStage } = await fixture(fixtureRead);
-  const firstStubRead = vi
-    .fn()
-    .mockRejectedValue(Object.assign(new Error("Studio restarted"), { retryable: true }));
-  store.mockImplementationOnce(() => ({
+  const { store, run, report, enqueueStage, cancelStage } = await fixture(fixtureRead);
+  let restarted = false;
+  const firstStubRead = vi.fn(async () => {
+    restarted = true;
+    throw Object.assign(new Error("Studio restarted"), { retryable: true });
+  });
+  store.mockImplementation(() => ({
     enqueueStage,
-    readStage: firstStubRead,
-    cancelStage: vi.fn(),
-  }));
-  store.mockImplementationOnce(() => ({
-    enqueueStage,
-    readStage: firstStubRead,
-    cancelStage: vi.fn(),
+    readStage: restarted ? fixtureRead : firstStubRead,
+    cancelStage,
   }));
   fixtureRead.mockResolvedValue({ events: [], result: { report } });
 
@@ -84,7 +80,6 @@ it("recreates the Studio stub for a retryable read and queues the child once", a
   await expect(result).resolves.toEqual(report);
   expect(enqueueStage).toHaveBeenCalledOnce();
   expect(firstStubRead).toHaveBeenCalledOnce();
-  expect(store).toHaveBeenCalledTimes(3);
   expect(fixtureRead).toHaveBeenCalledWith(...firstStubRead.mock.calls[0]);
 });
 
@@ -93,14 +88,17 @@ it("interrupts a stalled result read on parent abort and cancels through a fresh
     .fn<RunnerStageStore["readStage"]>()
     .mockImplementation(() => new Promise(() => {}));
   const { signal, run, store, cancelStage, enqueueStage } = await fixture(read);
+  const staleCancel = vi.fn<RunnerStageStore["cancelStage"]>();
+  store.mockImplementation(() => ({ enqueueStage, readStage: read, cancelStage: staleCancel }));
   const result = run();
   await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+  store.mockImplementation(() => ({ enqueueStage, readStage: read, cancelStage }));
   const failure = expect(result).rejects.toThrow("Parent stopped");
   signal.abort(new DOMException("Parent stopped", "AbortError"));
   await failure;
   expect(enqueueStage).toHaveBeenCalledOnce();
   expect(cancelStage).toHaveBeenCalledWith("launch", enqueueStage.mock.calls[0][0].id, undefined);
-  expect(store).toHaveBeenCalledTimes(3);
+  expect(staleCancel).not.toHaveBeenCalled();
 });
 
 it.each([

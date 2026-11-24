@@ -1,13 +1,10 @@
 import type { HostedLaunchResult, HostedLaunchValues } from "../hosting/launch-admission.js";
-import {
-  HOSTED_EXECUTIONS_PATH,
-  isLaunchIdentifier,
-  type HostedExecutionStatus,
-} from "../hosting/execution-status.js";
+import { HOSTED_EXECUTIONS_PATH, type HostedExecutionStatus } from "../hosting/execution-status.js";
 import { errorResponse, readJsonBody, StudioRequestError } from "../studio/server/http.js";
 import { parseStudioLaunchRequest } from "../studio/shared/protocol.js";
 import { isJsonObject } from "../utilities/canonical-json.js";
 import { jsonResponse } from "../utilities/http-response.js";
+import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 
 export function isExecutionPath(pathname: string): boolean {
   return pathname === HOSTED_EXECUTIONS_PATH || pathname.startsWith(`${HOSTED_EXECUTIONS_PATH}/`);

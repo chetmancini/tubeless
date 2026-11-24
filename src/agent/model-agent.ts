@@ -18,7 +18,8 @@ import type { AgentModel } from "./model-types.js";
 import { compileAgent } from "./compile-agent.js";
 import { registerSessionAgent, type SessionHooks } from "./agent-session.js";
 import { registerChatAgent } from "./chat-session.js";
-import { agentError, jsonDescriptor } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
+import { jsonDescriptor } from "./agent-state.js";
 import { resolvedLimits } from "./execution-scope.js";
 import { modelInstructions } from "./model-prompt.js";
 import { toolObject } from "./default-tool-schema.js";
@@ -182,8 +183,6 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
   >(
     {
       ...config,
-      // SAFETY: the key callback only receives options validated by this agent's input schema.
-      durability: config.durability,
       codemode,
       checkDescriptors: model.checkDescriptors,
       inputSchema: config.inputSchema ?? taskInput,
@@ -196,14 +195,7 @@ function compileModelAgent<Options extends StandardSchemaV1<object, object>>(
       decide: async (state, context) => {
         const prompt =
           state.instructions ??
-          (await modelInstructions(
-            context.cwd,
-            instructions,
-            projectContext,
-            context.signal,
-            context.environment,
-            codemode !== false
-          ));
+          (await modelInstructions(context, instructions, projectContext, codemode !== false));
         const request = {
           instructions: prompt,
           task: describe(context.options),

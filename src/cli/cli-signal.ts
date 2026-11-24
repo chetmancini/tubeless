@@ -1,7 +1,7 @@
 /** Watch for the first terminal signal, then restore default signal handling. */
-export function onFirstProcessSignal(
-  signals: readonly NodeJS.Signals[],
-  onFirst: (signal: NodeJS.Signals) => void
+export function onFirstProcessSignal<const TSignal extends NodeJS.Signals>(
+  signals: readonly TSignal[],
+  onFirst: (signal: TSignal) => void
 ): () => void {
   let handled = false;
   const removeAll = (): void => {
@@ -20,4 +20,20 @@ export function onFirstProcessSignal(
     return { signal, listener };
   });
   return removeAll;
+}
+
+const TERMINAL_SIGNALS = ["SIGINT", "SIGTERM"] as const;
+type TerminalSignal = (typeof TERMINAL_SIGNALS)[number];
+
+export function manageCliSignal(
+  signal?: AbortSignal,
+  onInterrupt?: (signal: TerminalSignal) => void
+) {
+  if (signal) return { signal, cleanup() {} };
+  const controller = new AbortController();
+  const cleanup = onFirstProcessSignal(TERMINAL_SIGNALS, (signal) => {
+    onInterrupt?.(signal);
+    controller.abort();
+  });
+  return { signal: controller.signal, cleanup };
 }

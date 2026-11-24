@@ -5,6 +5,7 @@ import type {
   PipelineRunStudioLaunchRequest,
 } from "../shared/protocol.js";
 import {
+  matchesStudioTranscriptQuery,
   parseStudioPayload,
   studioSnapshotSchema,
   studioCommandsSchema,
@@ -26,6 +27,13 @@ import {
   type StudioCapabilities,
   type StudioClearResult,
 } from "../shared/schema.js";
+import {
+  studioResourcePath,
+  STUDIO_API_ACTION,
+  STUDIO_API_PATH,
+  STUDIO_GUARD_HEADER,
+  STUDIO_GUARD_VALUE,
+} from "../shared/api-paths.js";
 import type { WireSchema } from "../../tracing/wire-schema.js";
 export type {
   StudioSnapshot,
@@ -152,7 +160,7 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       if (query) params.set("query", query);
       if (offset) params.set("offset", String(offset));
       if (selectedRunId) params.set("run", selectedRunId);
-      const key = "/api/snapshot" + (params.size ? "?" + params : "");
+      const key = STUDIO_API_PATH.snapshot + (params.size ? "?" + params : "");
       const previous = cachedSnapshot?.key === key ? cachedSnapshot : undefined;
       const response = await request(key, {
         cache: "no-store",
@@ -167,19 +175,23 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
     async loadDefinition(pipelineId, definitionId) {
       const params = new URLSearchParams({ pipelineId });
       if (definitionId) params.set("definitionId", definitionId);
-      const response = await request("/api/definitions?" + params, { cache: "no-store" });
+      const response = await request(STUDIO_API_PATH.definitions + "?" + params, {
+        cache: "no-store",
+      });
       const payload = await readSuccess(response, "Definition request failed.");
       return decodeResponse(studioDefinitionSchema, payload, "definition").definition;
     },
     async loadDefinitionRuns(pipelineId, definitionId, offset = 0) {
       const params = new URLSearchParams({ pipelineId, offset: String(offset) });
       if (definitionId) params.set("definitionId", definitionId);
-      const response = await request("/api/definitions/runs?" + params, { cache: "no-store" });
+      const response = await request(STUDIO_API_PATH.definitionRuns + "?" + params, {
+        cache: "no-store",
+      });
       const payload = await readSuccess(response, "Definition runs request failed.");
       return decodeResponse(studioDefinitionRunsSchema, payload, "definition runs");
     },
     async loadRunDetail(runId) {
-      const response = await request("/api/runs/" + encodeURIComponent(runId), {
+      const response = await request(studioResourcePath(STUDIO_API_PATH.runs, runId), {
         cache: "no-store",
       });
       const payload = await readJson(response);
@@ -189,7 +201,9 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
     },
     async loadChildRuns(runId, page) {
       const response = await request(
-        "/api/runs/" + encodeURIComponent(runId) + "/children?page=" + page,
+        studioResourcePath(STUDIO_API_PATH.runs, runId, STUDIO_API_ACTION.children) +
+          "?page=" +
+          page,
         { cache: "no-store" }
       );
       const payload = await readJson(response);
@@ -200,32 +214,31 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
     async loadTranscript(runId, requestedAfterSequence, signal) {
       const afterSequence = requestedAfterSequence ?? 0;
       const response = await request(
-        "/api/runs/" + encodeURIComponent(runId) + "/transcript?afterSequence=" + afterSequence,
+        studioResourcePath(STUDIO_API_PATH.runs, runId, STUDIO_API_ACTION.transcript) +
+          "?afterSequence=" +
+          afterSequence,
         { cache: "no-store", signal }
       );
       const payload = await readSuccess(response, "Transcript request failed.");
       const page = decodeResponse(studioTranscriptPageSchema, payload, "transcript");
-      if (
-        page.transcript.runId !== runId ||
-        page.transcript.records.some((record) => record.sequence <= afterSequence)
-      )
+      if (!matchesStudioTranscriptQuery(page.transcript, runId, afterSequence))
         throw invalidResponse("transcript");
       return page;
     },
     async loadCommands() {
-      const response = await request("/api/commands", { cache: "no-store" });
+      const response = await request(STUDIO_API_PATH.commands, { cache: "no-store" });
       const payload = await readSuccess(response, "Commands request failed.");
       return decodeResponse(studioCommandsSchema, payload, "commands").commands;
     },
     async loadCapabilities() {
-      const response = await request("/api/capabilities", { cache: "no-store" });
+      const response = await request(STUDIO_API_PATH.capabilities, { cache: "no-store" });
       const payload = await readSuccess(response, "Capabilities request failed.");
       return decodeResponse(studioCapabilitiesSchema, payload, "capabilities");
     },
     async clearHistory() {
-      const response = await request("/api/history", {
+      const response = await request(STUDIO_API_PATH.history, {
         method: "DELETE",
-        headers: { "x-tubeless-studio-clear-history": "1" },
+        headers: { [STUDIO_GUARD_HEADER.clear]: STUDIO_GUARD_VALUE },
       });
       const payload = await readSuccess(response, "History could not be cleared.");
       const { eventCount } = decodeResponse(studioClearResultSchema, payload, "clear history");
@@ -233,29 +246,44 @@ export function createStudioApi(fetcher: typeof fetch = fetch, mount = ""): Stud
       return { eventCount };
     },
     async previewPlan(commandId, input) {
-      const response = await request("/api/commands/" + encodeURIComponent(commandId) + "/plan", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-tubeless-studio-plan": "1" },
-        body: JSON.stringify(input),
-      });
+      const response = await request(
+        studioResourcePath(STUDIO_API_PATH.commands, commandId, STUDIO_API_ACTION.plan),
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            [STUDIO_GUARD_HEADER.plan]: STUDIO_GUARD_VALUE,
+          },
+          body: JSON.stringify(input),
+        }
+      );
       const payload = await readSuccess(response, "Plan request failed.");
       return decodeResponse(studioPlanResponseSchema, payload, "plan").plan;
     },
     async cancelRun(runId) {
-      const response = await request("/api/runs/" + encodeURIComponent(runId) + "/cancel", {
-        method: "POST",
-        headers: { "x-tubeless-studio-cancel": "1" },
-      });
+      const response = await request(
+        studioResourcePath(STUDIO_API_PATH.runs, runId, STUDIO_API_ACTION.cancel),
+        {
+          method: "POST",
+          headers: { [STUDIO_GUARD_HEADER.cancel]: STUDIO_GUARD_VALUE },
+        }
+      );
       const payload = await readSuccess(response, "Run could not be cancelled.");
       const result = decodeResponse(studioCancelResultSchema, payload, "cancel run");
       if (result.runId !== runId) throw invalidResponse("cancel run");
     },
     async launch(commandId, values) {
-      const response = await request("/api/commands/" + encodeURIComponent(commandId) + "/runs", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-tubeless-studio-launch": "1" },
-        body: JSON.stringify({ values, idempotencyKey: globalThis.crypto?.randomUUID?.() }),
-      });
+      const response = await request(
+        studioResourcePath(STUDIO_API_PATH.commands, commandId, STUDIO_API_ACTION.launch),
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            [STUDIO_GUARD_HEADER.launch]: STUDIO_GUARD_VALUE,
+          },
+          body: JSON.stringify({ values, idempotencyKey: globalThis.crypto?.randomUUID?.() }),
+        }
+      );
       const payload = await readSuccess(response, "Launch failed.");
       return decodeResponse(studioLaunchResultSchema, payload, "launch").runId;
     },

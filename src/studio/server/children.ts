@@ -1,9 +1,7 @@
 import type { StoredRunSummary } from "../../run-store/run-history.js";
 import { STUDIO_CHILD_PAGE_SIZE } from "../shared/limits.js";
 import type { StudioChildStep } from "../shared/schema.js";
-import { compareChildRuns } from "../shared/children.js";
-
-const UNATTRIBUTED = "";
+import { compareChildRuns, groupChildRunsByStep } from "../shared/children.js";
 
 /**
  * One page of direct children, capped per parent step in the order the graph draws:
@@ -16,18 +14,12 @@ export function pageDirectChildren(
   page: number,
   pageSize = STUDIO_CHILD_PAGE_SIZE
 ): { children: StoredRunSummary[]; childCount: number; childSteps: StudioChildStep[] } {
-  const groups = new Map<string, StoredRunSummary[]>();
-  for (const child of children) {
-    const key = child.origin?.stepId ?? UNATTRIBUTED;
-    const group = groups.get(key);
-    if (group) group.push(child);
-    else groups.set(key, [child]);
-  }
+  const groups = groupChildRunsByStep(children);
   const known = new Set(stepIds);
   const keys = [
     ...stepIds.filter((id) => groups.has(id)),
-    ...[...groups.keys()].filter((key) => key !== UNATTRIBUTED && !known.has(key)).sort(),
-    ...(groups.has(UNATTRIBUTED) ? [UNATTRIBUTED] : []),
+    ...[...groups.keys()].filter((key) => key !== undefined && !known.has(key)).sort(),
+    ...(groups.has(undefined) ? [undefined] : []),
   ];
   const start = page * pageSize;
   const end = start + pageSize;
@@ -37,7 +29,7 @@ export function pageDirectChildren(
     const group = groups.get(key)!;
     group.sort(compareChildRuns);
     childSteps.push(
-      key === UNATTRIBUTED ? { count: group.length } : { stepId: key, count: group.length }
+      key === undefined ? { count: group.length } : { stepId: key, count: group.length }
     );
     if (start < group.length) window.push(...group.slice(start, end));
   }

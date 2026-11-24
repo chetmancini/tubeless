@@ -12,12 +12,12 @@ import type { PipelineLogger } from "../../core/pipeline.js";
 import type { PipelineTracingOptions } from "../../tracing/tracing-contracts.js";
 import type { AgentModelFactory } from "../../cli/cli-agent-provider.js";
 import type { ProjectOptions } from "../../project/pipeline-project.js";
+import { hostedCommandContext } from "../../hosting/hosting-commands.js";
 import { createLaunchTracing } from "../../hosting/launch-tracing.js";
 import { createPipelineReporter } from "../../reporter/interactive-reporter.js";
 import { safeTerminalLog, safeTerminalText } from "../../reporter/terminal-text.js";
 import { awaitWithAbort, throwIfAborted } from "../../utilities/abort.js";
 import {
-  commandContext,
   errorMessage,
   TUBELESS_WORKBENCH_EXIT_CODE,
   type WorkbenchCliIo,
@@ -112,7 +112,7 @@ export async function executeAgentPrompt(
   chat: AgentPromptSession
 ): Promise<number> {
   io.stdout.write(`\nagent · ${safeTerminalText(options.label)}\n`);
-  const context = commandContext(io, signal);
+  const context = hostedCommandContext(io, signal);
   const reporter = options.graph
     ? createPipelineReporter<{ answer: string }>({
         log: context.log,

@@ -4,6 +4,7 @@ import { run } from "./graph/graph.test-support.js";
 import { createRunHistoryIndex, summarizeRun } from "../../run-store/run-history.js";
 import type { StudioRunDetail } from "./transport.js";
 import { RunDetailLoader } from "./run-detail-loader.js";
+import { deferred, settle } from "./request.test-support.js";
 
 function summary(id = "child", eventCount = 1) {
   const recorded = run({ runId: id, eventCount, status: "completed" });
@@ -11,18 +12,6 @@ function summary(id = "child", eventCount = 1) {
 }
 function detail(id = "child", eventCount = 1) {
   return studioRunDetail(run({ runId: id, eventCount, status: "completed" }));
-}
-function deferred() {
-  let resolve!: (detail: StudioRunDetail | null) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<StudioRunDetail | null>((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, resolve, reject };
-}
-async function settle() {
-  for (let i = 0; i < 8; i++) await Promise.resolve();
 }
 const loaders: RunDetailLoader[] = [];
 function loader(api: ConstructorParameters<typeof RunDetailLoader>[0], id = "child") {
@@ -54,7 +43,7 @@ describe("RunDetailLoader", () => {
   );
 
   it("publishes a slow success and coalesces revisions received during the read", async () => {
-    const requests = [deferred(), deferred(), deferred()];
+    const requests = Array.from({ length: 3 }, () => deferred<StudioRunDetail | null>());
     const loadRunDetail = vi
       .fn()
       .mockReturnValueOnce(requests[0].promise)
@@ -85,7 +74,7 @@ describe("RunDetailLoader", () => {
     "retries %s responses without a revision change and retains success",
     async (outcome) => {
       vi.useFakeTimers();
-      const requests = [deferred(), deferred(), deferred()];
+      const requests = Array.from({ length: 3 }, () => deferred<StudioRunDetail | null>());
       const loadRunDetail = vi
         .fn()
         .mockReturnValueOnce(requests[0].promise)
@@ -130,7 +119,7 @@ describe("RunDetailLoader", () => {
 
   it("retires requests and timers on disposal, including when the same run is reopened", async () => {
     vi.useFakeTimers();
-    const pending = deferred();
+    const pending = deferred<StudioRunDetail | null>();
     const loadRunDetail = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValueOnce(null);
     const old = loader({ loadRunDetail });
     old.instance.update(summary());

@@ -69,6 +69,7 @@ describe("forEachPipeline onItemFailure", () => {
 
   it("lets running items finish under stop", async () => {
     const slowStarted = defer();
+    const fastFailed = defer();
     const releaseSlow = defer();
     let slowFinished = false;
     const { step } = createSteps<ChildOptions>();
@@ -94,10 +95,27 @@ describe("forEachPipeline onItemFailure", () => {
       onItemFailure: "stop",
       mapOptions: (item) => ({ itemId: item }),
     });
-    const run = definePipeline({ id: "drain-parent", steps: [children] }).run({}, {}, silent);
-    await slowStarted.promise;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    releaseSlow.resolve();
+    const run = definePipeline({ id: "drain-parent", steps: [children] }).run(
+      {},
+      {},
+      {
+        ...silent,
+        hooks: {
+          onStepProgress: ({ step, progress }) => {
+            if (
+              step.id === "children" &&
+              progress.details?.some(({ id, status }) => id === "fast" && status === "failed")
+            )
+              fastFailed.resolve();
+          },
+        },
+      }
+    );
+    try {
+      await Promise.race([fastFailed.promise, run]);
+    } finally {
+      releaseSlow.resolve();
+    }
     const result = await run;
     expect(slowFinished).toBe(true);
     expect(result.status).toBe("failed");

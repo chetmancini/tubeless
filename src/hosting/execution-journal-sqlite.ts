@@ -1,12 +1,12 @@
 import type { PipelineExecutionJournal } from "../core/pipeline-types.js";
-import type { SqliteLaunchStorage } from "./launch-store-sqlite.js";
+import type { SqliteStorage } from "./sqlite-storage.js";
 import { decodeJournalValue, encodeJournalValue } from "./journal-value.js";
 
 const recordKey = (kind: "binding" | "step", path: readonly string[]) =>
   encodeJournalValue([kind, ...path]);
 
 export class SqliteExecutionJournal {
-  constructor(private readonly storage: SqliteLaunchStorage) {
+  constructor(private readonly storage: SqliteStorage) {
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS tubeless_run_journal_owner (
       singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
       generation INTEGER NOT NULL, deadline_at_ms INTEGER NOT NULL

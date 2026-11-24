@@ -6,7 +6,9 @@ import type {
   StandardSchemaV1,
 } from "../core/pipeline-types.js";
 import type { AnyStep } from "../core/pipeline-steps.js";
-import { agentError, checkSchema, descriptorFingerprint, jsonDescriptor } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
+import { isAgentToolName } from "./agent-values.js";
+import { checkSchema, descriptorFingerprint, jsonDescriptor } from "./agent-state.js";
 import { compileTool, type CompiledTool } from "./tools.js";
 import type { AgentModel } from "./model-types.js";
 import { CODEMODE_TOOL, compileCodemodeTool } from "./codemode.js";
@@ -130,7 +132,7 @@ export function compileAgent<
     );
   const tools = new Map(
     entries.map(([name, tool]) => {
-      if (!/^[A-Za-z][A-Za-z0-9_-]{0,127}$/.test(name))
+      if (!isAgentToolName(name))
         throw agentError("TUBELESS_AGENT_INVALID_DEFINITION", `Invalid tool name: ${name}`);
       return [name, compileTool(config.id, name, tool)];
     })

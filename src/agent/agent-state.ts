@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import type { AgentState } from "./agent-types.js";
 import { agentError } from "./agent-errors.js";
-export { agentError, limit } from "./agent-errors.js";
+import { isPlainRecord } from "./agent-values.js";
 
 function copy(value: unknown, ancestors: Set<object>, json: boolean): unknown {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
@@ -10,11 +10,7 @@ function copy(value: unknown, ancestors: Set<object>, json: boolean): unknown {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value !== "object" || value === null) throw new Error("Expected finite plain data");
   if (ancestors.has(value)) throw new Error("Cyclic data is not supported");
-  if (
-    !Array.isArray(value) &&
-    Object.getPrototypeOf(value) !== Object.prototype &&
-    Object.getPrototypeOf(value) !== null
-  ) {
+  if (!Array.isArray(value) && !isPlainRecord(value)) {
     throw new Error("Expected an array or plain record");
   }
   ancestors.add(value);

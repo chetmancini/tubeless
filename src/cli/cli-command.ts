@@ -1,18 +1,7 @@
 import * as path from "path";
 import { openCheckpoint } from "../node/checkpoint.js";
 import { inMemoryCheckpointStore } from "../utilities/checkpoint-store.js";
-import {
-  assertNoDuplicateFlags,
-  assertValidEnvironmentFallbacks,
-  assertValidMultipleParams,
-  assertValidPositionals,
-  buildEffectiveSchema,
-  commandDescriptor,
-  renderHelp,
-  resolveParam,
-  tokenize,
-  type ResolvedParamValue,
-} from "./cli-parser.js";
+import { compileCommandParameters, resolveParam, type ResolvedParamValue } from "./cli-parser.js";
 import {
   CliHelpRequested,
   CliValidationError,
@@ -29,7 +18,7 @@ import {
   isPipelineExecutionError,
   toExitCode,
 } from "./cli-exit.js";
-import { onFirstProcessSignal } from "./cli-signal.js";
+import { manageCliSignal } from "./cli-signal.js";
 
 function resolveContext(overrides?: Partial<CliContext>): CliContext {
   return {
@@ -60,20 +49,14 @@ const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 } as const;
  * their own signal through the context instead.
  */
 function manageMainSignal(context: CliContext): ManagedMainSignal {
-  if (context.signal) {
-    return { context, exitCode: () => undefined, wasInterrupted: () => false, cleanup: () => {} };
-  }
-
-  const controller = new AbortController();
   let interruptedBy: keyof typeof SIGNAL_EXIT_CODES | undefined;
-  const cleanup = onFirstProcessSignal(["SIGINT", "SIGTERM"], (signal) => {
-    interruptedBy = signal as keyof typeof SIGNAL_EXIT_CODES;
+  const { signal, cleanup } = manageCliSignal(context.signal, (signal) => {
+    interruptedBy = signal;
     context.log.warn(`${signal} received; cancelling pipeline work.`);
-    controller.abort();
   });
 
   return {
-    context: { ...context, signal: controller.signal },
+    context: { ...context, signal },
     exitCode: () => (interruptedBy ? SIGNAL_EXIT_CODES[interruptedBy] : undefined),
     wasInterrupted: () => interruptedBy !== undefined,
     cleanup,
@@ -84,26 +67,18 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   config: CliCommandConfig<TSchema, TResult>,
   mainExits?: { validation?: number }
 ): CliCommand<TSchema, TResult> {
-  const effectiveParams = buildEffectiveSchema(config.params, config.checkpoint, config.resume);
-  assertNoDuplicateFlags(effectiveParams);
-  assertValidMultipleParams(effectiveParams);
-  assertValidEnvironmentFallbacks(effectiveParams);
-  const positionals = [...(config.positionals ?? [])];
-  assertValidPositionals(positionals, effectiveParams);
-  const descriptor = commandDescriptor(config, effectiveParams, positionals);
+  const parameters = compileCommandParameters(config);
+  const { descriptor, helpText } = parameters;
 
   function resolveValues(
-    readValue: (key: string, param: CliParamsSchema[string]) => unknown,
+    readValue: (key: string) => unknown,
     context: CliContext,
     errors: string[],
-    helpText: string,
-    input: "argv" | "structured" = "argv"
+    input: "argv" | "structured"
   ): CliParseResult<TSchema> {
     const values: Record<string, ResolvedParamValue> = { resume: false };
-    for (const [key, param] of Object.entries(effectiveParams)) {
-      const errorCount = errors.length;
-      const raw = readValue(key, param);
-      if (errors.length > errorCount) continue;
+    for (const { key, param } of parameters.entries) {
+      const raw = readValue(key);
       const envValue = raw === undefined && param.env ? context.env?.[param.env] : undefined;
       const resolutionSource =
         raw !== undefined
@@ -129,19 +104,13 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
   }
 
   function parseWithContext(argv: readonly string[], context: CliContext): CliParseResult<TSchema> {
-    const helpText = renderHelp(
-      descriptor.name,
-      descriptor.description,
-      effectiveParams,
-      positionals
-    );
-    const tokenized = tokenize(argv, effectiveParams, positionals);
+    const tokenized = parameters.tokenize(argv);
     if (tokenized.help) return { kind: "help", helpText };
     return resolveValues(
       (key) => tokenized.values.get(key),
       context,
       [...tokenized.errors],
-      helpText
+      "argv"
     );
   }
 
@@ -156,15 +125,9 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
     structuredValues: Record<string, unknown>,
     context: CliContext
   ): CliParseResult<TSchema> {
-    const helpText = renderHelp(
-      descriptor.name,
-      descriptor.description,
-      effectiveParams,
-      positionals
-    );
     const errors: string[] = [];
     for (const key of Object.keys(structuredValues)) {
-      if (!Object.prototype.hasOwnProperty.call(effectiveParams, key)) {
+      if (!parameters.byKey.has(key)) {
         errors.push(`Unknown parameter: ${key}`);
       }
     }
@@ -172,7 +135,6 @@ export function createCommand<const TSchema extends CliParamsSchema, TResult = v
       (key) => (Object.hasOwn(structuredValues, key) ? structuredValues[key] : undefined),
       context,
       errors,
-      helpText,
       "structured"
     );
   }

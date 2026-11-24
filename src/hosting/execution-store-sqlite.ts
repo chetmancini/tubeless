@@ -5,7 +5,7 @@ import {
   type HostedExecutionState,
   type HostedExecutionStatus,
 } from "./execution-status.js";
-import type { SqliteLaunchStorage } from "./launch-store-sqlite.js";
+import type { SqliteStorage } from "./sqlite-storage.js";
 import type { RunJob } from "./run-contract.js";
 
 type ExecutionAction =
@@ -41,7 +41,7 @@ const WATCHDOGS = `${TRUSTED_LAUNCHES}, watchdogs AS (
 
 /** Pending work and terminal receipts share the launch and history transactions. */
 export class SqliteExecutionStore {
-  constructor(private readonly storage: SqliteLaunchStorage) {
+  constructor(private readonly storage: SqliteStorage) {
     storage.sql.exec(`CREATE TABLE IF NOT EXISTS tubeless_executions (
       launch_id TEXT PRIMARY KEY NOT NULL,
       job_json TEXT,

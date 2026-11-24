@@ -2,6 +2,15 @@ import type { StoredRunSummary } from "../../../run-store/run-history.js";
 import type { StoredPipelineRun, StoredPipelineStep } from "../../../run-store/run-store.js";
 import type { StudioChildStep } from "../../shared/schema.js";
 
+export const graphRunId = (run: GraphRun): string => run.runId ?? `definition:${run.pipelineId}`;
+
+export function graphKey(
+  kind: "run" | "step" | "item" | "edge",
+  ...ids: readonly string[]
+): string {
+  return JSON.stringify([kind, ...ids]);
+}
+
 /** Declared step data plus the execution fields graph views can display when present. */
 export type GraphStep = Omit<StoredPipelineStep, "status"> &
   Partial<Pick<StoredPipelineStep, "status">>;

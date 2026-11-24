@@ -87,48 +87,46 @@ function moduleName(file: string): string {
   return relative(dist, file).split(sep)[0];
 }
 
+function* reachableFiles(entries: readonly string[]): IterableIterator<string> {
+  const pending = entries.map((entry) => resolve(dist, entry));
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const file = pending.pop()!;
+    if (visited.has(file)) continue;
+    visited.add(file);
+    yield file;
+    pending.push(...dependencies(file));
+  }
+}
+
 describe("module runtime boundaries", () => {
   it("keeps the optional Node recipe outside core and within its execution adapters", () => {
-    const pending = [resolve(dist, "check/node-check.js")],
-      visited = new Set<string>();
-    while (pending.length) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["check/node-check.js"])) {
       expect(["check", "core", "node", "tracing", "utilities"]).toContain(moduleName(file));
-      pending.push(...dependencies(file));
     }
   });
   it("keeps graph scene construction independent of UI, transport and server modules", () => {
     const allowed = new Set([
       "studio/browser/graph/scene.js",
       "studio/browser/graph/dependencies.js",
+      "studio/browser/graph/input.js",
       "studio/browser/graph/layout.js",
+      "studio/browser/step-outcome.js",
       "studio/shared/children.js",
       "studio/shared/limits.js",
     ]);
-    const pending = [resolve(dist, "studio/browser/graph/scene.js")];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["studio/browser/graph/scene.js"])) {
       const name = relative(dist, file).split(sep).join("/");
       expect(allowed.has(name), `Graph scene construction reaches ${name}`).toBe(true);
       expect(externalSpecifiers(file), `${name} imports an external runtime`).toEqual([]);
-      pending.push(...dependencies(file));
     }
   });
 
   it("keeps provider and MCP adapters out of the generic agent import graph", () => {
-    const pending = [resolve(dist, "agent/agent.js")];
     const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
+    for (const file of reachableFiles(["agent/agent.js"])) {
       visited.add(file);
       expect(relative(dist, file)).not.toMatch(/openai|anthropic|provider-|mcp/);
-      pending.push(...dependencies(file));
     }
     expect(visited.has(resolve(dist, "agent/model-agent.js"))).toBe(true);
     expect(visited.has(resolve(dist, "agent/compile-agent.js"))).toBe(true);
@@ -139,51 +137,29 @@ describe("module runtime boundaries", () => {
       "reporter/live-ticker-worker.js",
       "reporter/live-ticker-frame.js",
       "reporter/live-ticker-protocol.js",
-      "reporter/reporter.js",
+      "reporter/reporter-format.js",
       "reporter/terminal-text.js",
-      "core/progress.js",
     ]);
-    const pending = [resolve(dist, "reporter/live-ticker-worker.js")];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["reporter/live-ticker-worker.js"])) {
       const name = relative(dist, file).split(sep).join("/");
       expect(allowed.has(name), `Ticker worker reaches ${name}`).toBe(true);
-      pending.push(...dependencies(file));
     }
   });
 
   it("keeps project registry validation independent of pipeline construction", () => {
     const allowed = new Set(["project/project-registry.js", "project/project-document.js"]);
-    const pending = [resolve(dist, "project/project-registry.js")];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["project/project-registry.js"])) {
       const name = relative(dist, file).split(sep).join("/");
       expect(allowed.has(name), `Project registry validation reaches ${name}`).toBe(true);
-      pending.push(...dependencies(file));
     }
   });
 
   it("keeps the Studio request pipeline, page and API free of Node built-ins", () => {
-    const pending = [
-      resolve(dist, "studio/server/handler.js"),
-      resolve(dist, "studio/server/page.js"),
-      resolve(dist, "studio/server/api.js"),
-    ];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    const entries = ["studio/server/handler.js", "studio/server/page.js", "studio/server/api.js"];
+    for (const file of reachableFiles(entries)) {
       expect(externalSpecifiers(file), `${relative(dist, file)} imports a platform module`).toEqual(
         []
       );
-      pending.push(...dependencies(file));
     }
   });
 
@@ -200,8 +176,10 @@ describe("module runtime boundaries", () => {
       "run-store/run-store-query.js",
       "run-store/run-history.js",
       "run-store/run-store-schema.js",
+      "run-store/step-plan-projection.js",
       "studio/server/api.js",
       "studio/server/children.js",
+      "studio/shared/api-paths.js",
       "studio/shared/children.js",
       "studio/shared/limits.js",
       "studio/server/http.js",
@@ -214,6 +192,8 @@ describe("module runtime boundaries", () => {
       "utilities/read-body.js",
       "utilities/abort.js",
       "utilities/http-response.js",
+      "utilities/launch-identifier.js",
+      "utilities/sha256.js",
       "tracing/agent-telemetry.js",
       "tracing/agent-transcript.js",
       "tracing/artifact-metadata.js",
@@ -222,19 +202,14 @@ describe("module runtime boundaries", () => {
       "tracing/tracing-constants.js",
       "tracing/wire-schema.js",
     ]);
-    const pending = [
-      resolve(dist, "studio/server/api.js"),
-      resolve(dist, "run-store/run-store.js"),
-      resolve(dist, "run-store/agent-history.js"),
+    const entries = [
+      "studio/server/api.js",
+      "run-store/run-store.js",
+      "run-store/agent-history.js",
     ];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(entries)) {
       const name = relative(dist, file).split(sep).join("/");
       expect(allowed.has(name), `History/API boundary reaches ${name}`).toBe(true);
-      pending.push(...dependencies(file));
     }
   });
 
@@ -289,33 +264,22 @@ describe("module runtime boundaries", () => {
   });
 
   it("keeps project declarations independent of executable integrations", () => {
-    const pending = [resolve(dist, "project/project.js")];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["project/project.js"])) {
       expect(
         ["project", "core", "tracing", "utilities"].includes(moduleName(file)),
         `Project entrypoint reaches executable integration: ${relative(dist, file)}`
       ).toBe(true);
-      pending.push(...dependencies(file));
     }
   });
 
   it("keeps Studio launch execution independent of command entrypoints and concrete adapters", () => {
-    const pending = [resolve(dist, "workbench/workbench-studio-launcher.js")];
-    const visited = new Set<string>();
     const workbenchInternals = new Set([
       "workbench/workbench-studio-launcher.js",
       "workbench/workbench-launch-session.js",
       "workbench/workbench-shared.js",
       "workbench/pipeline-module.js",
     ]);
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["workbench/workbench-studio-launcher.js"])) {
       const name = relative(dist, file).split(sep).join("/");
       expect(
         ["cli", "core", "hosting", "node", "reporter", "render", "tracing", "utilities"].includes(
@@ -323,19 +287,14 @@ describe("module runtime boundaries", () => {
         ) || workbenchInternals.has(name),
         `Studio launch execution reaches an entrypoint or concrete adapter: ${name}`
       ).toBe(true);
-      pending.push(...dependencies(file));
     }
   });
 
   it("keeps the hosting kit free of workbench, storage adapters and the HTTP listener", () => {
-    const pending = readdirSync(resolve(dist, "hosting"))
+    const entries = readdirSync(resolve(dist, "hosting"))
       .filter((file) => file.endsWith(".js"))
-      .map((file) => resolve(dist, "hosting", file));
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+      .map((file) => `hosting/${file}`);
+    for (const file of reachableFiles(entries)) {
       const name = relative(dist, file).split(sep).join("/");
       expect(moduleName(file), `Hosting reaches ${name}`).not.toBe("workbench");
       expect(moduleName(file), `Hosting reaches ${name}`).not.toBe("cloudflare");
@@ -347,21 +306,16 @@ describe("module runtime boundaries", () => {
           expect(specifier, `${name} imports ${specifier}`).not.toMatch(/^node:/);
         }
       }
-      pending.push(...dependencies(file));
     }
   });
 
   it("keeps collector worker entrypoints free of CLI startup and concrete storage", () => {
-    const pending = [
-      resolve(dist, "workbench/collector-worker-runtime.js"),
-      resolve(dist, "workbench/collector-worker.js"),
-      resolve(dist, "workbench/collector-worker-host.js"),
+    const entries = [
+      "workbench/collector-worker-runtime.js",
+      "workbench/collector-worker.js",
+      "workbench/collector-worker-host.js",
     ];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(entries)) {
       const name = relative(dist, file).split(sep).join("/");
       if (moduleName(file) === "workbench") {
         expect([
@@ -376,7 +330,18 @@ describe("module runtime boundaries", () => {
       expect(name).not.toMatch(
         /^run-store\/run-store-(sqlite|ndjson)\.js$|^studio\/server\/(listener|node-http|client-script)\.js$/
       );
-      pending.push(...dependencies(file));
+    }
+  });
+
+  it("keeps workbench module discovery independent of command execution", () => {
+    const allowed = new Set([
+      "workbench/pipeline-module.js",
+      "cli/cli-pipeline-command-contract.js",
+      "utilities/pipeline-command-marker.js",
+    ]);
+    for (const file of reachableFiles(["workbench/pipeline-module.js"])) {
+      const name = relative(dist, file).split(sep).join("/");
+      expect(allowed.has(name), `Workbench module discovery reaches ${name}`).toBe(true);
     }
   });
 
@@ -396,18 +361,12 @@ describe("module runtime boundaries", () => {
   });
 
   it("keeps the Cloudflare cache entrypoint loadable outside workerd", () => {
-    const pending = [resolve(dist, "cloudflare/cloudflare-cache.js")];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["cloudflare/cloudflare-cache.js"])) {
       for (const specifier of externalSpecifiers(file)) {
         expect(specifier, `${relative(dist, file)} imports ${specifier}`).not.toMatch(
           /^cloudflare:/
         );
       }
-      pending.push(...dependencies(file));
     }
     expect(readFileSync(resolve(dist, "cloudflare/cloudflare-cache.d.ts"), "utf8")).not.toMatch(
       /cloudflare:|@cloudflare\//
@@ -415,17 +374,11 @@ describe("module runtime boundaries", () => {
   });
 
   it("keeps CLI authoring independent of workbench, storage and Studio", () => {
-    const pending = [resolve(dist, "cli/cli.js")];
-    const visited = new Set<string>();
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["cli/cli.js"])) {
       expect(
         ["cli", "core", "node", "reporter", "tracing", "utilities"].includes(moduleName(file)),
         `CLI entrypoint reaches operational module: ${relative(dist, file)}`
       ).toBe(true);
-      pending.push(...dependencies(file));
     }
   });
 
@@ -448,8 +401,6 @@ describe("module runtime boundaries", () => {
   });
 
   it("keeps the entire root import graph free of presentation, storage and exporters", () => {
-    const pending = [resolve(dist, "core/pipeline.js")];
-    const visited = new Set<string>();
     const tracingInternals = new Set([
       "tracing/tracing.js",
       "tracing/artifact-metadata.js",
@@ -461,16 +412,12 @@ describe("module runtime boundaries", () => {
       "tracing/trace-exporter-error.js",
       "tracing/wire-schema.js",
     ]);
-    while (pending.length > 0) {
-      const file = pending.pop()!;
-      if (visited.has(file)) continue;
-      visited.add(file);
+    for (const file of reachableFiles(["core/pipeline.js"])) {
       const name = relative(dist, file).split(sep).join("/");
       expect(
         ["core", "utilities"].includes(moduleName(file)) || tracingInternals.has(name),
         `Root entrypoint reaches optional module: ${name}`
       ).toBe(true);
-      pending.push(...dependencies(file));
     }
   });
 });

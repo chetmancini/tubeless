@@ -85,6 +85,24 @@ export function createStudioLaunchForm(
   };
 }
 
+export function updateStudioLaunchForm(
+  command: PipelineRunStudioCommand,
+  form: StudioLaunchForm,
+  index: number,
+  next: readonly StudioParameterValue[]
+): StudioLaunchForm {
+  const edited = command.parameters[index];
+  const clearOtherSelections = edited?.exclusive && edited.multiple && next.length > 0;
+  return {
+    ...form,
+    values: form.values.map((value, indexOfValue) => {
+      if (indexOfValue === index) return next;
+      const parameter = command.parameters[indexOfValue];
+      return clearOtherSelections && parameter?.exclusive && parameter.multiple ? [] : value;
+    }),
+  };
+}
+
 function readValues(
   form: StudioLaunchForm,
   parameter: CliParameterDescriptor,

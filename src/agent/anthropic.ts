@@ -10,10 +10,13 @@ import {
   carriesCompaction,
   COMPACTION_BETA,
 } from "./anthropic-protocol.js";
-import { DEFAULT_COMPACT_AFTER_BYTES, MAX_REQUEST_BYTES } from "./provider-limits.js";
 import {
+  DEFAULT_COMPACT_AFTER_BYTES,
   DEFAULT_MAX_RETRIES,
-  MAX_RETRIES_LIMIT,
+  MAX_REQUEST_BYTES,
+  validProviderLimits,
+} from "./provider-limits.js";
+import {
   providerBaseUrl,
   providerRequest,
   withProviderDeadline,
@@ -98,18 +101,9 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
   } = options;
   if (
     (text !== undefined && typeof text !== "function") ||
-    (compactAfterBytes !== null &&
-      (!Number.isSafeInteger(compactAfterBytes) ||
-        compactAfterBytes < 1 ||
-        compactAfterBytes >= MAX_REQUEST_BYTES)) ||
-    !Number.isSafeInteger(maxRetries) ||
-    maxRetries < 0 ||
-    maxRetries > MAX_RETRIES_LIMIT ||
+    !validProviderLimits(timeoutMs, maxRetries, compactAfterBytes) ||
     !Number.isSafeInteger(maxTokens) ||
     maxTokens < 1 ||
-    !Number.isSafeInteger(timeoutMs) ||
-    timeoutMs < 1 ||
-    timeoutMs > 2_147_483_647 ||
     typeof strict !== "boolean" ||
     ![true, false, "5m", "1h"].includes(promptCaching) ||
     (apiKey !== undefined && authToken !== undefined) ||
@@ -274,7 +268,6 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
             typeof block.content === "string" &&
             typeof block.signature === "string"
           ) {
-            // The returned assistant message replaces every message it covered, unchanged.
             // The summarized history ended with tool results, so a user turn must follow it.
             messages = [
               { role: "assistant", content: [block] },
@@ -306,7 +299,6 @@ export function anthropicModel(options: AnthropicModelOptions = {}): AgentModel 
           if (response.stopReason !== "tool_use" && response.stopReason !== "end_turn")
             throw new Error(`Anthropic stopped unexpectedly (${response.stopReason})`);
           if (response.content.length === 0) throw new Error("Anthropic returned empty content");
-          // Keep every block, including thinking and signatures, exactly as returned.
           messages = [...messages, { role: "assistant", content: response.content }];
           const decision = anthropicDecision(response.content);
           if (decision) return { decision, conversation: messages };

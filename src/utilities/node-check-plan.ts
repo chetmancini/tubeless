@@ -32,6 +32,10 @@ export interface NodeCheckPlan {
   commands: NodeCheckCommand[];
 }
 
+const TOOLCHAIN: Readonly<NodeCheckPlan["toolchain"]> = { node: "24", bun: "1.4.4" };
+const PACKAGE_MANAGER = `bun@${TOOLCHAIN.bun}`;
+const VITEST_VERSION: Extract<NodeCheckCommand, { kind: "vitest" }>["report"]["version"] = "5.1.0";
+
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new TypeError(`Invalid ${label}.`);
@@ -50,9 +54,9 @@ function integer(value: unknown, max: number, label: string): number {
 }
 function toolchain(value: unknown): NodeCheckPlan["toolchain"] {
   const tools = object(value, ["node", "bun"], "toolchain");
-  if (tools.node !== "24" || tools.bun !== "1.4.4")
-    throw new TypeError("Supported toolchain: Node 24, Bun 1.4.4.");
-  return { node: "24", bun: "1.4.4" };
+  if (tools.node !== TOOLCHAIN.node || tools.bun !== TOOLCHAIN.bun)
+    throw new TypeError(`Supported toolchain: Node ${TOOLCHAIN.node}, Bun ${TOOLCHAIN.bun}.`);
+  return { ...TOOLCHAIN };
 }
 const CHECK_ID = /^[a-z][a-z0-9-]{0,47}$/;
 
@@ -131,7 +135,7 @@ function vitestCommand(options: Required<CheckOptions>, path: unknown): NodeChec
       `--outputFile=${path}`,
       "--includeTaskLocation",
     ],
-    report: { adapter: "vitest", version: "5.1.0", path },
+    report: { adapter: "vitest", version: VITEST_VERSION, path },
     reason: "Explicitly configured repository gate.",
   };
 }
@@ -192,8 +196,8 @@ export function resolveNodeCheckPlan(configuration: unknown, packageJson: unknow
   if (config.version !== 1) throw new TypeError("Supported recipe version: 1.");
   const tools = toolchain(config.toolchain),
     manifest = record(packageJson, "package.json");
-  if (manifest.packageManager !== "bun@1.4.4" || manifest.workspaces !== undefined)
-    throw new TypeError("Use packageManager bun@1.4.4 in a single-package repository.");
+  if (manifest.packageManager !== PACKAGE_MANAGER || manifest.workspaces !== undefined)
+    throw new TypeError(`Use packageManager ${PACKAGE_MANAGER} in a single-package repository.`);
   if (!Array.isArray(config.checks) || config.checks.length < 1 || config.checks.length > 16)
     throw new TypeError("Configure between 1 and 16 checks.");
   const commands = [installCommand()];
@@ -220,8 +224,8 @@ export function resolveNodeCheckPlan(configuration: unknown, packageJson: unknow
       );
     } else {
       const report = object(check.vitest, ["report"], "Vitest");
-      if (record(manifest.devDependencies, "devDependencies").vitest !== "5.1.0")
-        throw new TypeError("Vitest requires devDependency 5.1.0.");
+      if (record(manifest.devDependencies, "devDependencies").vitest !== VITEST_VERSION)
+        throw new TypeError(`Vitest requires devDependency ${VITEST_VERSION}.`);
       commands.push(vitestCommand(options, report.report));
     }
   }
@@ -258,7 +262,7 @@ function decodeCommand(value: unknown): NodeCheckCommand {
       command = scriptCommand(options, script(metadata.name, metadata.body));
     } else if (raw.kind === "vitest") {
       const report = object(raw.report, ["adapter", "version", "path"], "report");
-      if (report.adapter !== "vitest" || report.version !== "5.1.0")
+      if (report.adapter !== "vitest" || report.version !== VITEST_VERSION)
         throw new TypeError("Unsupported report adapter.");
       command = vitestCommand(options, report.path);
     } else throw new TypeError("Unsupported check kind.");

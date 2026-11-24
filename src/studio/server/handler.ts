@@ -3,8 +3,8 @@ import { jsonResponse } from "../../utilities/http-response.js";
 import { studioRoute } from "./hosting.js";
 import type { StudioPage } from "./page.js";
 import type { LaunchActor } from "../shared/launch-metadata.js";
+import { STUDIO_API_PATH } from "../shared/api-paths.js";
 
-/** Response for a request whose Host is not trusted. */
 export function untrustedHostResponse(): Response {
   return errorResponse(
     403,
@@ -78,7 +78,7 @@ export function createStudioRequestHandler(
         });
       }
       const url = new URL(route.path + route.search, "http://studio.local");
-      if (method === "GET" && url.pathname === "/api/health") {
+      if (method === "GET" && url.pathname === STUDIO_API_PATH.health) {
         const ready = options.isReady();
         return jsonResponse({ ready }, ready ? 200 : 503);
       }

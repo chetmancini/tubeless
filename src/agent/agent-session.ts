@@ -5,7 +5,8 @@ import type {
   PipelineRun,
   PipelineRunControls,
 } from "../core/pipeline-types.js";
-import { agentError, ownState } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
+import { ownState } from "./agent-state.js";
 
 export interface SessionHooks {
   seed(): unknown;

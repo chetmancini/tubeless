@@ -1,6 +1,7 @@
 import { isJsonObject } from "../../utilities/canonical-json.js";
 import { readBoundedBody } from "../../utilities/read-body.js";
-import { isLaunchIdentifier, HOSTED_EXECUTIONS_PATH } from "../../hosting/execution-status.js";
+import { HOSTED_EXECUTIONS_PATH } from "../../hosting/execution-status.js";
+import { isLaunchIdentifier } from "../../utilities/launch-identifier.js";
 import { normalizeRemoteOrigin } from "../workbench-remote-io.js";
 import { CLOUDFLARE_DEV_DEPENDENCIES } from "../workbench-init-cloudflare.js";
 import { chooseRemoteOption, type RemotePrompt } from "./prompt.js";

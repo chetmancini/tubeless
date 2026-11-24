@@ -7,7 +7,9 @@ import type {
   PipelineResult,
   StandardSchemaV1,
 } from "../core/pipeline-types.js";
-import { agentError, checkDescription, jsonDescriptor } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
+import { isToolReplayPolicy } from "./agent-values.js";
+import { checkDescription, jsonDescriptor } from "./agent-state.js";
 import type { AgentTool, Input, Output } from "./agent-types.js";
 
 type ChildPipeline = Pipeline<object, unknown>;
@@ -60,11 +62,7 @@ export function pipelineTool<
   }
 ): AgentTool<unknown, unknown> {
   checkDescription(definition.description);
-  if (
-    definition.replay !== undefined &&
-    definition.replay !== "safe" &&
-    definition.replay !== "unsafe"
-  )
+  if (definition.replay !== undefined && !isToolReplayPolicy(definition.replay))
     throw agentError(
       "TUBELESS_AGENT_INVALID_DEFINITION",
       "Pipeline tool replay must be safe or unsafe"

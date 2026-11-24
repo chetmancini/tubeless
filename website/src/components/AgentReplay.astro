@@ -1,13 +1,12 @@
 ---
-import recording from "../../public/agent-evaluation.json";
-import { RECORDING_CONTEXT, ROOT_INSTRUCTIONS } from "../data/agent-recordings";
+import { agentEvaluation } from "../data/agent-recordings";
 ---
 
 <div class="recordings">
-  {recording.results.map((run) => {
-    const context = RECORDING_CONTEXT[run.id];
+  {agentEvaluation.results.map((run) => {
+    const { context } = run;
     return (
-    <details class="recording" open={run.id === "recover-and-compact"}>
+    <details class="recording" open={context.openByDefault}>
       <summary><span>{context.title}</span><span class="verdict">{run.passed ? "Passed" : "Failed"} ↗</span></summary>
       <div class="recording-body" data-agent-replay>
         <div class="task-context">
@@ -19,7 +18,7 @@ import { RECORDING_CONTEXT, ROOT_INSTRUCTIONS } from "../data/agent-recordings";
           </div>
           <details class="starting-files">
             <summary>Read the starting files and project instructions</summary>
-            {Object.entries({ "AGENTS.md": ROOT_INSTRUCTIONS, ...context.files }).map(([path, content]) => (
+            {run.startingFiles.map(([path, content]) => (
               <div><h4><code>{path}</code></h4><pre>{content}</pre></div>
             ))}
             <p class="preserved-file">Each workspace also contains <code>unrelated.txt</code> with existing user work that must be preserved.</p>

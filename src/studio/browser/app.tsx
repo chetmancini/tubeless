@@ -2,7 +2,7 @@ import { shortId } from "./components/steps.js";
 import { render } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { type StudioApi, type StudioSnapshot, createStudioApi } from "./transport.js";
-import { StudioDataController } from "./data-controller.js";
+import { MUTATION_VISIBILITY_DELAY_MS, StudioDataController } from "./data-controller.js";
 import type { PipelineRunStudioCommand } from "../shared/protocol.js";
 import { commandDescription, errorMessage } from "./components/common.js";
 import type { StudioLaunchMetadata } from "../shared/launch-metadata.js";
@@ -12,6 +12,7 @@ import { PipelinePage } from "./components/pipeline.js";
 import { latestStatus, Rail, railPipelines, type RailPipeline } from "./components/rail.js";
 import { parseStudioRoute, studioPage, studioRouteUrl, type StudioRoute } from "../shared/route.js";
 import { useEscapeDismiss } from "./escape-dismiss.js";
+import { STUDIO_MOUNT_META, STUDIO_ROOT_ID } from "../shared/page-shell.js";
 
 interface ClearHistoryModalProps {
   api: StudioApi;
@@ -97,15 +98,7 @@ function ClearHistoryModal({ api, onCleared, onClose, snapshot }: ClearHistoryMo
   );
 }
 
-const studioMount =
-  typeof document === "undefined"
-    ? ""
-    : (document.querySelector<HTMLMetaElement>('meta[name="tubeless-studio-mount"]')?.content ??
-      "");
-
-const defaultStudioApi = createStudioApi(fetch, studioMount);
-
-export function connectionPresentation(connected: boolean) {
+function connectionPresentation(connected: boolean) {
   return {
     className: `pulse${connected ? "" : " lost"}`,
     label: connected ? "Connected · local" : "Connection lost",
@@ -182,7 +175,7 @@ export function StudioAccessNotice({ status, href }: { status: 401 | 403; href: 
   );
 }
 
-function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
+function StudioApp({ api }: { api: StudioApi }) {
   const initialRoute = useMemo(() => parseStudioRoute(window.location.href), []);
   const dataController = useMemo(
     () =>
@@ -254,16 +247,9 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     return () => clearInterval(interval);
   }, [accessDenied, api, dataController]);
 
-  /** Point history at the route's scope, then select its run. */
-  const applyRoute = (next: StudioRoute) => {
-    const current = dataController.getState().historyQuery;
-    const sameScope = current.pipelineId === next.pipelineId;
-    dataController.setHistoryQuery({
-      pipelineId: next.pipelineId,
-      query: sameScope ? current.query : "",
-      offset: sameScope ? current.offset : 0,
-    });
-    dataController.selectRun(next.runId ?? null);
+  const applyRoute = (next: StudioRoute, acceptedLaunch = false) => {
+    if (acceptedLaunch) dataController.openAcceptedRun(next);
+    else dataController.setNavigation(next);
     setRoute(next);
   };
 
@@ -285,14 +271,14 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   );
 
   /** Move between pages; tab and drawer changes replace the entry instead of adding one. */
-  const navigate = (next: StudioRoute, { replace = false }: { replace?: boolean } = {}) => {
+  const navigate = (next: StudioRoute, { replace = false, acceptedLaunch = false } = {}) => {
     if (dataController.getState().accessDenied) return;
     const href = studioRouteUrl(window.location.href, next);
     if (href !== window.location.href) {
       if (replace) window.history.replaceState(null, "", href);
       else window.history.pushState(null, "", href);
     }
-    applyRoute(next);
+    applyRoute(next, acceptedLaunch);
   };
   const showToast = (message: string) => {
     if (!dataController.getState().accessDenied) setToast(message);
@@ -311,7 +297,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     try {
       await api.cancelRun(runId);
       showToast("Run cancelled · " + shortId(runId));
-      dataController.invalidate({ delayMs: 80 });
+      dataController.invalidate({ delayMs: MUTATION_VISIBILITY_DELAY_MS });
     } catch (caught) {
       showToast(errorMessage(caught));
     } finally {
@@ -326,8 +312,8 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     pipelineFromHistory(
       pipelineId,
       snapshot,
-      data.snapshotPipelineId === pipelineId,
-      historyQuery.query
+      data.snapshotQuery?.pipelineId === pipelineId,
+      data.snapshotQuery?.query ?? ""
     );
   const connection = connectionPresentation(connected);
   const entries = [...pipelines, ...nested];
@@ -341,7 +327,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     (selection.status === "loading" ? selection.summary?.pipelineId : undefined);
   const runPipeline = entries.find((entry) => entry.pipelineId === runPipelineId);
   const launchTarget = (page === "run" ? runPipeline : pipeline)?.command;
-  const listCurrent = data.snapshotPipelineId === route.pipelineId;
+  const listCurrent = data.snapshotQuery === historyQuery;
   const roots = (listCurrent && snapshot?.runs) || [];
   const matchingRuns = listCurrent ? (snapshot?.matchingRootCount ?? 0) : 0;
   const listEmpty = (empty: { title: string; copy: string }) =>
@@ -364,7 +350,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
     page === "pipeline" &&
     commandsLoaded &&
     snapshot !== null &&
-    data.snapshotPipelineId === route.pipelineId &&
+    listCurrent &&
     pipeline === undefined;
   const heading =
     page === "activity"
@@ -462,10 +448,7 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
                   placeholder={searchPlaceholder}
                   aria-label="Filter runs"
                   onInput={(event) =>
-                    dataController.setHistoryQuery({
-                      pipelineId: route.pipelineId,
-                      query: event.currentTarget.value.trim(),
-                    })
+                    dataController.setHistoryQuery({ query: event.currentTarget.value.trim() })
                   }
                 />
               )}
@@ -526,7 +509,9 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
               })}
               matchingCount={matchingRuns}
               offset={snapshot.offset}
-              onPage={(offset) => dataController.setHistoryQuery({ ...historyQuery, offset })}
+              onPage={(offset) =>
+                dataController.setHistoryQuery({ query: historyQuery.query, offset })
+              }
             />
           )}
           {snapshot && page === "pipeline" && pipeline && (
@@ -539,7 +524,9 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
               listLoading={!listCurrent}
               matchingRunCount={matchingRuns}
               offset={snapshot.offset}
-              onPage={(offset) => dataController.setHistoryQuery({ ...historyQuery, offset })}
+              onPage={(offset) =>
+                dataController.setHistoryQuery({ query: historyQuery.query, offset })
+              }
               nowMs={nowMs}
               onOpenRun={(runId) => navigate({ pipelineId: pipeline.pipelineId, runId })}
               definitions={snapshot.definitions.filter(
@@ -572,7 +559,9 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
               listLoading={!listCurrent}
               offset={snapshot.offset}
               matchingRootCount={matchingRuns}
-              onPage={(offset) => dataController.setHistoryQuery({ ...historyQuery, offset })}
+              onPage={(offset) =>
+                dataController.setHistoryQuery({ query: historyQuery.query, offset })
+              }
               canCancel={canCancel}
               cancelling={cancelling}
               liveRunIds={snapshot.liveRunIds ?? []}
@@ -602,9 +591,8 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
           onLaunched={(runId, commandId) => {
             if (dataController.getState().accessDenied) return;
             setLaunch(null);
-            navigate({ pipelineId: commandId, runId });
+            navigate({ pipelineId: commandId, runId }, { acceptedLaunch: true });
             showToast("Run accepted · " + shortId(runId));
-            dataController.invalidate({ delayMs: 80 });
           }}
         />
       )}
@@ -630,9 +618,11 @@ function StudioApp({ api = defaultStudioApi }: { api?: StudioApi }) {
   );
 }
 
-/** Mount the local Studio browser application. */
 export function initStudio(): void {
-  const root = document.querySelector("#studio-root");
-  if (!(root instanceof HTMLElement)) throw new Error("Missing #studio-root");
-  render(<StudioApp />, root);
+  const root = document.getElementById(STUDIO_ROOT_ID);
+  if (!(root instanceof HTMLElement)) throw new Error(`Missing #${STUDIO_ROOT_ID}`);
+  const mount = document.querySelector<HTMLMetaElement>(
+    `meta[name="${STUDIO_MOUNT_META}"]`
+  )?.content;
+  render(<StudioApp api={createStudioApi(fetch, mount)} />, root);
 }

@@ -1,11 +1,11 @@
 import type { StoredRunSummary } from "../../run-store/run-history.js";
+import type { StudioRoute } from "../shared/route.js";
 import { RunDetailLoader, DEFAULT_DETAIL_RETRY_MS } from "./run-detail-loader.js";
 import type {
   StudioApi,
   StudioAccessDenied,
   StudioRunDetail,
   StudioSnapshot,
-  StudioHistoryQuery,
 } from "./transport.js";
 
 export type StudioRunSelection =
@@ -14,15 +14,24 @@ export type StudioRunSelection =
   | { status: "unavailable"; runId: string }
   | { status: "ready"; runId: string; summary: StoredRunSummary; detail: StudioRunDetail };
 
+interface HistoryQuery {
+  pipelineId?: string;
+  query: string;
+  offset: number;
+}
+
+// A launcher can acknowledge a mutation before its events reach the history reader.
+export const MUTATION_VISIBILITY_DELAY_MS = 80;
+
 export interface StudioDataState {
   accessDenied?: StudioAccessDenied;
   connected: boolean;
-  historyQuery: { pipelineId?: string; query: string; offset: number };
+  historyQuery: HistoryQuery;
   selection: StudioRunSelection;
   manualRefreshing: boolean;
   snapshot: StudioSnapshot | null;
-  /** Pipeline scope that produced `snapshot.runs`; it lags `historyQuery` until a read lands. */
-  snapshotPipelineId?: string;
+  /** The accepted snapshot retains its request identity until the next read lands. */
+  snapshotQuery?: HistoryQuery;
 }
 
 export interface StudioDataInvalidation {
@@ -51,7 +60,6 @@ function clearedSnapshot(snapshot: StudioSnapshot): StudioSnapshot {
   };
 }
 
-/** Owns history queries, selection reconciliation and selection-scoped detail freshness. */
 export class StudioDataController {
   readonly #api: StudioApi;
   readonly #unsubscribeAccess: (() => void) | undefined;
@@ -60,7 +68,6 @@ export class StudioDataController {
   #detail: RunDetailLoader | undefined;
   #disposed = false;
   #invalidationTimeout: ReturnType<typeof setTimeout> | undefined;
-  #manualRefreshPending = false;
   #snapshotEpoch = 0;
   #snapshotRefreshActive = false;
   #snapshotRefreshQueued = false;
@@ -86,13 +93,13 @@ export class StudioDataController {
     this.#unsubscribeAccess = api.subscribeAccessDenied?.((status) => {
       this.#snapshotEpoch += 1;
       this.#retireDetail();
-      if (this.#invalidationTimeout) clearTimeout(this.#invalidationTimeout);
-      this.#invalidationTimeout = undefined;
+      this.#clearSnapshotDelay();
       this.#snapshotRefreshQueued = false;
       this.#update({
         accessDenied: status,
         connected: false,
         snapshot: null,
+        snapshotQuery: undefined,
         selection: { status: "none" },
         manualRefreshing: false,
       });
@@ -109,45 +116,61 @@ export class StudioDataController {
   }
 
   setHistoryQuery({
-    pipelineId,
     query = "",
     offset = 0,
-  }: Pick<StudioHistoryQuery, "pipelineId" | "query" | "offset">): void {
+  }: Partial<Pick<HistoryQuery, "query" | "offset">>): void {
     if (this.#disposed || this.#state.accessDenied) return;
     const current = this.#state.historyQuery;
-    if (current.pipelineId === pipelineId && current.query === query && current.offset === offset)
-      return;
+    if (current.query === query && current.offset === offset) return;
     this.#snapshotEpoch += 1;
-    this.#update({ historyQuery: { pipelineId, query, offset } });
+    this.#update({ historyQuery: { pipelineId: current.pipelineId, query, offset } });
     this.refresh(true);
   }
 
-  selectRun(runId: string | null): void {
-    if (this.#disposed || this.#state.accessDenied || runId === this.#selectedRunId()) return;
-    const summary = runId ? this.#findSummary(runId) : undefined;
-    // Pipeline-scoped pages list runs at any depth; unscoped pages list top-level runs.
+  setNavigation(route: Pick<StudioRoute, "pipelineId" | "runId">): void {
+    if (!this.#applyNavigation(route)) return;
+    this.#clearSnapshotDelay();
+    const selection = this.#state.selection;
+    if (selection.status === "loading" && selection.summary) this.#loadDetail(selection.summary);
+    this.refresh(true);
+  }
+
+  openAcceptedRun(route: Pick<StudioRoute, "pipelineId" | "runId">): void {
+    this.#applyNavigation(route);
+    this.invalidate({ delayMs: MUTATION_VISIBILITY_DELAY_MS });
+  }
+
+  #applyNavigation({ pipelineId, runId }: Pick<StudioRoute, "pipelineId" | "runId">): boolean {
+    if (this.#disposed || this.#state.accessDenied) return false;
+    const { historyQuery, selection, snapshot, snapshotQuery } = this.#state;
+    const sameScope = historyQuery.pipelineId === pipelineId;
+    const sameRun = (runId ?? null) === this.#selectedRunId();
+    if (sameScope && sameRun) return false;
+    const summary = !sameRun && runId ? this.#findSummary(runId) : undefined;
     const visible =
       summary &&
-      this.#state.snapshot?.runs.some(
+      historyQuery === snapshotQuery &&
+      snapshot?.runs.some(
         (listed) => listed.runId === summary.rootRunId || listed.runId === summary.runId
       );
-    const { pipelineId } = this.#state.historyQuery;
-    this.#retireDetail();
+    if (!sameRun) this.#retireDetail();
     this.#snapshotEpoch += 1;
     this.#update({
-      historyQuery: visible ? this.#state.historyQuery : { pipelineId, query: "", offset: 0 },
-      selection: runId ? { status: "loading", runId, summary } : { status: "none" },
+      historyQuery:
+        sameScope && (sameRun || visible) ? historyQuery : { pipelineId, query: "", offset: 0 },
+      selection: sameRun
+        ? selection
+        : runId
+          ? { status: "loading", runId, summary }
+          : { status: "none" },
     });
-    if (summary) this.#loadDetail(summary);
-    this.refresh(true);
+    return true;
   }
 
   refresh(manual = false): void {
-    if (this.#disposed || this.#state.accessDenied) return;
-    if (manual) {
-      this.#manualRefreshPending = true;
-      this.#update({ manualRefreshing: true });
-    }
+    if (this.#disposed || this.#state.accessDenied || this.#invalidationTimeout !== undefined)
+      return;
+    if (manual) this.#update({ manualRefreshing: true });
     if (this.#snapshotRefreshActive) {
       if (manual) this.#snapshotRefreshQueued = true;
       return;
@@ -161,17 +184,24 @@ export class StudioDataController {
     const runId = this.#selectedRunId();
     if (resetHistory) {
       this.#retireDetail();
+      const historyQuery = {
+        pipelineId: this.#state.historyQuery.pipelineId,
+        query: "",
+        offset: 0,
+      };
+      const snapshot = this.#state.snapshot;
       this.#update({
-        historyQuery: { pipelineId: this.#state.historyQuery.pipelineId, query: "", offset: 0 },
+        historyQuery,
         selection: runId ? { status: "unavailable", runId } : { status: "none" },
-        snapshot: this.#state.snapshot ? clearedSnapshot(this.#state.snapshot) : null,
+        snapshot: snapshot ? clearedSnapshot(snapshot) : null,
+        snapshotQuery: snapshot ? historyQuery : undefined,
       });
     } else {
       this.#detail?.invalidate(delayMs);
     }
-    if (this.#invalidationTimeout) clearTimeout(this.#invalidationTimeout);
-    this.#invalidationTimeout = undefined;
+    this.#clearSnapshotDelay();
     if (delayMs > 0) {
+      this.#snapshotRefreshQueued = false;
       this.#invalidationTimeout = setTimeout(() => {
         this.#invalidationTimeout = undefined;
         this.refresh(true);
@@ -187,13 +217,17 @@ export class StudioDataController {
     this.#disposed = true;
     this.#snapshotEpoch += 1;
     this.#retireDetail();
-    if (this.#invalidationTimeout) clearTimeout(this.#invalidationTimeout);
-    this.#invalidationTimeout = undefined;
+    this.#clearSnapshotDelay();
     this.#listeners.clear();
   }
 
   #selectedRunId(): string | null {
     return this.#state.selection.status === "none" ? null : this.#state.selection.runId;
+  }
+
+  #clearSnapshotDelay(): void {
+    if (this.#invalidationTimeout !== undefined) clearTimeout(this.#invalidationTimeout);
+    this.#invalidationTimeout = undefined;
   }
 
   #findSummary(runId: string): StoredRunSummary | undefined {
@@ -208,7 +242,7 @@ export class StudioDataController {
     );
   }
 
-  #acceptSnapshot(snapshot: StudioSnapshot, snapshotPipelineId: string | undefined): void {
+  #acceptSnapshot(snapshot: StudioSnapshot, snapshotQuery: HistoryQuery): void {
     let selection = this.#state.selection;
     const runId = this.#selectedRunId();
     if (runId) {
@@ -218,14 +252,14 @@ export class StudioDataController {
           selection.status === "ready"
             ? { ...selection, summary }
             : { status: "loading", runId, summary };
-        this.#update({ connected: true, snapshot, snapshotPipelineId, selection });
+        this.#update({ connected: true, snapshot, snapshotQuery, selection });
         this.#loadDetail(summary);
         return;
       }
       this.#retireDetail();
       selection = { status: "unavailable", runId };
     }
-    this.#update({ connected: true, snapshot, snapshotPipelineId, selection });
+    this.#update({ connected: true, snapshot, snapshotQuery, selection });
   }
 
   #startSnapshotRefresh(): void {
@@ -233,12 +267,11 @@ export class StudioDataController {
     this.#snapshotRefreshActive = true;
     const epoch = this.#snapshotEpoch;
     const query = this.#state.historyQuery;
-    this.#manualRefreshPending = false;
     void this.#api
       .loadSnapshot({ ...query, selectedRunId: this.#selectedRunId() })
       .then((snapshot) => {
         if (this.#disposed || this.#state.accessDenied || epoch !== this.#snapshotEpoch) return;
-        this.#acceptSnapshot(snapshot, query.pipelineId);
+        this.#acceptSnapshot(snapshot, query);
       })
       .catch(() => {
         if (this.#disposed || this.#state.accessDenied || epoch !== this.#snapshotEpoch) return;
@@ -247,12 +280,13 @@ export class StudioDataController {
       .finally(() => {
         if (this.#disposed || this.#state.accessDenied) return;
         this.#snapshotRefreshActive = false;
+        if (this.#invalidationTimeout !== undefined) return;
         if (this.#snapshotRefreshQueued) {
           this.#snapshotRefreshQueued = false;
           this.#startSnapshotRefresh();
           return;
         }
-        if (!this.#manualRefreshPending) this.#update({ manualRefreshing: false });
+        if (this.#state.manualRefreshing) this.#update({ manualRefreshing: false });
       });
   }
 

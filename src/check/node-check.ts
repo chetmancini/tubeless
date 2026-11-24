@@ -58,7 +58,7 @@ export async function runNodeCheck(
   const plan = decodeNodeCheckPlan(input);
   if (!plan) throw new TypeError("Invalid Node check plan.");
   if (process.versions.node.split(".")[0] !== plan.toolchain.node)
-    throw new TypeError("The node-check-v1 recipe requires Node 24.");
+    throw new TypeError(`The ${plan.recipe} recipe requires Node ${plan.toolchain.node}.`);
   const sourcePlan = await readNodeCheckPlan(context.cwd);
   if (JSON.stringify(sourcePlan) !== JSON.stringify(plan))
     throw new TypeError("Check plan differs from repository configuration.");

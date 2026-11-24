@@ -1,11 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TUBELESS_WORKBENCH_EXIT_CODE, type WorkbenchCliIo } from "./workbench-shared.js";
-import {
-  parseSubcommandArgs,
-  renderWorkbenchUsage,
-  runWorkbenchSubcommand,
-  type WorkbenchSubcommand,
-} from "./workbench-subcommand.js";
+import { runWorkbenchSubcommand } from "./workbench-subcommand.js";
 
 function captureIo(): WorkbenchCliIo & { errors: string[]; output: string[] } {
   const errors: string[] = [];
@@ -27,123 +22,84 @@ function captureIo(): WorkbenchCliIo & { errors: string[]; output: string[] } {
   };
 }
 
-interface ToyParsed {
-  values: { help: boolean };
-  positionals: string[];
-}
+const spec = {
+  name: "toy",
+  usage: "Usage: toy <file>",
+  positional: { min: 1, max: 1, error: "Pass exactly one file." },
+  options: {
+    json: { type: "boolean", description: "JSON output" },
+    project: { type: "string", description: "Project", valueName: "path" },
+  },
+} as const;
 
-const TOY_SPEC = { name: "toy", usage: "Usage: toy <file>", options: {} } as const;
-const TOY_USAGE = renderWorkbenchUsage(TOY_SPEC);
-
-function toyCommand(
-  run: WorkbenchSubcommand<ToyParsed>["run"] = async () => TUBELESS_WORKBENCH_EXIT_CODE.success
-): WorkbenchSubcommand<ToyParsed> {
-  return {
-    spec: TOY_SPEC,
-    parse(argv) {
-      if (argv.includes("--bad")) throw new Error("Unknown option --bad");
-      return {
-        values: { help: argv.includes("--help") },
-        positionals: argv.filter((arg) => !arg.startsWith("-")),
-      };
-    },
-    positionalCountError: {
-      count: 1,
-      message: "Pass exactly one pipeline or command file.",
-    },
-    run,
-  };
+function commandFixture() {
+  return { spec, run: vi.fn(async () => TUBELESS_WORKBENCH_EXIT_CODE.success) };
 }
 
 describe("runWorkbenchSubcommand", () => {
-  it("writes a usage error when parse throws", async () => {
+  it.each([
+    ["--jsn", "--jsn", "--json"],
+    ["--projet=x.ts", "--projet", "--project"],
+  ])("suggests a documented flag for %s", async (flag, name, suggestion) => {
     const io = captureIo();
-    const exitCode = await runWorkbenchSubcommand(toyCommand(), ["--bad"], io);
+    const command = commandFixture();
+    const exitCode = await runWorkbenchSubcommand(command, [flag, "file"], io);
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
-    expect(io.errors.join("")).toBe(`Error: Unknown option --bad\n\n${TOY_USAGE}`);
+    expect(io.errors.join("").split("\n")[0]).toBe(
+      `Error: Unknown option: ${name}. Did you mean ${suggestion}?`
+    );
     expect(io.output).toEqual([]);
+    expect(command.run).not.toHaveBeenCalled();
   });
 
-  describe("unknown long flags", () => {
-    const spec = {
-      name: "toy",
-      usage: "Usage: toy <file>",
-      options: {
-        json: { type: "boolean", description: "JSON output" },
-        project: { type: "string", description: "Project", valueName: "path" },
-      },
-    } as const;
-    function strictCommand(): WorkbenchSubcommand<ToyParsed> {
-      return {
-        spec,
-        parse(argv) {
-          const { values, positionals } = parseSubcommandArgs(argv, spec.options);
-          return { values: { help: values.help === true }, positionals };
-        },
-        run: async () => TUBELESS_WORKBENCH_EXIT_CODE.success,
-      };
-    }
-
-    it("suggests a documented flag for a near-miss", async () => {
-      const io = captureIo();
-      const exitCode = await runWorkbenchSubcommand(strictCommand(), ["--jsn", "file"], io);
-      expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
-      const [message] = io.errors.join("").split("\n");
-      expect(message).toBe("Error: Unknown option: --jsn. Did you mean --json?");
-    });
-
-    it("suggests from the flag name when an inline value is attached", async () => {
-      const io = captureIo();
-      await runWorkbenchSubcommand(strictCommand(), ["--projet=x.ts", "file"], io);
-      expect(io.errors.join("")).toContain("Did you mean --project?");
-    });
-
-    it("adds nothing for a far miss or an unknown short flag", async () => {
-      for (const argv of [
-        ["--verbose", "file"],
-        ["-x", "file"],
-      ]) {
-        const io = captureIo();
-        const exitCode = await runWorkbenchSubcommand(strictCommand(), argv, io);
-        expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
-        expect(io.errors.join("")).toMatch(/^Error: Unknown option: -/);
-        expect(io.errors.join("")).not.toContain("Did you mean");
-      }
-    });
-  });
-
-  it("prints usage and succeeds when help is requested, before run", async () => {
+  it.each(["--verbose", "-x"])("reports %s without an unrelated suggestion", async (flag) => {
     const io = captureIo();
-    let ran = false;
-    const exitCode = await runWorkbenchSubcommand(
-      toyCommand(async () => {
-        ran = true;
-        return 99;
+    const exitCode = await runWorkbenchSubcommand(commandFixture(), [flag, "file"], io);
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("").split("\n")[0]).toBe(`Error: Unknown option: ${flag}.`);
+  });
+
+  it("prints help before validating the positional count", async () => {
+    const io = captureIo();
+    const command = commandFixture();
+    const exitCode = await runWorkbenchSubcommand(command, ["--help"], io);
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
+    expect(io.output.join("")).toContain("Usage: toy <file>");
+    expect(io.output.join("")).toContain("--project <path>");
+    expect(io.errors).toEqual([]);
+    expect(command.run).not.toHaveBeenCalled();
+  });
+
+  it.each([[], ["one", "two"]])("rejects a positional count mismatch for %j", async (...args) => {
+    const io = captureIo();
+    const command = commandFixture();
+    const exitCode = await runWorkbenchSubcommand(command, args, io);
+    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
+    expect(io.errors.join("")).toMatch(/^Error: Pass exactly one file\./);
+    expect(command.run).not.toHaveBeenCalled();
+  });
+
+  it("leaves command flags after the passthrough separator untouched", async () => {
+    const io = captureIo();
+    const command = {
+      spec: { ...spec, passthrough: true },
+      run: vi.fn(async (parsed: unknown) => {
+        expect(parsed).toMatchObject({
+          values: { json: true },
+          positionals: ["pipeline.ts"],
+          commandArgs: ["--help", "--flag", "--"],
+        });
+        return TUBELESS_WORKBENCH_EXIT_CODE.success;
       }),
-      ["--help", "extra"],
+    };
+    const exitCode = await runWorkbenchSubcommand(
+      command,
+      ["--json", "pipeline.ts", "--", "--help", "--flag", "--"],
       io
     );
     expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.success);
-    expect(io.output.join("")).toBe(TOY_USAGE);
+    expect(command.run).toHaveBeenCalledOnce();
     expect(io.errors).toEqual([]);
-    expect(ran).toBe(false);
-  });
-
-  it("rejects a positional count mismatch before run", async () => {
-    const io = captureIo();
-    let ran = false;
-    const exitCode = await runWorkbenchSubcommand(
-      toyCommand(async () => {
-        ran = true;
-        return 99;
-      }),
-      [],
-      io
-    );
-    expect(exitCode).toBe(TUBELESS_WORKBENCH_EXIT_CODE.usage);
-    expect(io.errors.join("")).toBe(
-      `Error: Pass exactly one pipeline or command file.\n\n${TOY_USAGE}`
-    );
-    expect(ran).toBe(false);
+    expect(io.output).toEqual([]);
   });
 });

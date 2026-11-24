@@ -6,6 +6,19 @@ import {
   type AgentTranscriptPage,
 } from "../tracing/agent-transcript.js";
 
+type TranscriptRunIdentity = Pick<AgentTranscriptRecord, "agentId" | "parentRunId" | "dryRun">;
+
+export function sameTranscriptRun(
+  left: TranscriptRunIdentity,
+  right: TranscriptRunIdentity
+): boolean {
+  return (
+    left.agentId === right.agentId &&
+    left.parentRunId === right.parentRunId &&
+    left.dryRun === right.dryRun
+  );
+}
+
 export function transcriptPageQuery({
   runId,
   afterSequence = 0,

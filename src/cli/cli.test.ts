@@ -61,6 +61,52 @@ describe("defineCommand: string params", () => {
     });
   });
 
+  it("keeps command help and parsing aligned with the admitted declaration", () => {
+    const choices = ["json", "csv"];
+    class Format {
+      name = "output";
+      get type() {
+        return "string" as const;
+      }
+      get flag() {
+        return this.name;
+      }
+      get choices() {
+        return choices;
+      }
+    }
+    const format = new Format();
+    const command = defineCommand({ params: { format }, run: (values) => values });
+
+    format.name = "format";
+    choices.push("xml");
+
+    expect(command.descriptor.parameters[1]).toMatchObject({
+      flag: "output",
+      choices: ["json", "csv"],
+    });
+    const help = command.parse(["--help"]);
+    expect(help.kind === "help" && help.helpText).toContain("--output <string>");
+    expect(command.parse(["--output", "csv"])).toMatchObject({
+      kind: "values",
+      values: { format: "csv" },
+    });
+    expect(command.parse(["--format", "csv"]).kind).toBe("error");
+    expect(command.parseValues({ format: "xml" }).kind).toBe("error");
+  });
+
+  it("rejects missing entries in the positional declaration", () => {
+    const positionals: "format"[] = [];
+    positionals.length = 1;
+    expect(() =>
+      defineCommand({
+        params: { format: { type: "string" } },
+        positionals,
+        run: (values) => values,
+      })
+    ).toThrow('Unknown positional parameter "undefined"');
+  });
+
   it("parses a provided value", () => {
     const command = defineCommand({
       params: { version: { type: "string" } },

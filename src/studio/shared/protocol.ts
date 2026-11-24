@@ -1,4 +1,5 @@
 import { parseStudioPayload, studioParameterSchema } from "./schema.js";
+import { isLaunchIdentifier } from "../../utilities/launch-identifier.js";
 import type { CliParameterDescriptor } from "../../cli/cli.js";
 import type { PipelinePlan, PipelineRunControls } from "../../core/pipeline.js";
 import type { StudioLaunchContext } from "./launch-metadata.js";
@@ -56,11 +57,7 @@ export function parseStudioLaunchRequest(
   }
   const values = value.values;
   const idempotencyKey = "idempotencyKey" in value ? value.idempotencyKey : undefined;
-  if (
-    idempotencyKey !== undefined &&
-    (typeof idempotencyKey !== "string" || !/^[a-zA-Z0-9._:-]{1,200}$/.test(idempotencyKey))
-  )
-    return undefined;
+  if (idempotencyKey !== undefined && !isLaunchIdentifier(idempotencyKey)) return undefined;
   if (typeof values !== "object" || values === null || Array.isArray(values)) return undefined;
   const entries = Object.entries(values);
   if (entries.length > 128) return undefined;

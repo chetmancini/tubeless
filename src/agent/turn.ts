@@ -9,7 +9,8 @@ import type { StandardSchemaV1 } from "../core/pipeline-types.js";
 import { validateStandardSchema } from "../core/pipeline-validation.js";
 import { throwIfAborted } from "../utilities/abort.js";
 import { runConcurrentPartial } from "../utilities/batch.js";
-import { ownState, limit } from "./agent-state.js";
+import { limit } from "./agent-errors.js";
+import { ownState } from "./agent-state.js";
 import { decisionEnvelope, prepareCalls, type PreparedCall } from "./decision.js";
 import { restoreCalls, saveCalls } from "./checkpoint-calls.js";
 import type {

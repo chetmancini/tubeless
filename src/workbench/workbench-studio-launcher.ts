@@ -1,3 +1,7 @@
+import type {
+  PipelineCommandContract,
+  PipelineCommandParseResult,
+} from "../cli/cli-pipeline-command-contract.js";
 import type { ProjectOptions } from "../project/pipeline-project.js";
 import { createLaunchTracing, type LaunchTracing } from "../hosting/launch-tracing.js";
 import type { PipelineRunControls } from "../core/pipeline.js";
@@ -9,14 +13,13 @@ import type {
   PipelineRunStudioCancelResult,
 } from "../studio/shared/protocol.js";
 import type { PipelineTraceExporter } from "../tracing/tracing.js";
-import type { WorkbenchPipelineCommand } from "./pipeline-module.js";
-import { executeHostedCommand } from "../hosting/hosting-commands.js";
+import { executeHostedCommand, hostedCommandContext } from "../hosting/hosting-commands.js";
 import { WorkbenchLaunchSession } from "./workbench-launch-session.js";
-import { commandContext, errorMessage, type WorkbenchCliIo } from "./workbench-shared.js";
+import { errorMessage, type WorkbenchCliIo } from "./workbench-shared.js";
 
 /** Loaded and validated by the UI command before opening its store. */
 export interface WorkbenchStudioRegistration {
-  readonly command: Pick<WorkbenchPipelineCommand, "parseValues" | "execute" | "plan">;
+  readonly command: Pick<PipelineCommandContract, "parseValues" | "execute" | "plan">;
   readonly commandIo: WorkbenchCliIo;
   readonly descriptor: PipelineRunStudioCommand;
   readonly tracing?: ProjectOptions["tracing"];
@@ -66,11 +69,13 @@ export class WorkbenchStudioLauncher implements PipelineRunStudioLauncher {
       stopping: this.#stopping,
       store: this.exporter,
     });
-    let parsed: ReturnType<WorkbenchPipelineCommand["parseValues"]>;
+    let parsed: PipelineCommandParseResult;
     try {
       parsed = registration.command.parseValues(
         values,
-        commandContext(registration.commandIo, session.signal, session.pipelineContext)
+        hostedCommandContext(registration.commandIo, session.signal, {
+          tracing: { exporter: session.exporter },
+        })
       );
     } catch (error) {
       return { accepted: false, errors: [errorMessage(error)] };
@@ -86,7 +91,7 @@ export class WorkbenchStudioLauncher implements PipelineRunStudioLauncher {
         signal: session.signal,
       },
       configurations: [registration.tracing],
-      exporters: [session.pipelineContext.tracing!.exporter],
+      exporters: [session.exporter],
     });
     let tracing: ReturnType<LaunchTracing["prepare"]>;
     try {

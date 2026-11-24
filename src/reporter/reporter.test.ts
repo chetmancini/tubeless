@@ -2,7 +2,8 @@ import { v8StepCacheCodec } from "../utilities/cache-storage.js";
 import { describe, expect, it } from "vitest";
 import { createPipelineTestRuntime, overrideStep } from "../testing/testing.js";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
-import { createRunReporter, formatDurationMs } from "./reporter.js";
+import { createRunReporter } from "./reporter.js";
+import { formatDurationMs } from "./reporter-format.js";
 
 function capturingLogger() {
   const messages = { error: [] as string[], log: [] as string[], warn: [] as string[] };

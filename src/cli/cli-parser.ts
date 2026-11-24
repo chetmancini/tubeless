@@ -27,7 +27,53 @@ const RESERVED_FLAG_NAMES: ReadonlySet<string> = new Set([
   "no-resume",
 ]);
 
-export function buildEffectiveSchema(
+function snapshotParam(param: CliParam): CliParam {
+  const common = {
+    description: param.description,
+    exclusive: param.exclusive,
+    flag: param.flag,
+    group: param.group,
+    short: param.short,
+    env: param.env,
+  };
+  switch (param.type) {
+    case "boolean":
+      return { ...common, type: "boolean", default: param.default };
+    case "string": {
+      const choices = param.choices;
+      return {
+        ...common,
+        type: "string",
+        choices: choices && [...choices],
+        default: param.default,
+        multiple: param.multiple,
+        optional: param.optional,
+      };
+    }
+    case "number":
+      return {
+        ...common,
+        type: "number",
+        default: param.default,
+        integer: param.integer,
+        min: param.min,
+        max: param.max,
+        multiple: param.multiple,
+        optional: param.optional,
+      };
+    case "path":
+      return {
+        ...common,
+        type: "path",
+        default: param.default,
+        kind: param.kind,
+        mustExist: param.mustExist,
+        optional: param.optional,
+      };
+  }
+}
+
+function buildEffectiveSchema(
   params: CliParamsSchema,
   checkpoint: CliCheckpointConfig | undefined,
   resume: true | undefined
@@ -55,7 +101,7 @@ export function buildEffectiveSchema(
   }
   for (const [key, param] of Object.entries(params)) {
     Object.defineProperty(effectiveParams, key, {
-      value: param,
+      value: snapshotParam(param),
       enumerable: true,
       configurable: true,
       writable: true,
@@ -82,17 +128,18 @@ function isMultipleParam(
   return (param.type === "string" || param.type === "number") && param.multiple === true;
 }
 
-export function commandDescriptor(
+function commandDescriptor(
   config: Pick<CliCommandConfig<CliParamsSchema, unknown>, "description" | "name">,
-  params: CliParamsSchema,
-  positionals: readonly string[]
+  entries: readonly CliParamEntry[],
+  positionals: readonly CliParamEntry[]
 ): CliCommandDescriptor {
-  const positionalEntries = positionals.map((key) => [key, params[key]] as const);
+  const positionalSet = new Set(positionals);
   let positionalIndex = 0;
-  const entries = Object.entries(params).map((entry) =>
-    positionals.includes(entry[0]) ? positionalEntries[positionalIndex++] : entry
+  const ordered = entries.map((entry) =>
+    positionalSet.has(entry) ? positionals[positionalIndex++] : entry
   );
-  const parameters = entries.map(([key, param]): CliParameterDescriptor => {
+  const parameters = ordered.map((entry): CliParameterDescriptor => {
+    const { key, param, flag } = entry;
     const defaultValue = param.type === "boolean" ? (param.default ?? false) : param.default;
     const required =
       param.type !== "boolean" &&
@@ -101,10 +148,10 @@ export function commandDescriptor(
       param.default === undefined &&
       param.env === undefined;
     const descriptor: MutableCliParameterDescriptor = {
-      flag: flagName(key, param),
+      flag,
       key,
       multiple: isMultipleParam(param),
-      positional: positionals.includes(key),
+      positional: positionalSet.has(entry),
       required,
       type: param.type,
     };
@@ -203,23 +250,23 @@ const HELP_ROW: readonly [usage: string, summary: string] = [
   "Show this help message.",
 ];
 
-export function renderHelp(
+function renderHelp(
   name: string,
   description: string | undefined,
-  schema: CliParamsSchema,
-  positionals: readonly string[]
+  entries: readonly CliParamEntry[],
+  positionals: readonly CliParamEntry[]
 ): string {
   const domainRows: (readonly [string, string])[] = [];
   const executionRows: (readonly [string, string])[] = [];
-  for (const [key, param] of Object.entries(schema)) {
-    const longUsage = usageToken(flagName(key, param), param);
+  for (const { flag, param } of entries) {
+    const longUsage = usageToken(flag, param);
     const usage = param.short ? `-${param.short}, ${longUsage}` : longUsage;
     (param.group === "execution" ? executionRows : domainRows).push([usage, describeParam(param)]);
   }
   domainRows.push(HELP_ROW);
   const width = Math.max(10, ...[...domainRows, ...executionRows].map(([usage]) => usage.length));
   const positionalUsage = positionals
-    .map((key) => positionalUsageToken(key, schema[key]))
+    .map(({ key, param }) => positionalUsageToken(key, param))
     .join(" ");
   const lines = [`Usage: ${name} [options]${positionalUsage ? ` ${positionalUsage}` : ""}`];
   if (description) {
@@ -238,7 +285,7 @@ export function renderHelp(
   return lines.join("\n");
 }
 
-export interface TokenizeResult {
+interface TokenizeResult {
   values: Map<string, string | boolean | string[]>;
   errors: string[];
   help: boolean;
@@ -250,10 +297,6 @@ interface CliParamEntry {
   param: CliParam;
 }
 
-function buildParamEntries(schema: CliParamsSchema): CliParamEntry[] {
-  return Object.entries(schema).map(([key, param]) => ({ key, param, flag: flagName(key, param) }));
-}
-
 function longFlagNames(entries: readonly CliParamEntry[]): string[] {
   const names = entries.flatMap(({ flag, param }) =>
     param.type === "boolean" ? [flag, `no-${flag}`] : [flag]
@@ -262,26 +305,13 @@ function longFlagNames(entries: readonly CliParamEntry[]): string[] {
   return names;
 }
 
-export function tokenize(
+function tokenize(
   argv: readonly string[],
-  schema: CliParamsSchema,
-  positionals: readonly string[]
+  paramByFlag: ReadonlyMap<string, CliParamEntry>,
+  paramByShort: ReadonlyMap<string, CliParamEntry>,
+  positionalEntries: readonly CliParamEntry[],
+  flagNames: readonly string[]
 ): TokenizeResult {
-  const entries = buildParamEntries(schema);
-  const paramByFlag = new Map<string, CliParamEntry>();
-  const paramByShort = new Map<string, CliParamEntry>();
-  const positionalEntries = positionals.map(
-    // SAFETY: `assertValidPositionals` (run by callers before `tokenize`) rejects any
-    // positional key absent from the schema, so every positional is present in `entries`.
-    (key) => entries.find((entry) => entry.key === key)!
-  );
-  for (const entry of entries) {
-    paramByFlag.set(entry.flag, entry);
-    if (entry.param.short) {
-      paramByShort.set(entry.param.short, entry);
-    }
-  }
-
   const values = new Map<string, string | boolean | string[]>();
   const errors: string[] = [];
   let help = false;
@@ -393,7 +423,7 @@ export function tokenize(
 
     const entry = paramByFlag.get(name);
     if (!entry) {
-      const suggestion = didYouMean(bodyName, longFlagNames(entries), (flag) => `--${flag}`);
+      const suggestion = didYouMean(bodyName, flagNames, (flag) => `--${flag}`);
       errors.push(`Unknown option: --${body}${suggestion ? `. ${suggestion}` : ""}`);
       if (bodyEqualsIndex === -1) unknownFlagValueIndex = index + 1;
       continue;
@@ -656,22 +686,24 @@ function validateNumberValue(
   return value;
 }
 
-export function assertNoDuplicateFlags(schema: CliParamsSchema): void {
-  const keyByFlag = new Map<string, string>();
-  const keyByShort = new Map<string, string>();
-  for (const [key, param] of Object.entries(schema)) {
-    const flag = flagName(key, param);
+function indexFlags(entries: readonly CliParamEntry[]) {
+  const byFlag = new Map<string, CliParamEntry>();
+  const byShort = new Map<string, CliParamEntry>();
+  for (const entry of entries) {
+    const { key, param, flag } = entry;
     const isBuiltInKey = key === DRY_RUN_KEY || key === RESUME_KEY;
     if (!isBuiltInKey && RESERVED_FLAG_NAMES.has(flag)) {
       throw new Error(
         `--${flag} is a reserved flag; remove "${key}" from params or give it a different flag name.`
       );
     }
-    const existingKey = keyByFlag.get(flag);
-    if (existingKey) {
-      throw new Error(`Duplicate --${flag} flag: both "${existingKey}" and "${key}" resolve to it`);
+    const existing = byFlag.get(flag);
+    if (existing) {
+      throw new Error(
+        `Duplicate --${flag} flag: both "${existing.key}" and "${key}" resolve to it`
+      );
     }
-    keyByFlag.set(flag, key);
+    byFlag.set(flag, entry);
 
     if (param.short === undefined) continue;
     if (!/^[A-Za-z]$/.test(param.short) || param.short === "h") {
@@ -679,18 +711,19 @@ export function assertNoDuplicateFlags(schema: CliParamsSchema): void {
         `"${key}" has invalid short alias "${param.short}"; aliases must be one letter other than "h".`
       );
     }
-    const existingShortKey = keyByShort.get(param.short);
-    if (existingShortKey) {
+    const existingShort = byShort.get(param.short);
+    if (existingShort) {
       throw new Error(
-        `Duplicate -${param.short} alias: both "${existingShortKey}" and "${key}" resolve to it`
+        `Duplicate -${param.short} alias: both "${existingShort.key}" and "${key}" resolve to it`
       );
     }
-    keyByShort.set(param.short, key);
+    byShort.set(param.short, entry);
   }
+  return { byFlag, byShort };
 }
 
-export function assertValidMultipleParams(schema: CliParamsSchema): void {
-  for (const [key, param] of Object.entries(schema)) {
+function assertValidMultipleParams(entries: readonly CliParamEntry[]): void {
+  for (const { key, param } of entries) {
     if (!isMultipleParam(param)) {
       continue;
     }
@@ -707,18 +740,18 @@ export function assertValidMultipleParams(schema: CliParamsSchema): void {
   }
 }
 
-export function assertValidPositionals(
+function resolvePositionals(
   positionals: readonly string[],
-  schema: CliParamsSchema
-): void {
+  byKey: ReadonlyMap<string, CliParamEntry>
+): CliParamEntry[] {
   const seen = new Set<string>();
   let sawOptional = false;
-  for (let index = 0; index < positionals.length; index++) {
-    const key = positionals[index];
-    const param = Object.hasOwn(schema, key) ? schema[key] : undefined;
-    if (!param) {
+  return positionals.map((key, index) => {
+    const entry = byKey.get(key);
+    if (!entry) {
       throw new Error(`Unknown positional parameter "${key}"; it must be declared in params.`);
     }
+    const { param } = entry;
     if (seen.has(key)) {
       throw new Error(`Duplicate positional parameter "${key}".`);
     }
@@ -736,11 +769,12 @@ export function assertValidPositionals(
       );
     }
     sawOptional ||= optional;
-  }
+    return entry;
+  });
 }
 
-export function assertValidEnvironmentFallbacks(schema: CliParamsSchema): void {
-  for (const [key, param] of Object.entries(schema)) {
+function assertValidEnvironmentFallbacks(entries: readonly CliParamEntry[]): void {
+  for (const { key, param } of entries) {
     if (param.env === undefined) continue;
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(param.env)) {
       throw new Error(`"${key}" has invalid environment variable name "${param.env}".`);
@@ -751,4 +785,33 @@ export function assertValidEnvironmentFallbacks(schema: CliParamsSchema): void {
       );
     }
   }
+}
+
+export function compileCommandParameters(
+  config: Pick<
+    CliCommandConfig<CliParamsSchema, unknown>,
+    "params" | "checkpoint" | "resume" | "positionals" | "name" | "description"
+  >
+) {
+  const schema = buildEffectiveSchema(config.params, config.checkpoint, config.resume);
+  const entries = Object.entries(schema).map(([key, param]) => ({
+    key,
+    param,
+    flag: flagName(key, param),
+  }));
+  const { byFlag, byShort } = indexFlags(entries);
+  assertValidMultipleParams(entries);
+  assertValidEnvironmentFallbacks(entries);
+  const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+  const positionals = resolvePositionals([...(config.positionals ?? [])], byKey);
+  const descriptor = commandDescriptor(config, entries, positionals);
+  const helpText = renderHelp(descriptor.name, descriptor.description, entries, positionals);
+  const flagNames = longFlagNames(entries);
+  return {
+    entries,
+    byKey,
+    descriptor,
+    helpText,
+    tokenize: (argv: readonly string[]) => tokenize(argv, byFlag, byShort, positionals, flagNames),
+  };
 }

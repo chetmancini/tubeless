@@ -3,11 +3,11 @@ import type {
   HostedLaunchReservation,
   StoredLaunchAdmission,
 } from "./launch-admission.js";
-import type { SqliteLaunchStorage } from "./launch-store-sqlite.js";
+import type { SqliteStorage } from "./sqlite-storage.js";
 
 /** Compose key persistence with the launch adapter's synchronous creation operation. */
 export function createSqliteLaunchAdmissionStore(
-  storage: SqliteLaunchStorage,
+  storage: SqliteStorage,
   createLaunch: (request: HostedLaunchReservation) => void
 ): HostedLaunchAdmissionStore {
   storage.sql.exec(`CREATE TABLE IF NOT EXISTS tubeless_launch_admissions (

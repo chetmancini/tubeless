@@ -5,11 +5,11 @@ import {
   type HostedChildPlacement,
   type HostedJobOwnership,
 } from "../hosting/run.js";
-import type { RunJob, StudioIngest } from "../hosting/run-contract.js";
+import type { RunJob } from "../hosting/run-contract.js";
 import type { PipelineTraceExporterOptions } from "../tracing/tracing.js";
 import { boundCloudflareTraceExporter } from "./cloudflare-tracing.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
-import type { CloudflareStudioIngest } from "./cloudflare-studio.js";
+import type { CloudflareStudioIngest } from "./cloudflare-studio-ingest.js";
 import {
   MAX_RUN_DURATION_MS,
   HOST_TERMINATED,
@@ -57,6 +57,12 @@ export async function runCloudflareJob(
 type CloudflareChildPlacement = (
   ...input: [...Parameters<HostedChildPlacement>, generation?: number]
 ) => ReturnType<HostedChildPlacement>;
+
+interface RecoveryAttempt {
+  readonly journal: SqliteExecutionJournal;
+  readonly generation: number;
+  readonly deadlineAtMs: number;
+}
 
 /** Alarm-driven execution state machine for one launch. Never rethrows from alarm(). */
 export class RunObjectCore {
@@ -110,8 +116,10 @@ export class RunObjectCore {
     const { storage } = this.deps;
     const job = await storage.get<RunJob>("job");
     if (!job) return;
-    if (job.recoveryDefinitionId !== undefined) return this.#recoverableAlarm(job);
-    if ((await storage.get("state")) === "running") {
+    let recovery: RecoveryAttempt | undefined;
+    if (job.recoveryDefinitionId !== undefined) {
+      recovery = await this.#openRecoveryAttempt(job);
+    } else if ((await storage.get("state")) === "running") {
       // Alarms never overlap, so a running state here means an earlier attempt died.
       await this.deps
         .ingest()
@@ -121,78 +129,86 @@ export class RunObjectCore {
         });
       await this.#finish();
       return;
+    } else {
+      await storage.transaction(async () => {
+        await Promise.all([
+          storage.put("state", "running"),
+          // Post-mortem watchdog: fires only if this invocation is killed before clearing it.
+          storage.setAlarm(this.#now() + boundedDuration(job) + 60_000),
+        ]);
+      });
     }
-    await storage.transaction(async () => {
-      await Promise.all([
-        storage.put("state", "running"),
-        // Post-mortem watchdog: fires only if this invocation is killed before clearing it.
-        storage.setAlarm(this.#now() + boundedDuration(job) + 60_000),
-      ]);
-    });
     const controller = new AbortController();
     this.#controller = controller;
+    let confirmed = false;
     try {
-      await runCloudflareJob({ ...this.deps, job, controller });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await this.deps
-        .ingest()
-        .reportFailure(job.launchId, `Run host error: ${message}`)
-        .catch(() => {});
+      confirmed = (await this.#runAttempt(job, controller, recovery)) !== "unconfirmed";
     } finally {
       this.#controller = undefined;
-      await this.#finish();
+      if (!recovery || confirmed) await this.#finish(recovery);
     }
   }
 
-  async #recoverableAlarm(job: RunJob): Promise<void> {
+  #openRecoveryAttempt(job: RunJob): Promise<RecoveryAttempt> {
     const { storage } = this.deps;
     const journal = new SqliteExecutionJournal(storage);
-    const { generation, deadlineAtMs } = await storage.transaction(async () => {
+    return storage.transaction(async () => {
       const attempt = journal.advance(this.#now() + boundedDuration(job));
       // The wake-up cannot overlap this alarm. It provides a short post-mortem delay.
       await storage.setAlarm(this.#now() + 2_000);
-      return attempt;
+      return { journal, ...attempt };
     });
-    const controller = new AbortController();
-    this.#controller = controller;
-    const ingest = (): Omit<StudioIngest, "admit"> => ({
-      appendEvents: (id, sequence, events) =>
-        this.deps.ingest().appendEvents(id, sequence, events, generation),
-      reportFailure: (id, message, reason) =>
-        this.deps.ingest().reportFailure(id, message, reason, generation),
-    });
-    try {
+  }
+
+  async #runAttempt(
+    job: RunJob,
+    controller: AbortController,
+    attempt?: RecoveryAttempt
+  ): ReturnType<typeof runCloudflareJob> {
+    const { placeChild } = this.deps;
+    const ingest = () => this.deps.ingest();
+    let ownership: HostedJobOwnership = { ingest };
+    if (attempt) {
+      const { generation, deadlineAtMs, journal } = attempt;
       // An unavailable Studio leaves the job and its wake intact.
-      const { admitted } = await this.deps.ingest().admit(job.launchId, generation);
-      if (admitted && this.#now() >= deadlineAtMs) {
+      const { admitted } = await ingest().admit(job.launchId, generation);
+      if (!admitted) return;
+      if (this.#now() >= deadlineAtMs) {
         await ingest().reportFailure(
           job.launchId,
           "The recovery deadline expired.",
-          "host_terminated"
+          "host_terminated",
+          generation
         );
-      } else if (admitted) {
-        const { placeChild } = this.deps;
-        const outcome = await runCloudflareJob({
-          ...this.deps,
-          job,
-          ingest,
-          controller,
-          placeChild: placeChild && ((...args) => placeChild(...args, generation)),
-          recovery: { journal: journal.open(job.launchId, generation), deadlineAtMs },
-        }).catch(async (error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
-          await ingest().reportFailure(job.launchId, `Run host error: ${message}`);
-        });
-        if (outcome === "unconfirmed") return;
+        return;
       }
-      await this.#finish({ journal, generation });
-    } finally {
-      this.#controller = undefined;
+      ownership = {
+        ingest: () => ({
+          appendEvents: (id, sequence, events) =>
+            ingest().appendEvents(id, sequence, events, generation),
+          reportFailure: (id, message, reason) =>
+            ingest().reportFailure(id, message, reason, generation),
+        }),
+        recovery: { journal: journal.open(job.launchId, generation), deadlineAtMs },
+      };
+    }
+    try {
+      return await runCloudflareJob({
+        ...this.deps,
+        ...ownership,
+        job,
+        controller,
+        placeChild: placeChild && ((...args) => placeChild(...args, attempt?.generation)),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const reported = ownership.ingest().reportFailure(job.launchId, `Run host error: ${message}`);
+      if (attempt) await reported;
+      else await reported.catch(() => {});
     }
   }
 
-  async #finish(owner?: { journal: SqliteExecutionJournal; generation: number }): Promise<void> {
+  async #finish(owner?: RecoveryAttempt): Promise<void> {
     const { storage } = this.deps;
     await storage.transaction(async () => {
       if (owner && !owner.journal.owns(owner.generation)) return;

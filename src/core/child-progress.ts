@@ -222,29 +222,47 @@ export function createSingleChildProgress(
   return childProgressHooks(singleChildProgress(plan, report));
 }
 
+export const CHILD_PROGRESS_TRACE_NAMES = [
+  "step.running",
+  "step.complete",
+  "step.skipped",
+  "step.cancelled",
+  "step.failed",
+] as const satisfies readonly PipelineTraceEvent["name"][];
+
+type ChildProgressTraceEvent = Extract<
+  PipelineTraceEvent,
+  { name: (typeof CHILD_PROGRESS_TRACE_NAMES)[number] }
+>;
+
+function isChildProgressTraceEvent(event: PipelineTraceEvent): event is ChildProgressTraceEvent {
+  return CHILD_PROGRESS_TRACE_NAMES.some((name) => name === event.name);
+}
+
+function traceProgressStatus(
+  step: PipelinePlanStep,
+  event: ChildProgressTraceEvent
+): ChildProgressStatus {
+  switch (event.name) {
+    case "step.running":
+      return { step, status: "running", ...event.payload };
+    case "step.complete":
+    case "step.skipped":
+      return { step, ...event.payload };
+    case "step.cancelled":
+    case "step.failed":
+      return { step, ...event.payload, error: event.error };
+  }
+}
+
 /** Project a remote child's recorded statuses through the same progress formatter. */
 export function createSingleChildTraceProgress(plan: PipelinePlan, report: ReportProgress) {
   const update = singleChildProgress(plan, report);
   const steps = new Map(plan.steps.map((step) => [step.id, step]));
   return (event: PipelineTraceEvent): void => {
-    if (!("stepId" in event) || event.stepId === undefined) return;
+    if (!isChildProgressTraceEvent(event)) return;
     const step = steps.get(event.stepId);
-    if (!step) return;
-    switch (event.name) {
-      case "step.running":
-        update({ step, status: "running", ...event.payload });
-        break;
-      case "step.complete":
-      case "step.skipped":
-        update({ step, ...event.payload });
-        break;
-      case "step.cancelled":
-      case "step.failed":
-        update({ step, ...event.payload, error: event.error });
-        break;
-      default:
-        break;
-    }
+    if (step) update(traceProgressStatus(step, event));
   };
 }
 

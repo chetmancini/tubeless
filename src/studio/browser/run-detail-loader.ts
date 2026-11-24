@@ -13,7 +13,6 @@ function sameRevision(left: Revision | undefined, right: Revision | undefined): 
   );
 }
 
-/** One run's detail reads: retain successes, coalesce revisions and retry missing/failed reads. */
 export class RunDetailLoader {
   #wanted: Revision | undefined;
   #loaded: Revision | undefined;

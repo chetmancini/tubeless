@@ -1,10 +1,5 @@
 import { HOSTED_FAILURE_REASONS } from "./run-contract.js";
-
 export const HOSTED_EXECUTIONS_PATH = "/api/executions/v1";
-
-export function isLaunchIdentifier(value: unknown): value is string {
-  return typeof value === "string" && /^[a-zA-Z0-9._:-]{1,200}$/.test(value);
-}
 
 export const HOSTED_EXECUTION_STATES = [
   "queued",

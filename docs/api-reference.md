@@ -13,18 +13,18 @@ Package: `tubeless`
 | `tubeless/agent/node`            | `./dist/agent/node.d.ts`                       | `52d41dc2c3cf9f36cc19b63d638350ea90e55b54db1ad8e8d5e89e158ea7851e` |                6 |
 | `tubeless/agent`                 | `./dist/agent/agent.d.ts`                      | `407a2193ae43c586cb5e016dc213fa57a1fca198491900e75a43c0490cdf31da` |               44 |
 | `tubeless`                       | `./dist/core/pipeline.d.ts`                    | `4c728a877e57f2dbb899c2e8a5f955d554246e8079ea308f4d50417c8cdbf685` |               86 |
-| `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `9a0cc5b107a28f9255ea124aaf0ce137efb5bf68c9a31864819aa8b4c03e56dc` |               33 |
+| `tubeless/cli`                   | `./dist/cli/cli.d.ts`                          | `eafeddb8f8a845002d6ef985c9d218eabfac513c3e79d16d3ac019803bc5c82f` |               33 |
 | `tubeless/batch`                 | `./dist/utilities/batch.d.ts`                  | `856e4e759f1a62a4edd210d0291bc8b3d82b2e3e983bd37d7348bfb2b8993156` |                7 |
 | `tubeless/node`                  | `./dist/node/node.d.ts`                        | `07ee53dc546fc384b08bbb58f25db947c6b5d9af21edc7f792bf714912e6c46d` |               16 |
 | `tubeless/rate-limit`            | `./dist/utilities/rate-limit.d.ts`             | `21223a0ce096d7eb188e7aa38e4e0df70081b086f899dfea825b429308f6910e` |                1 |
 | `tubeless/retry`                 | `./dist/utilities/retry.d.ts`                  | `ae8bdf0276b1930e4052f88a4912efe7dc6b857a8a51dcf2399eac0514fc9a0b` |                6 |
-| `tubeless/project`               | `./dist/project/project.d.ts`                  | `4bf216b4ea5238dd3a1c2507f0e4983177d43e181c79106a20d2988714bb3061` |                9 |
+| `tubeless/project`               | `./dist/project/project.d.ts`                  | `f0635520b1cf51faa43829561848bfb66e273026f6de7e6d95e8f99cb901a692` |                9 |
 | `tubeless/testing`               | `./dist/testing/testing.d.ts`                  | `b5e6fd0ddb963f65845cf238f364d8c25ba9d130371cec528453d7fbdb5cc257` |               16 |
 | `tubeless/tracing`               | `./dist/tracing/tracing.d.ts`                  | `3146f80a68bed8ed99ed2274c27a7978dcfbb1ecb7ec4b67099818ed841a0a4c` |                4 |
 | `tubeless/agent/openai`          | `./dist/agent/openai.d.ts`                     | `93c062bbb477e31880942c0b2cfa947c0457f0ffdd7010b3077e81a36d2026b0` |                2 |
 | `tubeless/agent/mcp`             | `./dist/agent/mcp.d.ts`                        | `fe8c6db54ca73f7a933ce66fa5fcda733b4044e23aefa1b060da8bcc86c6aad4` |                7 |
 | `tubeless/agent/anthropic`       | `./dist/agent/anthropic.d.ts`                  | `261bde00fe6bd3d5d65d3dff52a1d7bc35d4ec33e5379ad1ca38a7404f15c5c1` |                2 |
-| `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `20350e53d52f617c9e981705231cc7a97a933fa433f16a613fd9e4db2f0244a4` |               22 |
+| `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `52babc5a0a97d25705eee5b0291cf31b23bd6b97a4ad128de2ab34e19bb3ac6b` |               22 |
 | `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `175e32d0925ff8da30552a67cc0175fc9e5e8038639959f28be00ff52b144c40` |                4 |
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
 | `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
@@ -67,7 +67,7 @@ Package: `tubeless`
 | [`AgentModelResponse`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-types.ts#L13)                          | An untrusted decision and complete plain-data conversation, including any final answer.          |
 | [`AgentOutcome`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L83)                                | Input-order result or deliberately recoverable handler failure, including selected defaults.     |
 | [`AgentProjectInstruction`](https://github.com/chetmancini/tubeless/blob/main/src/agent/environment.ts#L9)                      | One scoped guidance file, loaded by the workspace that owns it.                                  |
-| [`AgentSession`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-session.ts#L26)                              | Sequential runs of one model-backed agent that continue a single conversation.                   |
+| [`AgentSession`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-session.ts#L27)                              | Sequential runs of one model-backed agent that continue a single conversation.                   |
 | [`AgentState`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L13)                                  | Deeply read-only view of the owned plain-data state supplied to agent callbacks.                 |
 | [`AgentTextEvent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/text-stream.ts#L8)                               | Ephemeral public text from one HTTP attempt; completed text is captured separately.              |
 | [`AgentTextSink`](https://github.com/chetmancini/tubeless/blob/main/src/agent/text-stream.ts#L19)                               | The destination owns filtering and I/O; its signal includes the provider deadline.               |
@@ -83,14 +83,14 @@ Package: `tubeless`
 | [`CodemodeReply`](https://github.com/chetmancini/tubeless/blob/main/src/agent/codemode-executor.ts#L44)                         | The value or failure of one script call, as JSON text crossing into the sandbox.                 |
 | [`CodemodeResult`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L38)                              | A code-mode script's JSON return value and bounded console lines.                                |
 | [`CodemodeSetting`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-types.ts#L51)                             | `true` or options enable code mode; `false` or omission advertises the registry.                 |
-| [`createAgentSession`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-session.ts#L50)                        | Continue one conversation across sequential runs of a `defineAgent` agent, such as chat prompts. |
+| [`createAgentSession`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent-session.ts#L51)                        | Continue one conversation across sequential runs of a `defineAgent` agent, such as chat prompts. |
 | [`createMemoryAgentCheckpointStore`](https://github.com/chetmancini/tubeless/blob/main/src/agent/memory-checkpoint-store.ts#L6) | In-memory checkpoint store with exclusive leases, useful for tests and embedded hosts.           |
 | [`DefaultAgentToolName`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tool-names.ts#L11)                 | A standard workspace tool an agent's setup may select.                                           |
 | [`DefaultAgentTools`](https://github.com/chetmancini/tubeless/blob/main/src/agent/default-tools.ts#L211)                        | The read, write, edit, bash, list and search tools included in every agent.                      |
-| [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L84)                                 | Prompt a model with `{ task }` and finish with the result schema, `{ answer }` by default.       |
+| [`defineAgent`](https://github.com/chetmancini/tubeless/blob/main/src/agent/model-agent.ts#L85)                                 | Prompt a model with `{ task }` and finish with the result schema, `{ answer }` by default.       |
 | [`defineAgentLoop`](https://github.com/chetmancini/tubeless/blob/main/src/agent/agent.ts#L70)                                   | Build a bounded in-process agent as an ordinary pipeline with one target, agent.                 |
-| [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L42)                                        | Declare a validated handler capability; tools skip live work in dry runs by default.             |
-| [`pipelineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/pipeline-tool.ts#L25)                              | Reuse a compiled child's options schema and exact final result.                                  |
+| [`defineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tools.ts#L38)                                        | Declare a validated handler capability; tools skip live work in dry runs by default.             |
+| [`pipelineTool`](https://github.com/chetmancini/tubeless/blob/main/src/agent/pipeline-tool.ts#L27)                              | Reuse a compiled child's options schema and exact final result.                                  |
 | [`plainAgentCheckpointCodec`](https://github.com/chetmancini/tubeless/blob/main/src/agent/checkpoint-codec.ts#L101)             | Lossless, tagged JSON codec for finite plain data; preserves undefined and sparse arrays.        |
 | [`ToolError`](https://github.com/chetmancini/tubeless/blob/main/src/agent/tool-error.ts#L2)                                     | A handler may throw this error to return a recoverable observation to its agent.                 |
 
@@ -105,7 +105,7 @@ Package: `tubeless`
 | [`ArtifactResult`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-artifacts.ts#L5)                 | Adapter result: the value flows to dependents; only artifact metadata is recorded.                                            |
 | [`ArtifactSaver`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-artifacts.ts#L17)                 | Application-owned write boundary returning a typed receipt and separate trace metadata.                                       |
 | [`createSteps`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-steps.ts#L73)                       | Create typed step constructors for one pipeline definition.                                                                   |
-| [`definePipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline.ts#L152)                         | Compile a typed step graph into a validated, executable pipeline.                                                             |
+| [`definePipeline`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline.ts#L147)                         | Compile a typed step graph into a validated, executable pipeline.                                                             |
 | [`ForEachItemFailurePolicy`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L200)    | What a `forEachPipeline` step does when an item's child run fails: - `"fail"` (default) runs every item, then fails the step. |
 | [`ForEachItemOutput`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L217)           | Output element of a `forEachPipeline` step: the item value, or its settled entry under `"collect"`.                           |
 | [`ForEachSettledItem`](https://github.com/chetmancini/tubeless/blob/main/src/core/pipeline-step-types.ts#L203)          | One item's outcome from `forEachPipeline` with `onItemFailure: "collect"`, in item order.                                     |
@@ -208,7 +208,7 @@ Package: `tubeless`
 | [`CliPathParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L64)                            | Declarative configuration for a filesystem path command parameter.                        |
 | [`CliStringParam`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L35)                          | Declarative configuration for a string command parameter.                                 |
 | [`CliValidationError`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-types.ts#L195)                     | Error thrown when command-line arguments fail schema validation.                          |
-| [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L310)                        | Create a typed command from a declarative parameter schema and run handler.               |
+| [`defineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-command.ts#L272)                        | Create a typed command from a declarative parameter schema and run handler.               |
 | [`definePipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L294)       | Turn a pipeline into a CLI; infer domain flags from its Standard JSON Schema input.       |
 | [`DefinePipelineCommandConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L150) | Configuration for a typed pipeline command.                                               |
 | [`PipelineCliParseResult`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L57)       | Parse result returned by commands created with `definePipelineCommand`.                   |
@@ -216,10 +216,10 @@ Package: `tubeless`
 | [`PipelineCommand`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L63)              | Typed CLI facade over a pipeline with planning and graph helpers.                         |
 | [`PipelineCommandHookConfig`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L103)   | Static or lazily constructed lifecycle hooks for a pipeline command.                      |
 | [`PipelineCommandHookContext`](https://github.com/chetmancini/tubeless/blob/main/src/cli/cli-pipeline-command.ts#L94)   | Parsed values and CLI services passed to a pipeline hook factory.                         |
-| [`PipelineReporterConfig`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L49)  | Rendering and output settings for automatic, plain, or interactive reporting.             |
-| [`PipelineReporterMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L31)    | Rendering mode selected for pipeline lifecycle reporting.                                 |
+| [`PipelineReporterConfig`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L53)  | Rendering and output settings for automatic, plain, or interactive reporting.             |
+| [`PipelineReporterMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L35)    | Rendering mode selected for pipeline lifecycle reporting.                                 |
 | [`ReporterColorMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L7)                    | Policy for ANSI color in terminal reporter output.                                        |
-| [`ReporterOutput`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L35)          | Writable terminal-like destination used by the interactive reporter.                      |
+| [`ReporterOutput`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/interactive-reporter.ts#L39)          | Writable terminal-like destination used by the interactive reporter.                      |
 | [`ReporterSymbolMode`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L9)                   | Symbol set used for step lifecycle markers in reporter output.                            |
 | [`ReporterTerminalCapabilities`](https://github.com/chetmancini/tubeless/blob/main/src/reporter/reporter.ts#L12)        | Detected or caller-overridden terminal rendering capabilities.                            |
 
@@ -279,13 +279,13 @@ Package: `tubeless`
 | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [`CompiledPipelineDocument`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L15) | Immutable compiled pipelines and descriptive metadata from a parsed document.     |
 | [`compilePipelineDocument`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-compiler.ts#L26)  | Compile parsed YAML or JSON into ordinary pipelines.                              |
-| [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L81)            | Register each pipeline once, directly or through its explicit command.            |
-| [`PipelineDocumentError`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L72)    | A document shape or reference error; graph errors remain PipelineDefinitionError. |
+| [`defineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L80)            | Register each pipeline once, directly or through its explicit command.            |
+| [`PipelineDocumentError`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L78)    | A document shape or reference error; graph errors remain PipelineDefinitionError. |
 | [`PipelineDocumentMetadata`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-document.ts#L11) | Optional human-facing document information, never execution policy.               |
-| [`PipelineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L62)          | Immutable named pipeline collection, preserving each pipeline's exact type by id. |
-| [`ProjectOptions`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L50)           | Optional project presentation, execution directory, and launched-run tracing.     |
+| [`PipelineProject`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L61)          | Immutable named pipeline collection, preserving each pipeline's exact type by id. |
+| [`ProjectOptions`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L49)           | Optional project presentation, execution directory, and launched-run tracing.     |
 | [`ProjectRegistry`](https://github.com/chetmancini/tubeless/blob/main/src/project/project-registry.ts#L79)          | Only explicitly registered functions and schemas can be referenced by a document. |
-| [`ProjectTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L42)      | Context for one CLI, Studio, or hosted command launch.                            |
+| [`ProjectTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/project/pipeline-project.ts#L41)      | Context for one CLI, Studio, or hosted command launch.                            |
 
 ### `tubeless/testing`
 
@@ -297,16 +297,16 @@ Package: `tubeless`
 | [`AgentTranscriptCollectorOptions`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-transcript.ts#L17) | Bounds on retained evaluation evidence.                                                     |
 | [`createAgentTestWorkspace`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-workspace.ts#L17)         | Create text fixtures in an owned temporary directory.                                       |
 | [`createAgentTranscriptCollector`](https://github.com/chetmancini/tubeless/blob/main/src/testing/agent-transcript.ts#L23)  | Collect owned records without loading agent execution or a model provider.                  |
-| [`createPipelineTestRuntime`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L172)               | Create a deterministic runtime without installing a test framework or fake-timer package.   |
+| [`createPipelineTestRuntime`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L156)               | Create a deterministic runtime without installing a test framework or fake-timer package.   |
 | [`overrideStep`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L33)                             | Supply a resolved handler output, before the step's outputSchema validation/transformation. |
-| [`PipelineTestClock`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L101)                       | Monotonic caller-controlled clock used by a pipeline test runtime.                          |
-| [`PipelineTestLogEntry`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L94)                     | One silent logger call captured by a pipeline test runtime.                                 |
-| [`PipelineTestLogLevel`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L91)                     | Log levels captured by a pipeline test runtime.                                             |
+| [`PipelineTestClock`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L85)                        | Monotonic caller-controlled clock used by a pipeline test runtime.                          |
+| [`PipelineTestLogEntry`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L78)                     | One silent logger call captured by a pipeline test runtime.                                 |
+| [`PipelineTestLogLevel`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L75)                     | Log levels captured by a pipeline test runtime.                                             |
 | [`PipelineTestOverride`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L28)                     | A typed step/value pair created by overrideStep; only accepted by test runs.                |
 | [`PipelineTestRunControls`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L41)                  | Test-only controls.                                                                         |
-| [`PipelineTestRuntime`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L125)                     | Framework-neutral runtime, observations, and typed execution helpers for pipeline tests.    |
-| [`PipelineTestRuntimeOptions`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L115)              | Clock, directory, and sleep overrides for a pipeline test runtime.                          |
-| [`PipelineTestSleep`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L108)                       | Optional replacement for the default immediate, clock-advancing test sleep.                 |
+| [`PipelineTestRuntime`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L109)                     | Framework-neutral runtime, observations, and typed execution helpers for pipeline tests.    |
+| [`PipelineTestRuntimeOptions`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L99)               | Clock, directory, and sleep overrides for a pipeline test runtime.                          |
+| [`PipelineTestSleep`](https://github.com/chetmancini/tubeless/blob/main/src/testing/testing.ts#L92)                        | Optional replacement for the default immediate, clock-advancing test sleep.                 |
 
 ### `tubeless/tracing`
 
@@ -321,8 +321,8 @@ Package: `tubeless`
 
 | Symbol                                                                                            | Description                                                                                   |
 | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L63)        | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
-| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L22) | Responses transport settings; credentials are resolved only when a decision executes.         |
+| [`openaiModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L62)        | Create a dependency-free OpenAI Responses model with native history and automatic compaction. |
+| [`OpenAIModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/openai.ts#L21) | Responses transport settings; credentials are resolved only when a decision executes.         |
 
 ### `tubeless/agent/mcp`
 
@@ -340,28 +340,28 @@ Package: `tubeless`
 
 | Symbol                                                                                                  | Description                                                                                     |
 | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L84)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
-| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L28) | Messages API transport settings; credentials are resolved only when a decision executes.        |
+| [`anthropicModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L87)        | Create a dependency-free Anthropic Messages model with native history and on-demand compaction. |
+| [`AnthropicModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/anthropic.ts#L31) | Messages API transport settings; credentials are resolved only when a decision executes.        |
 
 ### `tubeless/cloudflare`
 
 | Symbol                                                                                                                                   | Description                                                                                     |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L116)                                   | Worker handler and Durable Object classes that a Worker entry exports.                          |
-| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L83)                             | Configure deployment identity, application tracing and the cooperative run deadline.            |
-| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L110)                    | Durable Object class to export from the Worker entry under its binding's export name.           |
-| [`CloudflareExecutionStatus`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/execution-status.ts#L32)                     | Durable status of one hosted execution, independent of its runtime run ID.                      |
+| [`CloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L111)                                   | Worker handler and Durable Object classes that a Worker entry exports.                          |
+| [`CloudflareAppOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L78)                             | Configure deployment identity, application tracing and the cooperative run deadline.            |
+| [`CloudflareDurableObjectClass`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L105)                    | Durable Object class to export from the Worker entry under its binding's export name.           |
+| [`CloudflareExecutionStatus`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/execution-status.ts#L27)                     | Durable status of one hosted execution, independent of its runtime run ID.                      |
 | [`CloudflareLaunchActor`](https://github.com/chetmancini/tubeless/blob/main/src/studio/shared/launch-metadata.ts#L27)                    | User or service identity verified by the host or supplied by trusted application code.          |
-| [`CloudflareLaunchOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L74)                          | Reuse the same key for every delivery of one logical submission.                                |
-| [`CloudflareLaunchResult`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L20)                        | Admission is distinct from execution start and successful pipeline completion.                  |
-| [`CloudflareLaunchStatus`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L40)                        | Current launch bookkeeping; inspect the linked run for its pipeline outcome.                    |
+| [`CloudflareLaunchOptions`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L69)                          | Reuse the same key for every delivery of one logical submission.                                |
+| [`CloudflareLaunchResult`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L21)                        | Admission is distinct from execution start and successful pipeline completion.                  |
+| [`CloudflareLaunchStatus`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L41)                        | Current launch bookkeeping; inspect the linked run for its pipeline outcome.                    |
 | [`CloudflareLaunchTrigger`](https://github.com/chetmancini/tubeless/blob/main/src/studio/shared/launch-metadata.ts#L44)                  | Origin of a deliberate launch submission.                                                       |
-| [`CloudflareLaunchValues`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L17)                        | Structured command parameters, including built-in execution controls.                           |
-| [`CloudflareTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L69)                           | Context for one admitted Cloudflare launch, including this Durable Object's bindings.           |
+| [`CloudflareLaunchValues`](https://github.com/chetmancini/tubeless/blob/main/src/hosting/launch-admission.ts#L18)                        | Structured command parameters, including built-in execution controls.                           |
+| [`CloudflareTraceContext`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L64)                           | Context for one admitted Cloudflare launch, including this Durable Object's bindings.           |
 | [`CloudflareTranscriptIngest`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-transcript.ts#L9)             | Trusted Studio Durable Object capability; keep this binding on the server.                      |
-| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L105)                                | Worker module handler to use as the Worker entry's default export.                              |
+| [`CloudflareWorker`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L100)                                | Worker module handler to use as the Worker entry's default export.                              |
 | [`createCloudflareAgentTranscriptWriter`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-transcript.ts#L15) | An explicit agent sink.                                                                         |
-| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L197)                             | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
+| [`createCloudflareApp`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare.ts#L192)                             | Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects.       |
 | [`createR2CacheStore`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L25)                         | Step cache entries in R2.                                                                       |
 | [`createWorkerLoaderCodemodeExecutor`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-codemode.ts#L105)     | Run each code-mode script in a fresh Cloudflare Dynamic Worker from a `worker_loaders` binding. |
 | [`jsonCacheCodec`](https://github.com/chetmancini/tubeless/blob/main/src/cloudflare/cloudflare-cache.ts#L51)                             | Lossless JSON codec for Workers, where the default V8 codec is unavailable.                     |
@@ -409,12 +409,12 @@ Package: `tubeless`
 
 | Symbol                                                                                                            | Description                                                                                    |
 | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`decodeNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L277)  | Decode the bounded command contract directly; arbitrary argv and execution kinds are rejected. |
-| [`isNodeCheckReportPath`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L95) | Report files are confined to one dedicated directory; no absolute or traversing paths.         |
+| [`decodeNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L281)  | Decode the bounded command contract directly; arbitrary argv and execution kinds are rejected. |
+| [`isNodeCheckReportPath`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L99) | Report files are confined to one dedicated directory; no absolute or traversing paths.         |
 | [`NodeCheckCommand`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L19)      | One resolved native command, with metadata appropriate to its execution kind.                  |
 | [`NodeCheckConfig`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L2)        | Portable, deliberately restricted Node 24 / Bun 1.4.4 check recipe.                            |
 | [`NodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L26)         | All commands, dependency edges and script bodies are part of admission identity.               |
-| [`resolveNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L186) | Resolve data only.                                                                             |
+| [`resolveNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L190) | Resolve data only.                                                                             |
 
 ### `tubeless/reproduction-manifest`
 

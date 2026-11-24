@@ -1,6 +1,6 @@
 import { failExecutionJournal } from "../core/execution-journal.js";
 import { JOURNAL_OUTCOME_UNKNOWN } from "../tracing/tracing-constants.js";
-import { digestCollectorBody } from "../hosting/collector-protocol.js";
+import { sha256Hex } from "../utilities/sha256.js";
 import { createSingleChildTraceProgress } from "../core/child-progress.js";
 import type { StoredPipelineEvent } from "../run-store/run-store.js";
 import type { ChildPlacement } from "../core/child-placement.js";
@@ -14,10 +14,12 @@ import {
 import { abortableSleep, awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
 import { withRetry } from "../utilities/retry.js";
 
-export interface RunnerStageObservation {
-  readonly result?: RunnerStageResult;
+export type RunnerStageObservation = {
   readonly events: readonly StoredPipelineEvent[];
-}
+} & (
+  | { readonly hasMore: true; readonly result?: never }
+  | { readonly hasMore?: false; readonly result?: RunnerStageResult }
+);
 
 export interface RunnerStageStore {
   enqueueStage(job: RunnerJob & { kind: "stage" }, generation?: number): Promise<void>;
@@ -80,7 +82,7 @@ export function placeCloudflareChild(options: {
         id:
           generation === undefined
             ? crypto.randomUUID()
-            : await digestCollectorBody(new TextEncoder().encode(JSON.stringify(journalPath))),
+            : await sha256Hex(new TextEncoder().encode(JSON.stringify(journalPath))),
         launchId: options.launchId,
         deploymentId: options.deploymentId,
         pipelineId: pipeline.id,
@@ -141,6 +143,7 @@ export function placeCloudflareChild(options: {
             return result.report;
           }
           delayMs = 500;
+          if (observation.hasMore) continue;
           await abortableSleep(delayMs, context.signal, "Wait for remote stage");
         }
       } finally {

@@ -12,7 +12,7 @@ import {
   upgradeSqliteRunStore,
 } from "./run-store-migrate.js";
 import {
-  RUN_EVENT_DROP_TRIGGER_STATEMENTS,
+  RUN_EVENT_CLEAR_STATEMENTS,
   RUN_EVENT_INSERT_SQL,
   RUN_EVENT_STORE_VERSION,
   RUN_EVENT_TABLE_STATEMENTS,
@@ -366,8 +366,6 @@ export async function openSqlitePipelineRunStore(
         const { sql, params } = runEventListQuery(query);
         const rows = statement(database, sql).all(...params);
         if (legacyAttributes) return (rows as LegacyAttributeRow[]).map(storedLegacyAttributeEvent);
-        // SAFETY: The SELECT * columns match the RunEventRecord interface exactly
-        // (the table schema is owned by run-store-sql.ts), so each result row is one.
         return (rows as RunEventRecord[]).map(storedRunEvent);
       });
     },
@@ -392,9 +390,7 @@ export async function openSqlitePipelineRunStore(
       sqliteTransaction(database, () => {
         // The database guard also protects content from older, event-only clear implementations.
         clearSqliteAgentTranscripts(database);
-        database.exec(`${sqlScript(RUN_EVENT_DROP_TRIGGER_STATEMENTS)}
-DELETE FROM pipeline_run_events;
-${sqlScript(RUN_EVENT_TRIGGER_STATEMENTS)}`);
+        database.exec(sqlScript(RUN_EVENT_CLEAR_STATEMENTS));
       });
       try {
         database.exec("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");

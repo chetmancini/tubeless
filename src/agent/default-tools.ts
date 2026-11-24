@@ -30,6 +30,8 @@ import {
   MAX_SEARCH_SNIPPET_BYTES,
 } from "./default-tool-limits.js";
 
+const fileLimit = `${MAX_FILE_BYTES / (1024 * 1024)} MiB`;
+const outputLimit = `${MAX_OUTPUT_BYTES / 1024} KiB`;
 const path = wireString({ maxLength: 4096 });
 function utf8Text(maxBytes: number, allowEmpty = true) {
   return wireRefine(wireString({ allowEmpty, maxLength: maxBytes }), (value) => {
@@ -100,7 +102,7 @@ function search(input: Parameters<AgentEnvironment["search"]>[0], context: Agent
 export const defaultTools = Object.freeze({
   read: defineToolWithActivity({
     replay: "safe",
-    description: `Read a UTF-8 file up to 1 MiB. Paths resolve from the run cwd. startLine is 1-based (default 1); maxLines defaults to ${DEFAULT_READ_LINES}. Output is capped at 16 KiB. Use null for defaults.`,
+    description: `Read a UTF-8 file up to ${fileLimit}. Paths resolve from the run cwd. startLine is 1-based (default 1); maxLines defaults to ${DEFAULT_READ_LINES}. Output is capped at ${outputLimit}. Use null for defaults.`,
     inputSchema: toolObject({
       path,
       startLine: optionalToolField(positive(Number.MAX_SAFE_INTEGER)),
@@ -123,8 +125,7 @@ export const defaultTools = Object.freeze({
         : `lines ${result.startLine}-${result.endLine} of ${result.totalLines}${result.truncated ? ", truncated" : ""}`,
   }),
   write: defineToolWithActivity({
-    description:
-      "Create or replace a UTF-8 file (up to 1 MiB), creating parent directories and following symlinks, including missing targets. Paths resolve from the run cwd. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
+    description: `Create or replace a UTF-8 file (up to ${fileLimit}), creating parent directories and following symlinks, including missing targets. Paths resolve from the run cwd. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.`,
     inputSchema: toolObject({ path, content: text }),
     outputSchema: written,
     run: (input, context) =>
@@ -133,8 +134,7 @@ export const defaultTools = Object.freeze({
     summarize: (result) => `${result.bytes} bytes`,
   }),
   edit: defineToolWithActivity({
-    description:
-      "Replace one exact occurrence of oldText with newText in a UTF-8 file up to 1 MiB. Missing or ambiguous matches fail without writing. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.",
+    description: `Replace one exact occurrence of oldText with newText in a UTF-8 file up to ${fileLimit}. Missing or ambiguous matches fail without writing. Atomic replacement requires a writable parent directory and permission to preserve existing ownership. Skipped in dry runs.`,
     inputSchema: toolObject({
       path,
       oldText: utf8Text(MAX_FILE_BYTES, false),
@@ -147,7 +147,7 @@ export const defaultTools = Object.freeze({
     summarize: (result) => `${result.bytes} bytes`,
   }),
   bash: defineToolWithActivity({
-    description: `Run bash in the run cwd or a supplied cwd. Return stdout, stderr, exitCode, signal, timedOut and truncated. timeoutMs defaults to ${DEFAULT_BASH_TIMEOUT_MS} (maximum ${MAX_BASH_TIMEOUT_MS}); combined output is capped at 16 KiB. Use null for defaults. Skipped in dry runs.`,
+    description: `Run bash in the run cwd or a supplied cwd. Return stdout, stderr, exitCode, signal, timedOut and truncated. timeoutMs defaults to ${DEFAULT_BASH_TIMEOUT_MS} (maximum ${MAX_BASH_TIMEOUT_MS}); combined output is capped at ${outputLimit}. Use null for defaults. Skipped in dry runs.`,
     inputSchema: toolObject({
       command: wireString({ maxLength: 32_768 }),
       cwd: optionalToolField(path),
@@ -174,7 +174,7 @@ export const defaultTools = Object.freeze({
   }),
   list: defineToolWithActivity({
     replay: "safe",
-    description: `List up to ${MAX_LIST_ENTRIES} entries in filename order, defaulting to the run cwd. Retained names are capped at 16 KiB. Return names and file/directory/symlink kinds. Use null for the default path.`,
+    description: `List up to ${MAX_LIST_ENTRIES} entries in filename order, defaulting to the run cwd. Retained names are capped at ${outputLimit}. Return names and file/directory/symlink kinds. Use null for the default path.`,
     inputSchema: toolObject({ path: optionalToolField(path) }),
     outputSchema: toolObject({
       path,
@@ -189,7 +189,7 @@ export const defaultTools = Object.freeze({
   }),
   search: defineToolWithActivity({
     replay: "safe",
-    description: `Search for literal, case-sensitive text in a file or directory (default run cwd), traversing entries in filename order. Skip .git, node_modules and nested symlinks. Count binary/oversized files (over 1 MiB) and unavailable descendants in skippedFiles. Examine at most ${MAX_SEARCH_ENTRIES} entries and ${MAX_SEARCH_DEPTH} directory levels; return up to ${MAX_SEARCH_MATCHES} matching lines and 16 KiB. Long-line snippets shift to the match and cap at ${MAX_SEARCH_SNIPPET_BYTES} bytes. Use null for the default path.`,
+    description: `Search for literal, case-sensitive text in a file or directory (default run cwd), traversing entries in filename order. Skip .git, node_modules and nested symlinks. Count binary/oversized files (over ${fileLimit}) and unavailable descendants in skippedFiles. Examine at most ${MAX_SEARCH_ENTRIES} entries and ${MAX_SEARCH_DEPTH} directory levels; return up to ${MAX_SEARCH_MATCHES} matching lines and ${outputLimit}. Long-line snippets shift to the match and cap at ${MAX_SEARCH_SNIPPET_BYTES} bytes. Use null for the default path.`,
     inputSchema: toolObject({
       query: wireString({ maxLength: 4096 }),
       path: optionalToolField(path),

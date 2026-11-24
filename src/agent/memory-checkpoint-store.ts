@@ -1,4 +1,4 @@
-import { agentError } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
 import type { AgentCheckpointStore } from "./checkpoint-types.js";
 import { checkCheckpointKey } from "./checkpoint-key.js";
 

@@ -1,6 +1,8 @@
 import type { PipelineStepOutputSource } from "../../../tracing/tracing-constants.js";
 import type { ComponentChildren } from "preact";
 import type { GraphStep } from "../graph/input.js";
+import { producedStepOutput, tripsFailureGate } from "../step-outcome.js";
+import { progressWidthClass, STUDIO_PROGRESS_MAX_PERCENT } from "../../shared/progress.js";
 import { StepArtifacts } from "./artifacts.js";
 
 export const shortId = (id: string) => (id.length > 24 ? id.slice(0, 12) + "…" + id.slice(-7) : id);
@@ -97,8 +99,6 @@ function StepStatusIcon({ value }: { value: string }) {
   );
 }
 
-const settled = (status: string | undefined) => status === "failed" || status === "cancelled";
-
 /**
  * Explain a recorded skip from the step's own reason and the recorded statuses of
  * its planned inputs. Traces keep the reason, not the triggering dependency, so the
@@ -109,7 +109,7 @@ export function skipExplanation(step: GraphStep, steps: readonly GraphStep[]): s
   const statusOf = (id: string) => steps.find((candidate) => candidate.id === id)?.status;
   switch (step.skipReason) {
     case "failed-dependency": {
-      const gate = step.skipAfterFailureOf?.find((id) => settled(statusOf(id)));
+      const gate = step.skipAfterFailureOf?.find((id) => tripsFailureGate(statusOf(id)));
       return gate
         ? `Skipped because failure gate “${gate}” ${statusOf(gate)}.`
         : "Skipped because a failure gate failed or was cancelled.";
@@ -117,11 +117,7 @@ export function skipExplanation(step: GraphStep, steps: readonly GraphStep[]): s
     case "unmet-dependency": {
       const input = step.dependencies?.find((id) => {
         const candidate = steps.find((entry) => entry.id === id);
-        return (
-          candidate &&
-          candidate.status !== "completed" &&
-          !(candidate.status === "skipped" && candidate.skipReason === "policy")
-        );
+        return candidate && !producedStepOutput(candidate);
       });
       return input
         ? `Skipped because required input “${input}” was ${statusOf(input)}.`
@@ -151,9 +147,9 @@ export function StepRow({ step, steps = [], selected = false, onSelect }: StepRo
   const status = step.status ?? "planned";
   const progressTotal = step.progress?.total;
   const progressWidth = progressTotal
-    ? Math.max(0, Math.min(100, ((step.progress?.completed ?? 0) / progressTotal) * 100))
+    ? ((step.progress?.completed ?? 0) / progressTotal) * STUDIO_PROGRESS_MAX_PERCENT
     : status === "completed"
-      ? 100
+      ? STUDIO_PROGRESS_MAX_PERCENT
       : 18;
   const nested = step.nestedPipeline;
   const nestedCount = nested ? (nested.stepCount ?? nested.stepIds.length) : 0;
@@ -213,7 +209,7 @@ export function StepRow({ step, steps = [], selected = false, onSelect }: StepRo
       {step.progress && (
         <>
           <div class="progress">
-            <i class={`w${Math.round(progressWidth)}`} />
+            <i class={progressWidthClass(progressWidth)} />
           </div>
           <div class="progress-copy">
             {step.progress.message ||

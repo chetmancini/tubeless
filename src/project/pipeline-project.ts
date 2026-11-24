@@ -26,7 +26,6 @@ type PipelineIds<TPipelines extends readonly AnyProjectPipeline[]> = {
     : never;
 };
 
-// Distribute over pipeline candidates and retain those whose possible ids overlap the lookup.
 type PipelineById<
   TPipeline extends AnyProjectPipeline,
   TId extends string,

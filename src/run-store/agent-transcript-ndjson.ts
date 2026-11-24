@@ -5,7 +5,11 @@ import {
   type AgentTranscriptRecord,
   type AgentTranscriptReader,
 } from "../tracing/agent-transcript.js";
-import { transcriptPageQuery, transcriptRecordingStatus } from "./agent-transcript-page.js";
+import {
+  sameTranscriptRun,
+  transcriptPageQuery,
+  transcriptRecordingStatus,
+} from "./agent-transcript-page.js";
 import { readNdjsonArtifact } from "./ndjson-artifact.js";
 
 /** Open a validated, read-only snapshot. Later appends require reopening the artifact. */
@@ -17,12 +21,7 @@ export async function openNdjsonAgentTranscriptReader(
   for (const record of records) {
     const run = runs.get(record.runId) ?? new Map();
     const first = run.values().next().value;
-    if (
-      first &&
-      (first.agentId !== record.agentId ||
-        first.parentRunId !== record.parentRunId ||
-        first.dryRun !== record.dryRun)
-    )
+    if (first && !sameTranscriptRun(first, record))
       throw new Error("Transcript run identity changes within the artifact");
     const previous = run.get(record.sequence);
     if (previous && JSON.stringify(previous) !== JSON.stringify(record))

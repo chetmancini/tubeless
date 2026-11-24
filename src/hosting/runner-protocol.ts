@@ -26,11 +26,13 @@ import {
   wireRefine,
   wireString,
 } from "../tracing/wire-schema.js";
-import { isLaunchIdentifier } from "./execution-status.js";
+import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 import type { RunJob } from "./run-contract.js";
 
 export const RUNNER_PATH = "/api/runner/v1";
 export const RUNNER_VALUE_BYTES = 65_536;
+export const RUNNER_REPLY_BYTES = RUNNER_VALUE_BYTES + 2_048;
+export const MAX_RUNNER_MANIFEST_PIPELINES = 200;
 export const RUNNER_LEASE_MS = 15_000;
 export const RUNNER_HEARTBEAT_MS = 2_000;
 export const RUNNER_DRAIN_MS = 5_000;
@@ -79,11 +81,36 @@ export function parseRunnerManifest(value: unknown): ReadonlyMap<string, string>
   if (!isJsonObject(value)) throw new TypeError("Invalid runner manifest.");
   const entries = Object.entries(value);
   if (
-    entries.length > 200 ||
+    entries.length > MAX_RUNNER_MANIFEST_PIPELINES ||
     entries.some(([id, definition]) => !isAuthoredPipelineId(id) || !isLaunchIdentifier(definition))
   )
     throw new TypeError("Invalid runner manifest.");
   return new Map(entries as [string, string][]);
+}
+
+export function decodeRunnerClaim(
+  value: unknown,
+  deploymentId: string,
+  manifest: Readonly<Record<string, string>>
+): RunnerClaim {
+  if (
+    !isJsonObject(value) ||
+    !isJsonObject(value.job) ||
+    !isLaunchIdentifier(value.token) ||
+    typeof value.remainingMs !== "number" ||
+    !Number.isSafeInteger(value.remainingMs) ||
+    value.remainingMs < 1 ||
+    !(value.job.kind === "root" || value.job.kind === "stage") ||
+    value.job.deploymentId !== deploymentId ||
+    !isLaunchIdentifier(value.job.id) ||
+    !isLaunchIdentifier(value.job.launchId) ||
+    !isAuthoredPipelineId(value.job.pipelineId) ||
+    !Object.hasOwn(manifest, value.job.pipelineId) ||
+    value.job.definitionId !== manifest[value.job.pipelineId]
+  )
+    throw new Error("The Worker returned an incompatible runner claim.");
+  // The authenticated host supplies the pinned job; execution validates the command inputs.
+  return value as unknown as RunnerClaim;
 }
 
 export function boundedRunnerJson(value: unknown, label: string): string {

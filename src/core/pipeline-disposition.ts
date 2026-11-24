@@ -1,16 +1,21 @@
 import type { CompiledStep } from "./pipeline-graph.js";
-import type { PipelineStepReport, PipelineStepSkipReason } from "./pipeline-types.js";
+import type { PipelineStepReportStatus, PipelineStepSkipReason } from "./pipeline-types.js";
 
-function isRequiredDependencyMet(report: PipelineStepReport | undefined): boolean {
-  if (!report) return false;
-  if (report.status === "completed") return true;
-  return report.status === "skipped" && report.reason === "policy";
+export type DependencyState =
+  | { status: Exclude<PipelineStepReportStatus, "skipped"> }
+  | { status: "skipped"; reason: PipelineStepSkipReason };
+
+export function hasPublishedOutput(state: DependencyState | undefined): boolean {
+  return (
+    state?.status === "completed" || (state?.status === "skipped" && state.reason === "policy")
+  );
 }
 
 type StepDispositionInput<TOptions extends object> = {
   dryRun: boolean;
+  hasReplacementOutput?: boolean;
   selected: boolean;
-  reportsByStepId: ReadonlyMap<string, PipelineStepReport>;
+  dependencyStates: ReadonlyMap<string, DependencyState>;
   step: CompiledStep<TOptions>;
 };
 
@@ -20,7 +25,6 @@ type StepDisposition =
       kind: "skip";
       reason: PipelineStepSkipReason;
       dependencyId?: string;
-      message?: string;
     };
 
 /**
@@ -32,14 +36,15 @@ type StepDisposition =
 export function decideStepDisposition<TOptions extends object>(
   input: StepDispositionInput<TOptions>
 ): StepDisposition {
-  const { dryRun, selected, reportsByStepId, step } = input;
+  const { dryRun, selected, hasReplacementOutput, dependencyStates, step } = input;
 
   if (!selected) {
     return { kind: "skip", reason: "filtered" };
   }
+  if (hasReplacementOutput) return { kind: "run" };
 
   const unsuccessfulAncestor = step.skipAfterFailureOf.find((dep) => {
-    const status = reportsByStepId.get(dep.id)?.status;
+    const status = dependencyStates.get(dep.id)?.status;
     return status === "failed" || status === "cancelled";
   });
   if (unsuccessfulAncestor) {
@@ -51,7 +56,7 @@ export function decideStepDisposition<TOptions extends object>(
   }
 
   const unmetDependency = step.dependsOn.find(
-    (dep) => !isRequiredDependencyMet(reportsByStepId.get(dep.id))
+    (dep) => !hasPublishedOutput(dependencyStates.get(dep.id))
   );
   if (unmetDependency) {
     return {

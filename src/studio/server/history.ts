@@ -102,10 +102,6 @@ export class StudioHistory {
       roots = this.#search.roots;
     }
     const source = this.source;
-    const pageOffset = Math.min(
-      offset,
-      Math.max(0, Math.ceil(roots.length / STUDIO_HISTORY_PAGE_SIZE) - 1) * STUDIO_HISTORY_PAGE_SIZE
-    );
     return {
       activeRunCount: source.activeRunCount,
       completedRunCount: source.completedRunCount,
@@ -117,11 +113,10 @@ export class StudioHistory {
       eventCount: this.#eventCount,
       rootRunCount: this.#roots.length,
       matchingRootCount: roots.length,
-      offset: pageOffset,
       definitions: this.#definitions,
       pipelines: this.#pipelines,
       liveRunIds: [],
-      runs: roots.slice(pageOffset, pageOffset + STUDIO_HISTORY_PAGE_SIZE),
+      ...pageHistory(roots, offset),
       selectedRun: selectedRunId ? this.#summaries.get(selectedRunId) : undefined,
     };
   }
@@ -188,18 +183,19 @@ export class StudioHistory {
         run.pipelineId === pipelineId && run.definitionIdentity?.definitionId === definitionId
     );
     if (!runs.length) return undefined;
-    const pageOffset = Math.min(
-      offset,
-      Math.max(0, Math.ceil(runs.length / STUDIO_HISTORY_PAGE_SIZE) - 1) * STUDIO_HISTORY_PAGE_SIZE
-    );
+    const page = pageHistory(runs, offset);
     return {
-      runs: runs
-        .slice(pageOffset, pageOffset + STUDIO_HISTORY_PAGE_SIZE)
-        .map((run) => this.#summaries.get(run.runId)!),
-      offset: pageOffset,
+      runs: page.runs.map((run) => this.#summaries.get(run.runId)!),
+      offset: page.offset,
       runCount: runs.length,
     };
   }
+}
+
+function pageHistory<T>(runs: readonly T[], requestedOffset: number) {
+  const lastPage = Math.max(0, Math.ceil(runs.length / STUDIO_HISTORY_PAGE_SIZE) - 1);
+  const offset = Math.min(requestedOffset, lastPage * STUDIO_HISTORY_PAGE_SIZE);
+  return { offset, runs: runs.slice(offset, offset + STUDIO_HISTORY_PAGE_SIZE) };
 }
 
 const matchingRoots = (roots: readonly StoredRunSummary[], matches: ReadonlySet<string>) =>

@@ -1,6 +1,7 @@
-import { formatDurationMs } from "./reporter.js";
+import { formatDurationMs } from "./reporter-format.js";
 
 export const SPINNER_TOKEN = "\u0001";
+export const MIN_LOG_PANE_COLUMNS = 120;
 const ELAPSED_TOKEN_START = "\u0002";
 const ELAPSED_TOKEN_END = "\u0003";
 const SHIMMER_TOKEN_START = "\u0004";
@@ -142,7 +143,7 @@ export function paintLiveLines(
   logPane?: readonly string[]
 ): string[] {
   const painted = lines.map((line) => replaceLiveTokens(line, spinner, nowMs, color));
-  if (!logPane || !columns || columns < 120) {
+  if (!logPane || !columns || columns < MIN_LOG_PANE_COLUMNS) {
     return painted.map((line) => fitLine(line, columns, unicode));
   }
   const paneWidth = Math.min(60, Math.floor(columns * 0.4));
@@ -210,7 +211,6 @@ export class TickerFrame {
 
   private paintedRows(columns: number | undefined): number {
     // Resizing can reflow each previously painted line across several rows.
-    // Count those rows at the current width before moving back to the frame start.
     if (columns === undefined || columns <= 0) return this.paintedLines.length;
     let rows = 0;
     for (const line of this.paintedLines) {
@@ -229,9 +229,20 @@ export class TickerFrame {
   }
 }
 
-export function currentSpinner(unicode: boolean, refreshIntervalMs: number): string {
+export function paintTickerLines(
+  lines: readonly string[],
+  {
+    unicode,
+    refreshIntervalMs,
+    color,
+  }: { unicode: boolean; refreshIntervalMs: number; color?: boolean },
+  columns?: number,
+  logPane?: readonly string[]
+): string[] {
+  const now = Date.now();
   const frames = unicode ? SPINNERS.unicode : SPINNERS.ascii;
-  return frames[Math.floor(Date.now() / refreshIntervalMs) % frames.length] ?? frames[0];
+  const spinner = frames[Math.floor(now / refreshIntervalMs) % frames.length] ?? frames[0];
+  return paintLiveLines(lines, spinner, now, columns, color, unicode, logPane);
 }
 
 export function hasLiveAnimation(lines: readonly string[]): boolean {

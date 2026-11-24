@@ -1,7 +1,7 @@
 import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
 import {
   renderWorkbenchUsage,
-  parseSubcommandArgs,
+  type ParsedSubcommand,
   runWorkbenchSubcommand,
 } from "./workbench-subcommand.js";
 import {
@@ -31,23 +31,10 @@ import {
 
 const RUN_USAGE = renderWorkbenchUsage(WORKBENCH_SPECS.run);
 
-/** Shared with the executable so stdout routing uses the same workbench argument boundary. */
-export function parseRunArgs(argv: readonly string[]) {
-  const separatorIndex = argv.indexOf("--");
-  const workbenchArgs = separatorIndex === -1 ? argv : argv.slice(0, separatorIndex);
-  const commandArgs = separatorIndex === -1 ? [] : argv.slice(separatorIndex + 1);
-  return {
-    ...parseSubcommandArgs(workbenchArgs, WORKBENCH_SPECS.run.options),
-    commandArgs,
-  };
-}
-
 export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): Promise<number> {
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.run,
-      parse: parseRunArgs,
-      positionalCountError: { count: 1, message: "Pass exactly one pipeline ID or file." },
       run: executeRun,
     },
     argv,
@@ -56,7 +43,7 @@ export async function runCommand(argv: readonly string[], io: WorkbenchCliIo): P
 }
 
 async function executeRun(
-  parsed: ReturnType<typeof parseRunArgs>,
+  parsed: ParsedSubcommand<typeof WORKBENCH_SPECS.run.options>,
   io: WorkbenchCliIo
 ): Promise<number> {
   if (parsed.values.json && parsed.values.trace === "-") {
@@ -129,12 +116,12 @@ async function executeRun(
       commandIo,
       signal
     );
-    if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success && managedSignal.wasInterrupted()) {
+    if (exitCode === TUBELESS_WORKBENCH_EXIT_CODE.success && managedSignal.signal.aborted) {
       exitCode = TUBELESS_WORKBENCH_EXIT_CODE.cancellation;
     }
   } catch (error) {
     io.stderr.write(`Error: ${errorMessage(error)}\n`);
-    const interrupted = managedSignal?.wasInterrupted() ?? io.signal?.aborted === true;
+    const interrupted = managedSignal?.signal.aborted ?? io.signal?.aborted === true;
     exitCode = interrupted ? TUBELESS_WORKBENCH_EXIT_CODE.cancellation : toExitCode(error);
   } finally {
     await launchTracing?.close();

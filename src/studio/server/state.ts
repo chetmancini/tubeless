@@ -8,12 +8,13 @@ import {
   type AgentTranscriptReader,
 } from "../../tracing/agent-transcript.js";
 import { readPipelineEventPages } from "../../run-store/run-store-reader.js";
-import type {
-  StudioSnapshot,
-  StudioRunDetail,
-  StudioChildRuns,
-  StudioDefinitionRuns,
-  StudioTranscriptPage,
+import {
+  matchesStudioTranscriptQuery,
+  type StudioSnapshot,
+  type StudioRunDetail,
+  type StudioChildRuns,
+  type StudioDefinitionRuns,
+  type StudioTranscriptPage,
 } from "../shared/schema.js";
 import { StudioHistory } from "./history.js";
 import { StudioRunDetails } from "./run-details.js";
@@ -30,7 +31,6 @@ export class PipelineRunStudioHistoryBusyError extends Error {
   }
 }
 
-/** Serializes incremental store reads and history clearing for one studio server. */
 export class PipelineRunStudioEventState {
   #lastEventId: number | undefined;
   #oldestEventId: number | undefined;
@@ -92,38 +92,33 @@ export class PipelineRunStudioEventState {
     return this.#history;
   }
 
+  #readHistory<T>(read: (history: StudioHistory) => T | Promise<T>): Promise<T> {
+    return this.#serialize(async () => {
+      await this.#appendNewEvents();
+      return read(this.#indexedHistory());
+    });
+  }
+
   workspace(
     query = "",
     offset = 0,
     selectedRunId?: string | null,
     pipelineId = ""
   ): Promise<StudioSnapshot> {
-    return this.#serialize(async () => {
-      await this.#appendNewEvents();
-      return this.#indexedHistory().workspace(
-        this.#revision,
-        query,
-        offset,
-        selectedRunId,
-        pipelineId
-      );
-    });
+    return this.#readHistory((history) =>
+      history.workspace(this.#revision, query, offset, selectedRunId, pipelineId)
+    );
   }
 
   detail(runId: string): Promise<StudioRunDetail | undefined> {
-    return this.#serialize(async () => {
-      await this.#appendNewEvents();
-      const history = this.#indexedHistory();
+    return this.#readHistory(async (history) => {
       const run = await this.#details.read(runId);
       return run ? history.detail(run) : undefined;
     });
   }
 
   childRuns(runId: string, page: number): Promise<StudioChildRuns | undefined> {
-    return this.#serialize(async () => {
-      await this.#appendNewEvents();
-      return this.#indexedHistory().childRuns(runId, page);
-    });
+    return this.#readHistory((history) => history.childRuns(runId, page));
   }
 
   transcript(
@@ -142,10 +137,7 @@ export class PipelineRunStudioEventState {
         await reader.list({ runId, afterSequence }),
         "Transcript page"
       );
-      if (
-        transcript.runId !== runId ||
-        transcript.records.some((record) => record.sequence <= afterSequence)
-      )
+      if (!matchesStudioTranscriptQuery(transcript, runId, afterSequence))
         throw new Error("Transcript reader returned a mismatched run or cursor");
       // An external writer can commit a new turn before its transcript record is read.
       await this.#readEventTail();
@@ -163,10 +155,7 @@ export class PipelineRunStudioEventState {
     pipelineId: string,
     definitionId?: string
   ): Promise<StoredPipelineDefinition | undefined> {
-    return this.#serialize(async () => {
-      await this.#appendNewEvents();
-      return this.#indexedHistory().definition(pipelineId, definitionId);
-    });
+    return this.#readHistory((history) => history.definition(pipelineId, definitionId));
   }
 
   definitionRuns(
@@ -174,10 +163,7 @@ export class PipelineRunStudioEventState {
     definitionId?: string,
     offset = 0
   ): Promise<StudioDefinitionRuns | undefined> {
-    return this.#serialize(async () => {
-      await this.#appendNewEvents();
-      return this.#indexedHistory().definitionRuns(pipelineId, definitionId, offset);
-    });
+    return this.#readHistory((history) => history.definitionRuns(pipelineId, definitionId, offset));
   }
 
   clear(

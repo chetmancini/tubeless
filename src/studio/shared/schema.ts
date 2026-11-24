@@ -13,7 +13,10 @@ import {
   storedRunSummarySchema,
 } from "../../run-store/run-store-schema.js";
 import { pipelineMetadataSchema } from "../../tracing/graph-metadata.js";
-import { agentTranscriptPageSchema } from "../../tracing/agent-transcript.js";
+import {
+  agentTranscriptPageSchema,
+  type AgentTranscriptPage,
+} from "../../tracing/agent-transcript.js";
 import {
   agentMetadataSchema,
   iterationControlsSchema,
@@ -237,6 +240,14 @@ export type StudioTranscriptPage = InferWireSchema<typeof studioTranscriptPageSc
 export type StudioDefinitionRuns = InferWireSchema<typeof studioDefinitionRunsSchema>;
 export type StudioCapabilities = InferWireSchema<typeof studioCapabilitiesSchema>;
 export type StudioClearResult = Pick<InferWireSchema<typeof studioClearResultSchema>, "eventCount">;
+
+export function matchesStudioTranscriptQuery(
+  page: AgentTranscriptPage,
+  runId: string,
+  afterSequence: number
+): boolean {
+  return page.runId === runId && page.records.every((record) => record.sequence > afterSequence);
+}
 
 export function parseStudioPayload<T>(schema: WireSchema<T>, value: unknown): T | undefined {
   try {

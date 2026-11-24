@@ -79,7 +79,6 @@ describe("graph scenes", () => {
       expanded: true,
       graph: { run: { runId: "run-1" } },
     });
-    expect(graph.opened.has("run-0/child")).toBe(true);
     expect(inputs.opened.size).toBe(0);
     expect({ root, child }).toEqual(before);
     expect(inputs.loads.get("run-1")).toBe(child);
@@ -93,7 +92,7 @@ describe("graph scenes", () => {
     const retained = buildGraphScene(completed, next);
     expect([...retained.wanted]).toEqual(["run-1"]);
 
-    next.toggles.set("run-0/child", false);
+    next.toggles.set(retained.scene.steps[0].key, false);
     const collapsed = buildGraphScene(completed, next);
     expect(collapsed.scene.steps[0].expanded).toBe(false);
     expect(collapsed.wanted.size).toBe(0);

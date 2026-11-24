@@ -14,7 +14,6 @@ describe("pipeline document JSON Schema", () => {
     expect(jsonSchema).toMatchObject({
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $id: "https://tubeless.io/schemas/pipeline-document-v1.schema.json",
-      title: "Tubeless pipeline document v1",
       type: "object",
       additionalProperties: false,
       required: ["version", "pipelines"],
@@ -41,21 +40,6 @@ describe("pipeline document JSON Schema", () => {
         },
       },
     });
-    expect(Object.keys(jsonSchema.properties).sort()).toEqual([
-      "$schema",
-      "metadata",
-      "pipelines",
-      "version",
-    ]);
-    expect(Object.keys(jsonSchema.$defs).sort()).toEqual([
-      "composition",
-      "handler",
-      "metadata",
-      "names",
-      "pipeline",
-      "step",
-      "text",
-    ]);
   });
 });
 

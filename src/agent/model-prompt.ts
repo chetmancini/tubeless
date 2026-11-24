@@ -1,5 +1,9 @@
 import { throwIfAborted } from "../utilities/abort.js";
-import { environmentOperation, type AgentEnvironment } from "./environment.js";
+import {
+  environmentOperation,
+  type AgentEnvironment,
+  type AgentEnvironmentContext,
+} from "./environment.js";
 import { MAX_OUTPUT_BYTES, MAX_READ_LINES } from "./default-tool-limits.js";
 
 const MAX_PROMPT_BYTES = 32_768;
@@ -35,18 +39,13 @@ Return only the facts you need. Do not rerun a script to recheck a result you al
 const codemodeWorkspacePrompt = `Guidance reads still come first: read applicable AGENTS.md files in one script that catches missing files and returns their contents, and only act in that directory in a later script.`;
 
 export async function modelInstructions(
-  cwd: string,
+  context: AgentEnvironmentContext & { environment: AgentEnvironment },
   instructions: string | undefined,
   projectContext: boolean,
-  signal?: AbortSignal,
-  environment?: AgentEnvironment,
   codemode = false
 ) {
+  const { cwd, signal, environment } = context;
   throwIfAborted(signal, "Load project instructions");
-  const env = environment ?? (await import("./node-environment.js")).createNodeAgentEnvironment();
-  const workspace = environment
-    ? cwd
-    : await environmentOperation({ cwd, signal }, () => env.resolveCwd({ cwd, signal }));
   const sections: string[] = [];
   const encoder = new TextEncoder();
   let promptBytes = 0;
@@ -65,12 +64,13 @@ export async function modelInstructions(
   append(projectContext ? workspaceAgentPrompt : taskAgentPrompt);
   if (codemode)
     append(projectContext ? `${codemodePrompt}\n${codemodeWorkspacePrompt}` : codemodePrompt);
-  append("Working directory: ", workspace);
+  append("Working directory: ", cwd);
   if (projectContext) {
-    const context = { cwd: workspace, signal };
-    for (const file of await environmentOperation(context, () =>
-      env.projectInstructions(context)
-    )) {
+    const location = { cwd, signal };
+    const files = await environmentOperation(location, () =>
+      environment.projectInstructions(location)
+    );
+    for (const file of files) {
       const path = file.path;
       if (typeof path !== "string" || path.length > 4096 || !path.trim())
         throw new Error("Project instruction path must be nonblank and at most 4096 characters");

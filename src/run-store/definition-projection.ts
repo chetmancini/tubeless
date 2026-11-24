@@ -1,4 +1,5 @@
 import type { PipelineDefinitionSnapshot } from "../core/pipeline.js";
+import { copyStepPlan } from "./step-plan-projection.js";
 import type {
   StoredPipelineDefinition,
   StoredPipelineDefinitionStep,
@@ -9,26 +10,15 @@ import type {
 function definitionStep(
   event: Extract<StoredPipelineEvent, { name: "step.planned" }>
 ): StoredPipelineDefinitionStep {
-  const step: StoredPipelineDefinitionStep = {
-    dependencies: [...event.payload.dependencies],
+  const { description, name, ...plan } = copyStepPlan(event.payload);
+  return {
+    ...plan,
     dryRun: event.payload.dryRun,
     id: event.stepId,
-    optionalDependencies: [...event.payload.optionalDependencies],
     runtimeSkipPossible: event.payload.runtimeSkipPossible,
-    skipAfterFailureOf: [...event.payload.skipAfterFailureOf],
+    ...(description ? { description } : {}),
+    ...(name ? { name } : {}),
   };
-  const description = event.payload.description;
-  if (description) step.description = description;
-  const name = event.payload.name;
-  if (name) step.name = name;
-  if (event.payload.nestedPipeline) {
-    step.nestedPipeline = {
-      ...event.payload.nestedPipeline,
-      stepIds: [...event.payload.nestedPipeline.stepIds],
-    };
-  }
-  if (event.payload.remote) step.remote = { ...event.payload.remote };
-  return step;
 }
 
 export class DefinitionProjection {

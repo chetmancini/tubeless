@@ -1,6 +1,6 @@
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { HostedAttemptConflict } from "./attempt-store.js";
-import type { SqliteLaunchStorage } from "./launch-store-sqlite.js";
+import type { SqliteStorage } from "./sqlite-storage.js";
 
 interface AttemptBatchIdentity {
   readonly attemptId: string;
@@ -8,9 +8,18 @@ interface AttemptBatchIdentity {
   readonly digest: string;
 }
 
-/** Both owners authenticate first, then bind, append and record under one storage transaction. */
+interface AttemptBatch extends AttemptBatchIdentity {
+  readonly events: readonly PipelineTraceEvent[];
+}
+
+type AttemptBatchStatus =
+  | { readonly kind: "replay"; readonly runId: string }
+  | { readonly kind: "gap"; readonly expectedSequence: number }
+  | { readonly kind: "next"; readonly runId: string | undefined };
+
+/** Both owners authenticate first and commit their trace and receipt in one transaction. */
 export class SqliteAttemptLedger {
-  constructor(private readonly sql: SqliteLaunchStorage["sql"]) {
+  constructor(private readonly sql: SqliteStorage["sql"]) {
     for (const statement of [
       `CREATE TABLE IF NOT EXISTS tubeless_attempt_batches (
         attempt_id TEXT NOT NULL,
@@ -29,7 +38,7 @@ export class SqliteAttemptLedger {
       sql.exec(statement);
   }
 
-  replay(batch: AttemptBatchIdentity): string | undefined {
+  check(batch: AttemptBatchIdentity): AttemptBatchStatus {
     const row = this.sql
       .exec(
         "SELECT digest, run_id FROM tubeless_attempt_batches WHERE attempt_id = ? AND sequence = ?",
@@ -37,9 +46,15 @@ export class SqliteAttemptLedger {
         batch.sequence
       )
       .toArray()[0];
-    if (!row) return undefined;
-    if (row.digest !== batch.digest) throw new HostedAttemptConflict("replay");
-    return String(row.run_id);
+    if (row) {
+      if (row.digest !== batch.digest) throw new HostedAttemptConflict("replay");
+      return { kind: "replay", runId: String(row.run_id) };
+    }
+    const latest = this.latest(batch.attemptId);
+    const expectedSequence = (latest?.sequence ?? -1) + 1;
+    return batch.sequence === expectedSequence
+      ? { kind: "next", runId: latest?.runId }
+      : { kind: "gap", expectedSequence };
   }
 
   latest(attemptId: string): { sequence: number; runId: string } | undefined {
@@ -52,7 +67,27 @@ export class SqliteAttemptLedger {
     return row && { sequence: Number(row.sequence), runId: String(row.run_id) };
   }
 
-  record(batch: AttemptBatchIdentity, runId: string): void {
+  runIds(attemptIds: readonly string[]): string[] {
+    if (attemptIds.length === 0) return [];
+    return this.sql
+      .exec(
+        `SELECT (
+           SELECT batch.run_id FROM tubeless_attempt_batches AS batch
+           WHERE batch.attempt_id = attempt.value ORDER BY batch.sequence DESC LIMIT 1
+         ) AS run_id FROM json_each(?) AS attempt`,
+        JSON.stringify(attemptIds)
+      )
+      .toArray()
+      .flatMap(({ run_id }) => (typeof run_id === "string" ? [run_id] : []));
+  }
+
+  /** Call after sequence validation. A failed append must roll back the surrounding transaction. */
+  bindBatch(
+    batch: AttemptBatch,
+    owner: { pipelineId: string; parentRunId?: string; stepId?: string; definitionId?: string },
+    previousRunId: string | undefined
+  ): string {
+    const runId = this.#bind({ ...owner, attemptId: batch.attemptId }, previousRunId, batch.events);
     this.sql.exec(
       "INSERT INTO tubeless_attempt_batches (attempt_id, sequence, digest, run_id) VALUES (?, ?, ?, ?)",
       batch.attemptId,
@@ -60,9 +95,10 @@ export class SqliteAttemptLedger {
       batch.digest,
       runId
     );
+    return runId;
   }
 
-  bind(
+  #bind(
     owner: {
       attemptId: string;
       pipelineId: string;
@@ -118,7 +154,6 @@ export class SqliteAttemptLedger {
           throw new HostedAttemptConflict("events");
       }
     }
-    // Every accepted owned batch belongs to a bound root, including the first batch.
     if (root === undefined) throw new HostedAttemptConflict("events");
     return root;
   }

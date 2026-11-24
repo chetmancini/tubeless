@@ -194,7 +194,7 @@
         "ReporterSymbolMode",
         "ReporterTerminalCapabilities"
       ],
-      "sha256": "9a0cc5b107a28f9255ea124aaf0ce137efb5bf68c9a31864819aa8b4c03e56dc",
+      "sha256": "eafeddb8f8a845002d6ef985c9d218eabfac513c3e79d16d3ac019803bc5c82f",
       "specifier": "tubeless/cli"
     },
     {
@@ -266,7 +266,7 @@
         "ProjectRegistry",
         "ProjectTraceContext"
       ],
-      "sha256": "4bf216b4ea5238dd3a1c2507f0e4983177d43e181c79106a20d2988714bb3061",
+      "sha256": "f0635520b1cf51faa43829561848bfb66e273026f6de7e6d95e8f99cb901a692",
       "specifier": "tubeless/project"
     },
     {
@@ -355,7 +355,7 @@
         "WorkerLoaderCodemodeOptions",
         "WorkerLoaderLike"
       ],
-      "sha256": "20350e53d52f617c9e981705231cc7a97a933fa433f16a613fd9e4db2f0244a4",
+      "sha256": "52babc5a0a97d25705eee5b0291cf31b23bd6b97a4ad128de2ab34e19bb3ac6b",
       "specifier": "tubeless/cloudflare"
     },
     {

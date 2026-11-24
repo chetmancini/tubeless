@@ -60,7 +60,7 @@ export async function* readProviderEvents(
         throw new Error(`${provider} stream interrupted`);
       }
       if (chunk.done) {
-        // Validate any unterminated line too, but EOF never establishes completion.
+        // SSE requires a closing blank line to dispatch an event.
         if (length) {
           try {
             decoder.decode(buffer.subarray(0, length));

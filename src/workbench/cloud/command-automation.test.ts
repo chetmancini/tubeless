@@ -5,12 +5,24 @@ import { pipeline, fixture, service } from "./command.test-support.js";
 
 describe("Cloud automation commands", () => {
   it.each([
-    ["list", "--json"],
-    ["logs", "run-1", "--json"],
-    ["run", "--id", pipeline.id, "--detach", "--json"],
+    {
+      args: ["list", "--json"],
+      request: "GET /api/v1/workspaces/workspace/pipelines",
+      expected: [{ id: pipeline.id, slug: "orders" }],
+    },
+    {
+      args: ["logs", "run-1", "--json"],
+      request: "GET /api/v1/workspaces/workspace/runs/run-1",
+      expected: { id: "run-1", status: "completed", logs: [] },
+    },
+    {
+      args: ["run", "--id", pipeline.id, "--detach", "--json"],
+      request: "POST /api/v1/workspaces/workspace/runs",
+      expected: { id: "run-1", pipelineId: pipeline.id, status: "queued" },
+    },
   ])(
-    "uses an injected automation bearer without session or keychain access: %j",
-    async (...args) => {
+    "uses an injected automation bearer for $request without session or keychain access",
+    async ({ args, expected, request }) => {
       const dependencies = service();
       const fetcher = dependencies.fetch;
       const token = "tlc_ci_v1.test-only-automation-bearer";
@@ -20,7 +32,6 @@ describe("Cloud automation commands", () => {
         expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${token}`);
         expect(init?.credentials).toBe("omit");
         expect(String(url)).not.toContain("/session");
-        if (args[0] === "run") expect(init?.method).toBe("POST");
         return fetcher(url, init);
       };
       const io = captureIo(await fixture());
@@ -30,8 +41,9 @@ describe("Cloud automation commands", () => {
       expect(store.get).not.toHaveBeenCalled();
       expect(store.set).not.toHaveBeenCalled();
       expect(store.delete).not.toHaveBeenCalled();
+      expect(dependencies.calls.map(({ method, url }) => `${method} ${url}`)).toEqual([request]);
       expect(io.output.join("") + io.errors.join("")).not.toContain(token);
-      expect(JSON.parse(io.output.join(""))).toBeDefined();
+      expect(JSON.parse(io.output.join(""))).toMatchObject(expected);
     }
   );
 

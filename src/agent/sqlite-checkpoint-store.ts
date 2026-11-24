@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { agentError } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
 import type { AgentCheckpointStore } from "./checkpoint-types.js";
 import { checkCheckpointKey } from "./checkpoint-key.js";
 

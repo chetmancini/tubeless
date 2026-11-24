@@ -15,7 +15,6 @@ export interface CompiledPipeline<
   TResultSchema extends StandardSchemaV1 | undefined = undefined,
 > {
   readonly definition: PipelineDefinitionSnapshot;
-  readonly declaredTargets: readonly CompiledStep<StepsOptions<TSteps>>[];
   readonly finalize: Extract<
     NonNullable<PipelineDefinition<TSteps, TResult, TTargets, TResultSchema>["finalize"]>,
     (...args: never[]) => unknown
@@ -24,9 +23,9 @@ export interface CompiledPipeline<
   readonly optionsSchema: StandardSchemaV1 | undefined;
   readonly orderedSteps: readonly CompiledStep<StepsOptions<TSteps>>[];
   readonly compiledByAuthorStep: ReadonlyMap<AnyStep, CompiledStep>;
-  readonly requiredFinalizerSteps: readonly CompiledStep<StepsOptions<TSteps>>[] | undefined;
   readonly resultSchema: TResultSchema | undefined;
   readonly stepIds: readonly string[];
+  readonly stepsById: ReadonlyMap<string, CompiledStep<StepsOptions<TSteps>>>;
   readonly targetIds: readonly string[];
 }
 
@@ -45,8 +44,8 @@ export function compilePipeline<
   const { compiledByAuthorStep, orderedSteps } = compilePipelineGraph(validated.graph);
   const { finalizerMetadata } = validated;
   const requiredFinalizerSteps = finalizerMetadata?.steps;
-  const compiledTargets = validated.declaredTargets.map((target) =>
-    compiledByAuthorStep.get(target)!
+  const targetIds = Object.freeze(
+    validated.declaredTargets.map((target) => compiledByAuthorStep.get(target)!.id)
   );
   const compiledRequiredFinalizerSteps = requiredFinalizerSteps?.map((step) =>
     compiledByAuthorStep.get(step)!
@@ -66,14 +65,13 @@ export function compilePipeline<
   const snapshot = compileDefinitionSnapshot({
     orderedSteps,
     metadata: snapshotPipelineMetadata(definition.metadata),
-    targetIds: compiledTargets.map((step) => step.id),
+    targetIds,
     requiredFinalizerSteps: compiledRequiredFinalizerSteps,
     resultValidated: definition.resultSchema !== undefined,
     implementationVersion: definition.implementationVersion,
   });
   return Object.freeze({
     definition: snapshot,
-    declaredTargets: Object.freeze(compiledTargets),
     // Invoke ordinary finalizers on the author's definition so method-style
     // implementations keep `this`. Required finalizers compile the same input
     // and context contract with stable required ids.
@@ -87,11 +85,9 @@ export function compilePipeline<
         : compiledByAuthorStep.get(definition.steps[0])?.[STEP_OPTIONS_SCHEMA],
     orderedSteps: Object.freeze([...orderedSteps]),
     compiledByAuthorStep,
-    requiredFinalizerSteps: compiledRequiredFinalizerSteps
-      ? Object.freeze(compiledRequiredFinalizerSteps)
-      : undefined,
     resultSchema: definition.resultSchema,
     stepIds: Object.freeze(definition.steps.map((step) => compiledByAuthorStep.get(step)!.id)),
-    targetIds: Object.freeze(compiledTargets.map((step) => step.id)),
+    stepsById: new Map(orderedSteps.map((step) => [step.id, step])),
+    targetIds,
   });
 }

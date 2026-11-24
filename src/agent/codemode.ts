@@ -11,7 +11,8 @@ import {
   wireString,
 } from "../tracing/wire-schema.js";
 import { createHash } from "node:crypto";
-import { agentError, descriptorFingerprint } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
+import { descriptorFingerprint } from "./agent-state.js";
 import { codemodeDeclarations } from "./codemode-declarations.js";
 import {
   runCodemodeScript,

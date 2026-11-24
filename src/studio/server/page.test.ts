@@ -13,7 +13,6 @@ describe("pipeline run studio page composition", () => {
       '<script type="module">',
     ]);
     expect(PIPELINE_RUN_STUDIO_HTML.match(/<\/html>/g)).toEqual(["</html>"]);
-    expect(PIPELINE_RUN_STUDIO_SCRIPT).toContain("#studio-root");
     expect(PIPELINE_RUN_STUDIO_SCRIPT).not.toMatch(/\bimport\s/);
     expect(PIPELINE_RUN_STUDIO_HTML).toContain(
       `<script type="module">${PIPELINE_RUN_STUDIO_SCRIPT}</script>`

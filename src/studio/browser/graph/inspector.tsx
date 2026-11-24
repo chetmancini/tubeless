@@ -13,7 +13,6 @@ export const EDGE_KIND_LABEL: Record<EdgeKind, string> = {
   gate: "Failure gate",
 };
 
-/** Elapsed time from the run's start, for step timing facts. */
 export const runOffset = (run: GraphRun, ms: number | undefined) =>
   ms === undefined || run.startedAtMs === undefined ? "—" : "+" + duration(ms - run.startedAtMs);
 
@@ -89,7 +88,6 @@ function ChildRunList({
   );
 }
 
-/** Side panel for one selection; Escape or × closes it. */
 export function Drawer({ children, onClose }: { children: ComponentChildren; onClose(): void }) {
   useEscapeDismiss(onClose);
   return (
@@ -113,7 +111,6 @@ interface StepInspectorProps {
   onSelectConsumer(stepId: string): void;
 }
 
-/** Everything recorded about one step: outcome, timing, connections, error, children, logs. */
 export function StepInspector({
   run,
   step,

@@ -119,6 +119,12 @@ describe("checkedCheckpoint rejects", () => {
     ],
     ["execution without state", noState, "Invalid saved agent execution"],
     ["unknown phase", withAgent({ phase: "paused" }), "Invalid saved agent execution"],
+    ["coercible phase", withAgent({ phase: ["decide"] }), "Invalid saved agent execution"],
+    [
+      "coercible cache mode",
+      withAgent({ metadata: { ...metadata(), cache: ["use"] } }),
+      "Invalid saved agent metadata",
+    ],
     ["completed without result", checkpoint(agentIn("completed")), "Missing saved agent result"],
     [
       "completedState without state",
@@ -135,6 +141,9 @@ describe("checkedCheckpoint rejects", () => {
     ["calls phase without decision", checkpoint(agentIn("calls")), "Invalid saved call batch"],
     ["duplicate call ids", withCalls([call(), call()]), "Invalid saved call"],
     ["bad tool name", withCalls([{ ...call(), tool: "1bad" }]), "Invalid saved call"],
+    ["coercible tool kind", withCalls([{ ...call(), kind: ["handler"] }]), "Invalid saved call"],
+    ["coercible replay mode", withCalls([{ ...call(), replay: ["safe"] }]), "Invalid saved call"],
+    ["coercible call state", withCalls([{ ...call(), status: ["pending"] }]), "Invalid saved call"],
     [
       "call without input",
       withCalls([Object.fromEntries(Object.entries(call()).filter(([k]) => k !== "input"))]),

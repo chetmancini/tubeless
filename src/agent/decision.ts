@@ -4,7 +4,8 @@ import { agentScope, type AgentExecutionScope } from "./execution-scope.js";
 import type { PipelinePlan, PipelineStepContext } from "../core/pipeline-types.js";
 import { validateStandardSchema } from "../core/pipeline-validation.js";
 import { throwIfAborted } from "../utilities/abort.js";
-import { agentError } from "./agent-state.js";
+import { agentError } from "./agent-errors.js";
+import { isAgentCallId, isPlainRecord } from "./agent-values.js";
 import type { CompiledTool, ToolInvocation } from "./tools.js";
 
 type PreparedTool =
@@ -30,15 +31,6 @@ function invalid(message: string): never {
   throw agentError("TUBELESS_AGENT_INVALID_DECISION", message);
 }
 
-function record(value: unknown): value is Record<string, unknown> {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
-  );
-}
-
 function keys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   return (
     Reflect.ownKeys(value).length === expected.length &&
@@ -49,7 +41,7 @@ function keys(value: Record<string, unknown>, expected: readonly string[]): bool
 export function decisionEnvelope(
   value: unknown
 ): { kind: "finish"; result: unknown } | { kind: "continue"; calls: readonly unknown[] } {
-  if (!record(value)) return invalid("Agent decision must be a plain object");
+  if (!isPlainRecord(value)) return invalid("Agent decision must be a plain object");
   if (value.kind === "finish" && keys(value, ["kind", "result"]))
     return { kind: "finish", result: value.result };
   if (
@@ -71,11 +63,9 @@ export async function prepareCalls(
   const ids = new Set<string>();
   const calls = Array.from(values, (call: unknown) => {
     if (
-      !record(call) ||
+      !isPlainRecord(call) ||
       !keys(call, ["id", "tool", "input"]) ||
-      typeof call.id !== "string" ||
-      !call.id.trim() ||
-      call.id.length > 256 ||
+      !isAgentCallId(call.id) ||
       typeof call.tool !== "string" ||
       !call.tool.trim()
     )

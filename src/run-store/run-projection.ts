@@ -3,6 +3,7 @@ import type { PipelineTraceError } from "../tracing/tracing-contracts.js";
 import { RUN_MODEL_VERSION } from "../core/pipeline-ids.js";
 import { hasVisibleStepProgress } from "../core/progress.js";
 import { AgentProjection } from "./agent-projection.js";
+import { copyStepPlan } from "./step-plan-projection.js";
 import type {
   StoredPipelineEvent,
   StoredPipelineRun,
@@ -123,18 +124,7 @@ export class RunProjection {
       this.#steps.set(event.stepId, step);
     }
     if (event.name === "step.planned") {
-      step.name = event.payload.name;
-      step.description = event.payload.description;
-      step.dependencies = [...event.payload.dependencies];
-      step.optionalDependencies = [...event.payload.optionalDependencies];
-      step.skipAfterFailureOf = [...event.payload.skipAfterFailureOf];
-      if (event.payload.nestedPipeline) {
-        step.nestedPipeline = {
-          ...event.payload.nestedPipeline,
-          stepIds: [...event.payload.nestedPipeline.stepIds],
-        };
-      }
-      if (event.payload.remote) step.remote = { ...event.payload.remote };
+      Object.assign(step, copyStepPlan(event.payload));
       return;
     }
     if (event.name === "step.artifact") {

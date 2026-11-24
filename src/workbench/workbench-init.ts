@@ -1,9 +1,5 @@
 import { WORKBENCH_SPECS } from "./workbench-command-specs.js";
-import {
-  renderWorkbenchUsage,
-  parseSubcommandArgs,
-  runWorkbenchSubcommand,
-} from "./workbench-subcommand.js";
+import { renderWorkbenchUsage, runWorkbenchSubcommand } from "./workbench-subcommand.js";
 import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { cloudflareScaffold } from "./workbench-init-cloudflare.js";
@@ -74,11 +70,8 @@ export async function runInit(argv: readonly string[], io: WorkbenchCliIo): Prom
   return runWorkbenchSubcommand(
     {
       spec: WORKBENCH_SPECS.init,
-      parse: (args) => parseSubcommandArgs(args, WORKBENCH_SPECS.init.options),
       async run(parsed, commandIo) {
-        if (parsed.positionals.length > 1)
-          return writeUsageError(commandIo, "Pass at most one target.", INIT_USAGE);
-        const targetId = parsed.positionals[0] ?? projectScaffold.id;
+        const targetId = parsed.positionals[0] ?? WORKBENCH_SPECS.init.defaultSubcommand;
         const target = TARGETS.get(targetId);
         if (!target) {
           return writeUsageError(
@@ -87,15 +80,7 @@ export async function runInit(argv: readonly string[], io: WorkbenchCliIo): Prom
             INIT_USAGE
           );
         }
-        const project = parsed.values.project;
-        if (target.loadsProject) return initDeployment(target, project, commandIo);
-        // Bare init accepts every option until the default target is known.
-        if (project !== undefined)
-          return writeUsageError(
-            commandIo,
-            `--project is not supported by init ${target.id}.`,
-            renderWorkbenchUsage(WORKBENCH_SPECS.init, target.id)
-          );
+        if (target.loadsProject) return initDeployment(target, parsed.values.project, commandIo);
         return initProject(commandIo);
       },
     },

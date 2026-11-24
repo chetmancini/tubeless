@@ -1,3 +1,11 @@
+import { progressWidthClass, STUDIO_PROGRESS_MAX_PERCENT } from "../shared/progress.js";
+import { STUDIO_MOUNT_META, STUDIO_ROOT_ID } from "../shared/page-shell.js";
+
+const progressWidths = Array.from(
+  { length: STUDIO_PROGRESS_MAX_PERCENT + 1 },
+  (_, percent) => `.progress > i.${progressWidthClass(percent)}{width:${percent}%}`
+).join("");
+
 export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     :root {
       --ink: #171816;
@@ -150,7 +158,7 @@ export const PIPELINE_RUN_STUDIO_STYLE = String.raw`
     .artifact-detail pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 10px/1.6 var(--mono); }
     .progress { height: 3px; margin-top: 10px; overflow: hidden; border-radius: 2px; background: #e7e9e2; }
     .progress > i { display: block; height: 100%; width: 0; background: var(--blue); transition: width .3s ease; }
-    .progress > i.w0{width:0%}.progress > i.w1{width:1%}.progress > i.w2{width:2%}.progress > i.w3{width:3%}.progress > i.w4{width:4%}.progress > i.w5{width:5%}.progress > i.w6{width:6%}.progress > i.w7{width:7%}.progress > i.w8{width:8%}.progress > i.w9{width:9%}.progress > i.w10{width:10%}.progress > i.w11{width:11%}.progress > i.w12{width:12%}.progress > i.w13{width:13%}.progress > i.w14{width:14%}.progress > i.w15{width:15%}.progress > i.w16{width:16%}.progress > i.w17{width:17%}.progress > i.w18{width:18%}.progress > i.w19{width:19%}.progress > i.w20{width:20%}.progress > i.w21{width:21%}.progress > i.w22{width:22%}.progress > i.w23{width:23%}.progress > i.w24{width:24%}.progress > i.w25{width:25%}.progress > i.w26{width:26%}.progress > i.w27{width:27%}.progress > i.w28{width:28%}.progress > i.w29{width:29%}.progress > i.w30{width:30%}.progress > i.w31{width:31%}.progress > i.w32{width:32%}.progress > i.w33{width:33%}.progress > i.w34{width:34%}.progress > i.w35{width:35%}.progress > i.w36{width:36%}.progress > i.w37{width:37%}.progress > i.w38{width:38%}.progress > i.w39{width:39%}.progress > i.w40{width:40%}.progress > i.w41{width:41%}.progress > i.w42{width:42%}.progress > i.w43{width:43%}.progress > i.w44{width:44%}.progress > i.w45{width:45%}.progress > i.w46{width:46%}.progress > i.w47{width:47%}.progress > i.w48{width:48%}.progress > i.w49{width:49%}.progress > i.w50{width:50%}.progress > i.w51{width:51%}.progress > i.w52{width:52%}.progress > i.w53{width:53%}.progress > i.w54{width:54%}.progress > i.w55{width:55%}.progress > i.w56{width:56%}.progress > i.w57{width:57%}.progress > i.w58{width:58%}.progress > i.w59{width:59%}.progress > i.w60{width:60%}.progress > i.w61{width:61%}.progress > i.w62{width:62%}.progress > i.w63{width:63%}.progress > i.w64{width:64%}.progress > i.w65{width:65%}.progress > i.w66{width:66%}.progress > i.w67{width:67%}.progress > i.w68{width:68%}.progress > i.w69{width:69%}.progress > i.w70{width:70%}.progress > i.w71{width:71%}.progress > i.w72{width:72%}.progress > i.w73{width:73%}.progress > i.w74{width:74%}.progress > i.w75{width:75%}.progress > i.w76{width:76%}.progress > i.w77{width:77%}.progress > i.w78{width:78%}.progress > i.w79{width:79%}.progress > i.w80{width:80%}.progress > i.w81{width:81%}.progress > i.w82{width:82%}.progress > i.w83{width:83%}.progress > i.w84{width:84%}.progress > i.w85{width:85%}.progress > i.w86{width:86%}.progress > i.w87{width:87%}.progress > i.w88{width:88%}.progress > i.w89{width:89%}.progress > i.w90{width:90%}.progress > i.w91{width:91%}.progress > i.w92{width:92%}.progress > i.w93{width:93%}.progress > i.w94{width:94%}.progress > i.w95{width:95%}.progress > i.w96{width:96%}.progress > i.w97{width:97%}.progress > i.w98{width:98%}.progress > i.w99{width:99%}.progress > i.w100{width:100%}
+    ${progressWidths}
     .progress-copy { margin-top: 5px; color: var(--faint); font-size: 9px; }
     .step .plan-nested { margin-top: 8px; }
     .progress-details { margin-top: 8px; display: grid; gap: 3px; }
@@ -542,7 +550,7 @@ function studioDocument(script: string): string {
     String.raw`</style>
 </head>
 <body>
-  <div id="studio-root"></div>
+  <div id="${STUDIO_ROOT_ID}"></div>
   <script type="module">` +
     script +
     String.raw`</script>
@@ -569,7 +577,7 @@ export async function createStudioPage(script: string): Promise<StudioPage> {
         .replaceAll(">", "&gt;");
       return document.replace(
         '<meta charset="utf-8" />',
-        '<meta charset="utf-8" /><meta name="tubeless-studio-mount" content="' + escaped + '" />'
+        `<meta charset="utf-8" /><meta name="${STUDIO_MOUNT_META}" content="${escaped}" />`
       );
     },
   };

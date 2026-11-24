@@ -42,9 +42,8 @@ describe("mapped child adapter: planning and progress", () => {
       run: () => "setup",
     });
     const process = childStep("process", {
-      run: async (_inputs, context) => {
+      run: (_inputs, context) => {
         processStarted = true;
-        await new Promise((resolve) => setTimeout(resolve, 20));
         return context.options.itemId;
       },
     });

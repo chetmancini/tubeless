@@ -3,7 +3,7 @@ import { createSteps, definePipeline, PipelineExecutionError, type Step } from "
 import { standardSchema } from "./pipeline.test-support.js";
 
 describe("definePipeline runtime policies", () => {
-  it("policy-skips a step with a yellow skip report and unlocks dependents", async () => {
+  it("publishes a policy skip with a trimmed reason and unlocks dependents", async () => {
     interface Options {
       enableWrite: boolean;
     }
@@ -15,7 +15,7 @@ describe("definePipeline runtime policies", () => {
       skip: (_inputs, context) =>
         context.options.enableWrite
           ? false
-          : { reason: "write disabled by config", value: "skipped-write" },
+          : { reason: "  write disabled by config  ", value: "skipped-write" },
       run: () => {
         writeRan = true;
         return "written";

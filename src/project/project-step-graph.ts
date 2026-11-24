@@ -6,7 +6,11 @@ import {
   type StepSkipDecision,
 } from "../core/pipeline.js";
 import type { AnyStep } from "../core/pipeline-steps.js";
-import { PipelineDocumentError, type PipelineDocumentStep } from "./project-document.js";
+import {
+  PipelineDocumentError,
+  STEP_DEPENDENCY_FIELDS,
+  type PipelineDocumentStep,
+} from "./project-document.js";
 import type { ProjectRegistryResolver } from "./project-registry.js";
 
 /** Build and link one document's step graph; mutable forward-reference arrays stay local. */
@@ -54,22 +58,24 @@ export function compileDocumentSteps(
         : factory.step(definition.id, config);
     } else if (definition.fromPipeline !== undefined) {
       const reference = definition.fromPipeline;
-      const adapter = registry.singleChild(reference.adapter, `${stepPath}.fromPipeline.adapter`);
+      const { mapResult, ...adapter } = registry.singleChild(
+        reference.adapter,
+        `${stepPath}.fromPipeline.adapter`
+      );
       const config = {
         ...common,
+        ...adapter,
         dryRun: definition.dryRun,
         pipeline: resolvePipeline(reference.pipeline, `${stepPath}.fromPipeline.pipeline`),
-        controls: adapter.controls,
-        mapOptions: adapter.mapOptions,
         skip,
       };
       built =
-        adapter.mapResult === undefined
+        mapResult === undefined
           ? factory.fromPipeline(definition.id, config)
-          : factory.fromPipeline(definition.id, { ...config, mapResult: adapter.mapResult });
+          : factory.fromPipeline(definition.id, { ...config, mapResult });
     } else {
       const reference = definition.forEachPipeline;
-      const adapter = registry.mappedChild(
+      const { mapResult, ...adapter } = registry.mappedChild(
         reference.adapter,
         `${stepPath}.forEachPipeline.adapter`
       );
@@ -83,20 +89,15 @@ export function compileDocumentSteps(
         | undefined;
       const config = {
         ...common,
+        ...adapter,
         dryRun: definition.dryRun,
         pipeline: resolvePipeline(reference.pipeline, `${stepPath}.forEachPipeline.pipeline`),
-        items: adapter.items,
-        key: adapter.key,
-        concurrency: adapter.concurrency,
-        controls: adapter.controls,
-        progress: adapter.progress,
-        mapOptions: adapter.mapOptions,
         skip: fanOutSkip,
       };
       built =
-        adapter.mapResult === undefined
+        mapResult === undefined
           ? factory.forEachPipeline(definition.id, config)
-          : factory.forEachPipeline(definition.id, { ...config, mapResult: adapter.mapResult });
+          : factory.forEachPipeline(definition.id, { ...config, mapResult });
     }
     return {
       definition,
@@ -119,7 +120,7 @@ export function compileDocumentSteps(
       return found;
     });
   for (const entry of entries) {
-    for (const field of ["dependsOn", "optionalDependsOn", "skipAfterFailureOf"] as const) {
+    for (const field of STEP_DEPENDENCY_FIELDS) {
       entry[field].push(...resolveSteps(entry.definition[field], `${entry.path}.${field}`));
     }
   }

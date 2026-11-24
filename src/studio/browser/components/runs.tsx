@@ -1,4 +1,4 @@
-import { childStepTotal } from "../graph/dependencies.js";
+import { indexChildRunPages } from "../../shared/children.js";
 import { STUDIO_HISTORY_PAGE_SIZE } from "../../shared/limits.js";
 import type { StudioRunDetail } from "../../shared/schema.js";
 import type { StoredRunSummary } from "../../../run-store/run-history.js";
@@ -576,6 +576,9 @@ function RunDetail({
   const { detail } = selection;
   const { run } = detail;
   const drawerStep = stepId ? run.steps.find((step) => step.id === stepId) : undefined;
+  const drawerChildren = drawerStep
+    ? indexChildRunPages(detail.children, detail.childSteps)(drawerStep.id)
+    : undefined;
   const revealStep = (id: string) => {
     setTab("steps");
     onSelectStep?.(id);
@@ -727,15 +730,8 @@ function RunDetail({
                       <StepInspector
                         run={run}
                         step={drawerStep}
-                        childRuns={detail.children.filter(
-                          (child) => child.origin?.stepId === drawerStep.id
-                        )}
-                        childTotal={childStepTotal(
-                          detail.childSteps,
-                          drawerStep.id,
-                          detail.children.filter((child) => child.origin?.stepId === drawerStep.id)
-                            .length
-                        )}
+                        childRuns={drawerChildren?.runs ?? []}
+                        childTotal={drawerChildren?.total ?? 0}
                         onOpenRun={onSelect}
                         onSelectInput={(id) => onSelectStep?.(id)}
                         onSelectConsumer={(id) => onSelectStep?.(id)}

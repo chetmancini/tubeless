@@ -12,16 +12,20 @@ import type {
 import { hasVisibleStepProgress } from "../core/progress.js";
 import { PIPELINE_FINALIZE_STEP_ID } from "../core/pipeline-step-metadata.js";
 import { STEP_LOG_SCOPE, type StepScopedLogger } from "../core/step-log-scope.js";
-import { elapsedToken, shimmerToken, SPINNER_TOKEN } from "./live-ticker-frame.js";
+import {
+  elapsedToken,
+  shimmerToken,
+  SPINNER_TOKEN,
+  MIN_LOG_PANE_COLUMNS,
+} from "./live-ticker-frame.js";
 import { createLiveTicker, type LiveTicker } from "./live-ticker.js";
 import {
   createReporterTheme,
   createRunReporter,
-  formatDurationMs,
-  outputSourceSuffix,
   type ReporterTheme,
   type RunReporterConfig,
 } from "./reporter.js";
+import { formatDurationMs, outputSourceSuffix, stepDisplayName } from "./reporter-format.js";
 import { safeTerminalLog, safeTerminalText } from "./terminal-text.js";
 
 const PANE_ONLY_LOG_LIMIT = 50;
@@ -200,11 +204,12 @@ function renderStep(
   spinner: string,
   progressBarWidth: number,
   lookup: StepLookup
-): string[] {
+): string {
   const { step } = state;
-  const displayName =
-    safeTerminalText(step.name ?? step.id) +
-    (state.status === "planned" ? "" : outputSourceSuffix(state.outputSource));
+  const displayName = stepDisplayName(
+    step,
+    state.status === "planned" ? undefined : state.outputSource
+  );
   switch (state.status) {
     case "running": {
       const progress =
@@ -215,41 +220,28 @@ function renderStep(
         state.startedAtMs !== undefined
           ? ` ${theme.styled.duration(elapsedToken(state.startedAtMs))}`
           : "";
-      const lines = [
-        `  ${theme.styled.start(spinner)} ${shimmerToken(displayName)}${progress}${elapsed}`,
-      ];
-      return lines;
+      return `  ${theme.styled.start(spinner)} ${shimmerToken(displayName)}${progress}${elapsed}`;
     }
     case "completed":
-      return [
-        `  ${theme.styled.complete(theme.symbols.complete)} ${displayName} ${theme.styled.duration(
-          `(${formatDurationMs(state.finishedAtMs - state.startedAtMs)})`
-        )}`,
-      ];
+      return `  ${theme.styled.complete(theme.symbols.complete)} ${displayName} ${theme.styled.duration(
+        `(${formatDurationMs(state.finishedAtMs - state.startedAtMs)})`
+      )}`;
     case "failed":
-      return [
-        `  ${theme.styled.fail(theme.symbols.fail)} ${displayName} ${theme.styled.duration(
-          `(${formatDurationMs(state.finishedAtMs - state.startedAtMs)})`
-        )}: ${safeTerminalText(state.error.message)}`,
-      ];
+      return `  ${theme.styled.fail(theme.symbols.fail)} ${displayName} ${theme.styled.duration(
+        `(${formatDurationMs(state.finishedAtMs - state.startedAtMs)})`
+      )}: ${safeTerminalText(state.error.message)}`;
     case "cancelled":
-      return [
-        `  ${theme.styled.skip(theme.symbols.skip)} ${displayName}: cancelled: ${safeTerminalText(
-          state.error.message
-        )}`,
-      ];
+      return `  ${theme.styled.skip(theme.symbols.skip)} ${displayName}: cancelled: ${safeTerminalText(
+        state.error.message
+      )}`;
     case "skipped":
-      return [
-        `  ${theme.styled.skip(theme.symbols.skip)} ${displayName} ${theme.styled.duration(
-          `(${skipDetail(state, lookup)})`
-        )}`,
-      ];
+      return `  ${theme.styled.skip(theme.symbols.skip)} ${displayName} ${theme.styled.duration(
+        `(${skipDetail(state, lookup)})`
+      )}`;
     case "planned":
-      return [
-        `  ${theme.styled.description(theme.symbols.pending)} ${displayName} ${theme.styled.description(
-          waitingDetail(step, lookup)
-        )}`,
-      ];
+      return `  ${theme.styled.description(theme.symbols.pending)} ${displayName} ${theme.styled.description(
+        waitingDetail(step, lookup)
+      )}`;
   }
 }
 
@@ -339,7 +331,7 @@ function createInteractiveReporter<TResult>(
       );
     }
     for (const state of steps.values()) {
-      lines.push(...renderStep(state, theme, SPINNER_TOKEN, progressBarWidth, lookup));
+      lines.push(renderStep(state, theme, SPINNER_TOKEN, progressBarWidth, lookup));
       for (const detail of state.details ?? []) {
         lines.push(
           renderProgressDetail(detail, theme, SPINNER_TOKEN, progressBarWidth, state.status)
@@ -385,7 +377,7 @@ function createInteractiveReporter<TResult>(
     plan !== undefined &&
     !result &&
     options.logPane !== "off" &&
-    (output.columns ?? 0) >= 120 &&
+    (output.columns ?? 0) >= MIN_LOG_PANE_COLUMNS &&
     (output.rows ?? 0) >= 8;
 
   const redraw = (): void => {
@@ -463,7 +455,7 @@ function createInteractiveReporter<TResult>(
 
   const stepLabel = (stepId: string): string => {
     const step = steps.get(stepId)?.step;
-    if (step) return safeTerminalText(step.name ?? step.id);
+    if (step) return stepDisplayName(step);
     return stepId === PIPELINE_FINALIZE_STEP_ID ? "finalize" : safeTerminalText(stepId);
   };
 

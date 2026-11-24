@@ -5,28 +5,15 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { runInNewContext } from "node:vm";
 
 const execFileAsync = promisify(execFile);
 const websiteRoot = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
 const astroCli = join(websiteRoot, "node_modules", ".bin", "astro");
-const builtHtml = await readFile(join(websiteRoot, "dist", "index.html"), "utf8");
-
-function assertDisabled(html) {
-  assert.doesNotMatch(html, /window\.__posthog_initialized/);
-  assert.doesNotMatch(html, /\/static\/array\.js/);
-}
-
-function assertEnabled(html, expected) {
-  assert.match(html, /window\.__posthog_initialized/);
-  assert.match(html, /autocapture:\s*false/);
-  assert.match(html, /disable_session_recording:\s*true/);
-  assert.match(html, /script\.src\s*=\s*config\.asset_host/);
-
-  if (expected) {
-    assert.ok(html.includes(JSON.stringify(expected.projectKey)));
-    assert.ok(html.includes(JSON.stringify(expected.apiHost)));
-    assert.ok(html.includes(JSON.stringify(expected.assetHost)));
-  }
+function analyticsBootstrap(html) {
+  return [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map(([, script]) => script)
+    .find((script) => script.includes("/static/array.js"));
 }
 
 async function buildWith(config) {
@@ -52,13 +39,10 @@ async function buildWith(config) {
   }
 }
 
-test("the production artifact matches the PostHog build configuration", () => {
-  if (builtHtml.includes("window.__posthog_initialized")) assertEnabled(builtHtml);
-  else assertDisabled(builtHtml);
-});
-
 test("an analytics-disabled build omits PostHog", async () => {
-  assertDisabled(await buildWith({}));
+  const html = await buildWith({});
+  assert.equal(analyticsBootstrap(html), undefined);
+  assert.doesNotMatch(html, /posthog\.com\/static\/array\.js/);
 });
 
 test("an analytics-enabled build uses the regional asset host", async () => {
@@ -68,7 +52,26 @@ test("an analytics-enabled build uses the regional asset host", async () => {
     projectKey: "phc_test",
   };
 
-  assertEnabled(await buildWith(config), config);
+  const bootstrap = analyticsBootstrap(await buildWith(config));
+  assert.ok(bootstrap, "The configured build includes an analytics bootstrap");
+  const scripts = [];
+  const browser = {
+    document: {
+      createElement: () => ({}),
+      getElementsByTagName: () => [{
+        parentNode: { insertBefore: (script) => scripts.push(script) },
+      }],
+    },
+  };
+  browser.window = browser;
+  runInNewContext(bootstrap, browser, { timeout: 1000 });
+
+  assert.deepEqual(scripts.map(({ src }) => src), [config.assetHost + "/static/array.js"]);
+  const [[token, options]] = browser.posthog._i;
+  assert.equal(token, config.projectKey);
+  assert.equal(options.api_host, config.apiHost);
+  assert.equal(options.autocapture, false);
+  assert.equal(options.disable_session_recording, true);
 });
 
 test("a partial analytics configuration fails the build", async () => {
