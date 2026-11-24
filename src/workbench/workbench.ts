@@ -23,7 +23,6 @@ const WORKBENCH_HANDLERS = {
   plan: runPlan,
   graph: runGraph,
   run: runCommand,
-  reproduce: async (argv, io) => (await import("./workbench-reproduce.js")).runReproduce(argv, io),
   history: runHistory,
   upgrade: runUpgrade,
   agent: async (argv, io) => (await import("./agent/command.js")).runAgent(argv, io),

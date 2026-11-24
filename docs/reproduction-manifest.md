@@ -4,7 +4,7 @@ Save the reproduction manifest for an eligible Cloud run as a local JSON file.
 On Linux or macOS, put Git, Node 24 and Bun 1.4.4 on PATH, then run:
 
 ```sh
-tubeless reproduce --execute reproduction.json
+tubeless cloud reproduce --execute reproduction.json
 ```
 
 The `--execute` flag authorizes the recorded repository's package scripts,
@@ -104,7 +104,7 @@ make website-build
 ```
 
 Wait for an OSS release that publishes both `tubeless/reproduction-manifest`
-and `tubeless reproduce`. Verify both against the npm tarball, then pin that
+and `tubeless cloud reproduce`. Verify both against the npm tarball, then pin that
 exact version in Cloud and run the paired fixture tests against the installed
 package. Run Cloud's `make check` and `node scripts/integration.mjs --node-check`
 with the producer and retained-run authorization tests in place. Keep the

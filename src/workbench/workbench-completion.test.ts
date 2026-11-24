@@ -126,6 +126,8 @@ describe("tubeless __complete", () => {
     expect(all.lines).toContain("list\tList pipelines or commands in the project file");
     expect(all.lines).toContain("completion\tPrint a shell completion script (bash, zsh, fish)");
     expect(all.lines).toContain("help\tShow usage");
+    expect(all.values).not.toContain("reproduce");
+    expect((await complete(tmpdir(), "cloud", "rep")).values).toEqual(["reproduce"]);
     expect(all.lines.some((line) => line.startsWith("__complete"))).toBe(false);
     expect((await complete(tmpdir(), "pl")).lines).toEqual([
       "plan\tPreview step selection without executing the pipeline",
@@ -364,6 +366,7 @@ describe("tubeless __complete", () => {
         "--cursor",
         "--poll",
         "--json",
+        "--execute",
         "--help",
       ].sort()
     );
@@ -371,6 +374,7 @@ describe("tubeless __complete", () => {
 
   it.each([
     ["cloud", "list", ["--host", "--workspace", "--json", "--help"]],
+    ["cloud", "reproduce", ["--execute", "--help"]],
     [
       "cloud",
       "run",
@@ -432,6 +436,8 @@ describe("tubeless __complete", () => {
     ["cloud", "list", "--detach"],
     ["cloud", "logs", "--detach"],
     ["cloud", "run", "--follow"],
+    ["cloud", "list", "--execute"],
+    ["cloud", "reproduce", "--json"],
     ["auth", "status", "--no-browser"],
     ["auth", "login", "--json"],
   ])("rejects %s %s %s before running command effects", async (...args) => {
@@ -446,6 +452,8 @@ describe("tubeless __complete", () => {
       (await complete(tmpdir(), "cloud", "--host", "https://example.test", "list", "--d")).values
     ).toEqual([]);
     expect((await complete(tmpdir(), "cloud", "run", "--input-file=pa")).files).toBe(true);
+    expect((await complete(tmpdir(), "cloud", "reproduce", "--execute", "mani")).files).toBe(true);
+    expect((await complete(tmpdir(), "cloud", "reproduce", "manifest.json", "")).files).toBe(false);
     expect((await complete(tmpdir(), "cloud", "run", "--source={")).files).toBe(false);
     expect((await complete(tmpdir(), "cloud", "list", "--source=pa")).files).toBe(false);
     expect((await complete(tmpdir(), "cloud", "list", "--input-file=pa")).files).toBe(false);

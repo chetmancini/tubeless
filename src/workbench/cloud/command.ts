@@ -59,7 +59,7 @@ function parseAction({
 }: ReturnType<typeof parseArgs>): CloudAction<CloudRunInputArguments> {
   const [command, selector] = positionals;
   if (!CLOUD_SPEC.subcommands.some((name) => name === command))
-    throw new CloudRunUsageError("Pass list, run, follow, or logs.");
+    throw new CloudRunUsageError(`Pass one of: ${CLOUD_SPEC.subcommands.join(", ")}.`);
   const wanted =
     command === "logs" || command === "follow" || (command === "run" && !values.id) ? 2 : 1;
   if (positionals.length !== wanted)
@@ -298,6 +298,10 @@ export async function runCloud(
       spec: CLOUD_SPEC,
       parse: parseArgs,
       run: async (parsed) => {
+        if (parsed.positionals[0] === "reproduce") {
+          const { runReproduce } = await import("./reproduce.js");
+          return runReproduce(parsed.positionals.slice(1), parsed.values.execute === true, io);
+        }
         let action;
         try {
           action = parseAction(parsed);

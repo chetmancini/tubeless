@@ -38,6 +38,7 @@ export interface WorkbenchCommandSpec {
   readonly options: Readonly<Record<string, WorkbenchOption>>;
   readonly positional?: "pipeline" | "file" | readonly string[];
   readonly subcommands?: readonly string[];
+  readonly subcommandPositionals?: Readonly<Record<string, "file">>;
   readonly passthrough?: boolean;
 }
 

@@ -23,13 +23,12 @@ or later without Bun.
 | `tubeless plan`       | A pipeline or command export     | Previews selection without executing or requiring domain options    |
 | `tubeless graph`      | A pipeline or command export     | Writes Mermaid flowchart source                                     |
 | `tubeless run`        | A pipeline ID or command export  | Infers or validates command arguments and runs the pipeline         |
-| `tubeless reproduce`  | A Cloud reproduction manifest    | Reruns a pinned Node check locally with `--execute`                 |
 | `tubeless history`    | An optional run id               | Lists or shows recorded runs from SQLite or a finished NDJSON trace |
 | `tubeless upgrade`    | An optional `--store` path       | Rewrites an older SQLite run store after `--yes`                    |
 | `tubeless ui`         | An optional project file         | Serves the local run studio; see [studio](./studio.md)              |
 | `tubeless agent`      | An optional agent ID or file     | Prompts a workspace agent; see [agent](#prompt-a-workspace-agent)   |
 | `tubeless auth`       | `login`, `status`, `logout`      | Manages Tubeless Cloud sessions                                     |
-| `tubeless cloud`      | `list`, `run`, `follow`, `logs`  | Runs and follows [Cloud pipelines](#tubeless-cloud)                 |
+| `tubeless cloud`      | Cloud runs or a saved manifest   | Operates on [Cloud runs](#tubeless-cloud) and reproduces checks     |
 | `tubeless completion` | `bash`, `zsh`, or `fish`         | Prints a shell completion script                                    |
 | `tubeless init`       | An optional target               | Scaffolds a project or deployment files; see [init](#init)          |
 
@@ -421,15 +420,6 @@ is accepted only by deployment targets.
 `init` never overwrites: if any target file exists it names the conflicts and writes
 nothing. An unknown or repeated target is a usage error.
 
-## Reproduce a Cloud Node check
-
-Run `tubeless reproduce --execute <manifest.json>` with Git, Node 24 and Bun
-1.4.4 on PATH. The command verifies the original commit, tree, lockfile and plan
-in a temporary checkout before running the check. It emits the local
-execution's JSON with native outcomes and normalized reports. See
-[reproduction manifests](./reproduction-manifest.md) for the supported scope and
-what the execution flag authorizes.
-
 ## Exit codes
 
 | Code | Meaning      |
@@ -650,10 +640,9 @@ dedicated Access service credential. See [runner placement](./deploy-cloudflare.
 
 ## Tubeless Cloud
 
-The same executable supplies `auth` and `cloud` commands. Create or join a workspace,
-install the GitHub App, and connect a repository in the
-[Cloud dashboard](https://cloud.tubeless.io) first; workspaces, connections, pipeline
-loading, secrets, schedules and billing stay dashboard operations.
+To use the Cloud service, create or join a workspace, install the GitHub App,
+and connect a repository in the [Cloud dashboard](https://cloud.tubeless.io).
+Manage connections, pipeline loading, secrets, schedules, and billing there.
 
 ```sh
 tubeless auth login
@@ -665,8 +654,8 @@ tubeless cloud logs <run-id> --follow
 tubeless auth logout
 ```
 
-Commands work from any directory and never read Git, project files, or
-`.tubeless/cloud.json`; local pipeline code is never uploaded. All accept
+Cloud service commands work from any directory and use the repository and
+pipeline configuration stored in Cloud. They accept
 `--workspace <id>` (auto-selected when the session has one workspace) and
 `--host <origin>` (default `https://cloud.tubeless.io`; HTTPS only, except loopback
 development). Credentials are isolated by full origin.
@@ -805,3 +794,12 @@ JSON or requests, `6` for rejected admission or failed execution, and `7` for
 remote cancellation or local interruption. A remotely interrupted run keeps
 `status: "failed"` and its diagnostic. In JSON mode, stderr also reports
 `{"type":"cloud_follow_terminal","outcome":"interrupted"}`.
+
+### Reproduce a Node check locally
+
+Run `tubeless cloud reproduce --execute <manifest.json>` with Git, Node 24
+and Bun 1.4.4 on PATH. It uses the saved manifest and your Git permissions
+without Cloud login. It verifies the original commit, tree, lockfile and plan
+in a temporary checkout, then runs the check and emits JSON with native
+outcomes and normalized reports. See [reproduction manifests](./reproduction-manifest.md)
+for the supported scope and what the execution flag authorizes.

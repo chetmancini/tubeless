@@ -67,7 +67,10 @@ function subcommandSpec(command: WorkbenchCommandSummary, nested?: string): Subc
       value: option.type === "boolean" ? undefined : (option.completion ?? "text"),
       multiple: option.multiple,
     })),
-    positional: command.spec.subcommands ?? command.spec.positional,
+    positional:
+      nested === undefined
+        ? (command.spec.subcommands ?? command.spec.positional)
+        : command.spec.subcommandPositionals?.[nested],
   };
 }
 
@@ -234,7 +237,8 @@ async function subcommandCompletion(
 ): Promise<Completion> {
   let spec = subcommandSpec(command);
   const nested = scanWords(words, spec).positionals[0];
-  if (nested !== undefined) spec = subcommandSpec(command, nested);
+  const selected = nested !== undefined && command.spec.subcommands?.includes(nested);
+  if (selected) spec = subcommandSpec(command, nested);
   // zsh and fish keep `--flag=partial` as one word: complete the value, then restore the prefix.
   const mode = command.spec.passthrough ? "run" : "workbench";
   let scanned = scanWords(words, spec, mode);
@@ -253,7 +257,12 @@ async function subcommandCompletion(
   } else if (inline) {
     return NO_COMPLETION;
   } else {
-    return optionOrPositionalCompletion(spec, scanned, current, io);
+    return optionOrPositionalCompletion(
+      spec,
+      selected ? { ...scanned, positionals: scanned.positionals.slice(1) } : scanned,
+      current,
+      io
+    );
   }
   if (!inline) return completion;
   // Shell scripts complete file paths after the "--flag=" prefix themselves.

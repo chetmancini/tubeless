@@ -27,7 +27,7 @@ function temporaryRoot() {
 async function invoke(cwd: string, ...args: string[]) {
   let stdout = "";
   let stderr = "";
-  const code = await runWorkbenchCli(["reproduce", ...args], {
+  const code = await runWorkbenchCli(["cloud", "reproduce", ...args], {
     cwd,
     signal: new AbortController().signal,
     stdout: {
