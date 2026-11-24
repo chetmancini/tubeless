@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "run": {
+    "id": "fixture-run",
+    "pipelineId": "fixture-node-check"
+  },
+  "repository": {
+    "id": "fixture-repository",
+    "fullName": "fixture-org/portable-node-check"
+  },
+  "source": {
+    "commit": "ddf11a75a87c4d18af8675dcf889204f0cd15faa",
+    "treeSha": "a5fad0c320f808b3991870301c91e24134b5bcf2",
+    "lockfile": {
+      "path": "bun.lock",
+      "digest": "o6aigou_MMjFfEGoQYWUPbCeo0pHl3K73p-sP5qJkvo"
+    }
+  },
+  "nodeCheck": {
+    "plan": {
+      "version": 1,
+      "recipe": "node-check-v1",
+      "toolchain": {
+        "node": "24",
+        "bun": "1.4.4"
+      },
+      "lockfile": "bun.lock",
+      "maxConcurrency": 1,
+      "commands": [
+        {
+          "kind": "install",
+          "id": "install",
+          "argv": ["bun", "install", "--frozen-lockfile"],
+          "dependsOn": [],
+          "timeoutMs": 300000,
+          "reason": "Install the committed bun.lock without updating it."
+        },
+        {
+          "id": "types",
+          "dependsOn": ["install"],
+          "timeoutMs": 60000,
+          "kind": "script",
+          "argv": ["bun", "run", "--silent", "types"],
+          "script": {
+            "name": "types",
+            "body": "node --check app.js"
+          },
+          "reason": "Explicitly configured repository gate."
+        },
+        {
+          "id": "test",
+          "dependsOn": ["install", "types"],
+          "timeoutMs": 60000,
+          "kind": "vitest",
+          "argv": [
+            "node",
+            "node_modules/vitest/vitest.mjs",
+            "run",
+            "--reporter=json",
+            "--outputFile=.tubeless-reports/vitest.json",
+            "--includeTaskLocation"
+          ],
+          "report": {
+            "adapter": "vitest",
+            "version": "5.1.0",
+            "path": ".tubeless-reports/vitest.json"
+          },
+          "reason": "Explicitly configured repository gate."
+        }
+      ]
+    },
+    "digest": "sPrELDQ3XiH-aOApNno0cgz96krMppsK4_iavG71y70"
+  },
+  "runtime": {
+    "imageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "node": "24.22.1",
+    "bun": null,
+    "tubeless": null
+  },
+  "diagnostics": [
+    {
+      "stepId": "test",
+      "artifact": "test.check-report.json"
+    }
+  ]
+}

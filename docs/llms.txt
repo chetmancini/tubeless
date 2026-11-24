@@ -26,6 +26,7 @@ Guides:
 
 - CLI commands, flags, and exit codes: ./cli.md
 - Follow an existing Cloud run or resume after a disconnect: ./cli.md#follow-and-read-results
+- Reproduce a pinned Cloud Node check: ./reproduction-manifest.md
 - Local Studio and gateway hosting: ./studio.md
 - YAML and JSON pipelines: ./declarative-pipelines.md
 - Pipeline document JSON Schema v1: ./pipeline-document.schema.json

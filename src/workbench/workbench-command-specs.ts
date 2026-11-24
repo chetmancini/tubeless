@@ -69,6 +69,8 @@ const STORE_OPTION = {
   completion: "file",
 } as const;
 
+const CLOUD_SERVICE_COMMANDS = ["list", "run", "follow", "logs"] as const;
+
 const CLOUD_HOST_OPTION = {
   type: "string",
   description: "Cloud origin (default https://cloud.tubeless.io)",
@@ -353,16 +355,17 @@ Sign in to Tubeless Cloud with an expiring first-party session.
   },
   cloud: {
     name: "cloud",
-    description: "List, run, and follow deployed Cloud pipelines",
-    usage: `Usage: tubeless cloud <list|run|follow|logs> [options]
+    description: "Run and inspect Cloud pipelines or reproduce a check locally",
+    usage: `Usage: tubeless cloud <list|run|follow|logs|reproduce> [options]
 
   list [--json]
   run <pipeline-name-or-slug> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach|--poll] [--json]
   run --id <cloud-pipeline-id> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach|--poll] [--json]
   follow <run-id> [--cursor <cursor>|--poll] [--json]
   logs <run-id> [--follow [--cursor <cursor>|--poll]] [--json]
+  reproduce --execute <manifest.json>
 
-All commands accept --workspace <id>, --host <origin>, and --help.
+Cloud service commands accept --workspace <id> and --host <origin>.
 Use a listed slug or an exact name. Quote names containing spaces.
 Run streams progress and output by default; --detach returns the admission.
 Follow attaches to an existing run. Ctrl-C stops observation. To cancel the
@@ -374,17 +377,31 @@ Use --source for an advanced source selector and --idempotency-key to
 retry the same pipeline/input/source after an uncertain admission.
 Remote runs use Cloud-admitted source. Local edits and modules are never loaded.
 Set up and load pipelines in the Cloud dashboard.
+
+Reproduce runs a saved manifest locally without Cloud login. It emits JSON and
+requires Git, Node 24 and Bun 1.4.4 on PATH. Only execute revisions you trust.
 `,
-    subcommands: ["list", "run", "follow", "logs"],
+    subcommands: [...CLOUD_SERVICE_COMMANDS, "reproduce"],
+    subcommandPositionals: { reproduce: "file" },
     options: {
-      host: CLOUD_HOST_OPTION,
+      host: { ...CLOUD_HOST_OPTION, commands: CLOUD_SERVICE_COMMANDS },
       workspace: {
         type: "string",
         description: "Select a Cloud workspace",
         valueName: "id",
         completion: "text",
+        commands: CLOUD_SERVICE_COMMANDS,
       },
-      json: { type: "boolean", description: "Emit machine-readable JSON" },
+      json: {
+        type: "boolean",
+        description: "Emit machine-readable JSON",
+        commands: CLOUD_SERVICE_COMMANDS,
+      },
+      execute: {
+        type: "boolean",
+        description: "Authorize running the pinned repository source locally",
+        commands: ["reproduce"],
+      },
       id: {
         type: "string",
         description: "Select a pipeline by its exact ID",

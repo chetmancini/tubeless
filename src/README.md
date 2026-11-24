@@ -27,7 +27,7 @@ implementation modules are not public subpaths. Keep tests beside their source.
 | `hosting/`    | Platform-neutral deployment kit: project commands, hosted execution, launch admission, collector ingest        |
 | `cloudflare/` | Cloudflare deploy target and the `tubeless/cloudflare`, `/cache` and `/transcript` entries                     |
 | `workbench/`  | Module loading, executable commands, Cloud client, agent REPL, adapter wiring                                  |
-| `check/`      | Optional Node check recipe execution over ordinary pipeline steps                                              |
+| `check/`      | Optional Node check recipe execution and local reproduction                                                    |
 | `node/`       | Optional filesystem, path, environment, checkpoint and Node worker-thread helpers                              |
 | `testing/`    | Test runtime and executable-example integration tests                                                          |
 
@@ -52,7 +52,7 @@ re-exports and lazy imports, and fails on any edge outside this table.
 | `cli`                  | `core`, `node`, `reporter`, `tracing`, `utilities`                                          |
 | `hosting`              | `cli`, `core`, `project`, `render`, `run-store`, `studio`, `tracing`, `utilities`           |
 | `cloudflare`           | `agent`, `cli`, `core`, `hosting`, `project`, `run-store`, `studio`, `tracing`, `utilities` |
-| `workbench`            | everything above except `check`, `node`, `testing` and `cloudflare`                         |
+| `workbench`            | everything above except `node`, `testing` and `cloudflare`                                  |
 
 The same table is enforced on source files by per-directory `no-restricted-imports`
 overrides in `.oxlintrc.json`, so a forbidden import fails lint before the build. Type-only

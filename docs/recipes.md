@@ -7,7 +7,7 @@ compiled and checked against the packaged library.
 For an existing script or workflow, use `tubeless-make-pipeline` from the
 [agent skill pack](./agent-skills.md) to choose step boundaries first.
 
-For an explicit Node 24/Bun repository gate, see [the portable check recipe](node-check-recipe.md) and [`node-check.ts`](../examples/node-check.ts).
+For an explicit Node 24/Bun repository gate, see [the portable check recipe](node-check-recipe.md) and [`node-check.ts`](../examples/node-check.ts). To rerun an eligible Cloud check, use [a reproduction manifest](./reproduction-manifest.md).
 
 For optional structured Vitest failures, see [the diagnostic contract](structured-diagnostics.md).
 For headless Cloud submission, see [Cloud CLI](./cli.md#tubeless-cloud).

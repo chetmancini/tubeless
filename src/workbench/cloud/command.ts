@@ -53,13 +53,20 @@ type CloudAction<Input = PreparedCloudRunInput> =
       mode?: ObservationMode;
     };
 
-function parseAction({
-  values,
-  positionals,
-}: ReturnType<typeof parseArgs>): CloudAction<CloudRunInputArguments> {
+type CloudCliAction = CloudAction<CloudRunInputArguments> | { kind: "reproduce"; path: string };
+
+function parseAction({ values, positionals }: ReturnType<typeof parseArgs>): CloudCliAction {
   const [command, selector] = positionals;
   if (!CLOUD_SPEC.subcommands.some((name) => name === command))
-    throw new CloudRunUsageError("Pass list, run, follow, or logs.");
+    throw new CloudRunUsageError(`Pass one of: ${CLOUD_SPEC.subcommands.join(", ")}.`);
+  if (command === "reproduce") {
+    if (positionals.length !== 2)
+      throw new CloudRunUsageError("Pass one reproduction manifest file.");
+    if (!values.execute)
+      throw new CloudRunUsageError("Pass --execute to authorize running the pinned source.");
+    return { kind: "reproduce", path: selector };
+  }
+
   const wanted =
     command === "logs" || command === "follow" || (command === "run" && !values.id) ? 2 : 1;
   if (positionals.length !== wanted)
@@ -303,8 +310,16 @@ export async function runCloud(
           action = parseAction(parsed);
         } catch (error) {
           if (error instanceof CloudRunUsageError)
-            return writeUsageError(io, error.message, CLOUD_USAGE);
+            return writeUsageError(
+              io,
+              error.message,
+              renderWorkbenchUsage(CLOUD_SPEC, parsed.positionals[0])
+            );
           throw error;
+        }
+        if (action.kind === "reproduce") {
+          const { runReproduce } = await import("./reproduce.js");
+          return runReproduce(action.path, io);
         }
         return runCloudCommand({ ...parsed.values, action }, io, dependencies);
       },

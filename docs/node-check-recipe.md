@@ -1,13 +1,9 @@
 # Portable Node checks
 
-Candidate O3 slice: a single-package Node 24 / Bun 1.4.4 recipe with Vitest
-5.1.0 reports on POSIX hosts (Linux and macOS). Windows execution is rejected
-before launching commands because process-tree cancellation is not supported there.
-This API is newer than published Tubeless 0.4.2. Cloud's paired
-wrapper is an implementation/fixture integration pending an OSS release, Cloud
-pin update and hosted qualification. Customer enrollment remains disabled.
-The earlier `design/ci/node-check-recipe.md` proposal was removed in the repository's
-November documentation cleanup; this document records the implemented slice.
+The portable recipe supports a single-package Node 24 / Bun 1.4.4 check
+with Vitest 5.1.0 reports on Linux and macOS. Cloud pins the recipe to
+Tubeless 0.4.3 and has qualified the wrapper in a disposable hosted proof.
+Customer enrollment remains disabled.
 
 Commit `package.json` with `"packageManager": "bun@1.4.4"`, `bun.lock`, and
 `tubeless.check.json`:
@@ -117,9 +113,11 @@ storage, authorization, retention and collection transport. Repository reports
 remain untrusted inspection data. They cannot create check receipts, authorize a
 deployment or override a supervisor's nonzero exit.
 
-Remaining work: publish the new entrypoints and replace Cloud's temporary O3 source
-bridge with that pin; qualify the wrapper on the approved hosted image at an exact
-revision; validate cold start, cancellation/timeout/restart and cleanup there;
-complete C2/C3 outbound-network, abuse, enrollment and rollout gates. Additional
-package managers/languages, private registries, caches, service containers, test
-selection, sharding and reproduction are deferred.
+For an eligible Cloud run, [reproduce the pinned check locally](./reproduction-manifest.md)
+from a manifest with the original source, plan and image identity. Cloud
+production of these manifests depends on an OSS release containing the
+manifest API and reproduction command.
+
+Cloud rollout still requires its outbound-network, abuse and enrollment gates.
+Additional package managers and languages, private registries, caches, service
+containers, test selection and sharding remain outside the recipe.

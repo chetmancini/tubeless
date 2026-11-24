@@ -69,6 +69,7 @@ const allowedDependencies: Record<string, readonly string[]> = {
   ],
   workbench: [
     "agent",
+    "check",
     "cli",
     "core",
     "hosting",

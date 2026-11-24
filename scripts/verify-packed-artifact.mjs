@@ -171,6 +171,13 @@ function assertPackedLauncher(installedPackage, tubelessBin, consumerRoot) {
 }
 
 function assertPackedExecutable(tubelessBin, installedPackage, consumerRoot) {
+  if (
+    !run(tubelessBin, ["cloud", "reproduce", "--help"], consumerRoot).includes(
+      "reproduce --execute"
+    )
+  ) {
+    throw new Error("Packed executable is missing the reproduction command.");
+  }
   const cliJob = join(installedPackage, "examples", "cli-job.ts");
   const sourceFile = join(consumerRoot, "import-source.txt");
   writeFileSync(sourceFile, "Alpha\nBeta\n");

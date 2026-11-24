@@ -41,27 +41,37 @@ export async function readCliJson(
       }
     }
   } else {
-    const fileHandle = await open(
-      resolve(context.cwd, file),
-      constants.O_RDONLY | constants.O_NONBLOCK
-    );
-    try {
-      if (!(await fileHandle.stat()).isFile())
-        throw new CliInputError(`${label} file must be a regular file.`);
-      const buffer = Buffer.alloc(CLI_INPUT_MAX_BYTES + 1);
-      let size = 0;
-      while (size < buffer.length) {
-        if (context.signal.aborted) throw new Error("Input read interrupted.");
-        const read = await fileHandle.read(buffer, size, buffer.length - size, null);
-        if (read.bytesRead === 0) break;
-        size += read.bytesRead;
-      }
-      text = buffer.subarray(0, size).toString("utf8");
-    } finally {
-      await fileHandle.close();
-    }
+    text = (
+      await readCliFile(file, context.cwd, CLI_INPUT_MAX_BYTES, label, context.signal)
+    ).toString("utf8");
   }
   return parseCliJson(text, label);
+}
+
+/** Read at most one byte beyond the limit so the caller can reject oversized input. */
+export async function readCliFile(
+  file: string,
+  cwd: string,
+  maxBytes: number,
+  label: string,
+  signal: AbortSignal
+): Promise<Buffer> {
+  const fileHandle = await open(resolve(cwd, file), constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    if (!(await fileHandle.stat()).isFile())
+      throw new CliInputError(`${label} file must be a regular file.`);
+    const buffer = Buffer.alloc(maxBytes + 1);
+    let size = 0;
+    while (size < buffer.length) {
+      if (signal.aborted) throw new Error("Input read interrupted.");
+      const read = await fileHandle.read(buffer, size, buffer.length - size, null);
+      if (read.bytesRead === 0) break;
+      size += read.bytesRead;
+    }
+    return buffer.subarray(0, size);
+  } finally {
+    await fileHandle.close();
+  }
 }
 
 export function parseCliJson(text: string, label: string): unknown {
