@@ -9,4 +9,4 @@ const path = `og.jpg?v=${revision}`;
 
 export const SOCIAL_IMAGE_HREF = href(path);
 export const SOCIAL_IMAGE_URL = absUrl(path);
-export const SOCIAL_IMAGE_ALT = "Tubeless — Typed, previewable pipelines. Ivory tubes surround a large wordmark on warm paper, with the five-color brand stripe above.";
+export const SOCIAL_IMAGE_ALT = "Tubeless — Typed, agentic pipelines. Ivory tubes surround a large wordmark on warm paper, with the five-color brand stripe above.";

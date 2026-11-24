@@ -12,7 +12,7 @@ Brand assets for referring to Tubeless in articles, integrations, and community 
 
 ## Social share image
 
-Typed, previewable pipelines. Use this 1200 × 630 JPEG when sharing Tubeless on social media.
+Typed, agentic pipelines. Use this 1200 × 630 JPEG when sharing Tubeless on social media.
 
 - [Download the social share image](${SOCIAL_IMAGE_URL})
 `, { headers: { "content-type": "text/markdown; charset=utf-8" } });

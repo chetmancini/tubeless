@@ -5,7 +5,7 @@
 </p>
 <h1 align="center">Tubeless</h1>
 <p align="center">
-  Typed, previewable pipelines for TypeScript. Run locally, schedule on <a href="https://cloud.tubeless.io">Tubeless Cloud</a>.
+  Typed, agentic pipelines for TypeScript. Run locally, schedule on <a href="https://cloud.tubeless.io">Tubeless Cloud</a>.
 </p>
 <p align="center">
   <a href="https://www.npmjs.com/package/tubeless"><img alt="npm version" src="https://img.shields.io/npm/v/tubeless?style=flat-square&labelColor=121212&color=c4a046"></a>
@@ -19,7 +19,7 @@
   <img src="docs/assets/studio.png" width="720" alt="Tubeless Studio on a completed live-tui run, with the step timeline and the Publish Manifest step selected.">
 </p>
 
-Each step's output is the next step's typed input. `plan()` shows the selected work before it runs. A dry run can skip writes. The same file runs in your process or on Tubeless Cloud.
+Each step's output is the next step's typed input. `plan()` lists the steps that will run, and does not run them. A dry run still runs unmarked steps and skips a write marked `dryRun: "skip"`. The same file runs in your process or on Tubeless Cloud.
 
 ## Quick start
 
