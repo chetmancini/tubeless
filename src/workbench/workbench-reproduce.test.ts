@@ -10,6 +10,8 @@ import {
   type ReproductionManifest,
 } from "../utilities/reproduction-manifest.js";
 import { runWorkbenchCli, TUBELESS_WORKBENCH_EXIT_CODE as exit } from "./workbench.js";
+import { shellWord } from "./workbench-shared.js";
+import { captureIo } from "./workbench.test-support.js";
 
 const pinned = new URL("../../fixtures/reproduction/node-check-failure-v1.json", import.meta.url);
 const source = new URL("../../scripts/fixtures/node-check/", import.meta.url);
@@ -26,25 +28,9 @@ function temporaryRoot() {
 }
 
 async function invoke(cwd: string, ...args: string[]) {
-  let stdout = "";
-  let stderr = "";
-  const code = await runWorkbenchCli(["cloud", "reproduce", ...args], {
-    cwd,
-    signal: new AbortController().signal,
-    stdout: {
-      write(chunk) {
-        stdout += chunk;
-        return true;
-      },
-    },
-    stderr: {
-      write(chunk) {
-        stderr += chunk;
-        return true;
-      },
-    },
-  });
-  return { code, stdout, stderr };
+  const io = captureIo(cwd);
+  const code = await runWorkbenchCli(["cloud", "reproduce", ...args], io);
+  return { code, stdout: io.output.join(""), stderr: io.errors.join("") };
 }
 
 it("requires explicit execution and rejects oversized files without starting tools", async () => {
@@ -65,7 +51,7 @@ it("requires explicit execution and rejects oversized files without starting too
     copyFileSync(pinned, join(cwd, "manifest.json"));
     expect(await invoke(cwd, "--execute", "manifest.json")).toMatchObject({
       code: exit.validation,
-      stderr: expect.stringContaining("requires node 24 on PATH"),
+      stderr: expect.stringContaining("requires Node 24 on PATH"),
       stdout: "",
     });
   }
@@ -96,11 +82,11 @@ it.runIf(process.platform !== "win32" && process.versions.node.startsWith("24.")
     };
     const git = (...args: string[]) =>
       execFileSync(gitPath, args, { cwd, env, encoding: "utf8" }).trim();
-    for (const file of ["app.js", "app.test.js", "bun.lock", "package.json", "tubeless.check.json"])
-      copyFileSync(new URL(file, source), join(cwd, file));
+    const files = ["app.js", "app.test.js", "bun.lock", "package.json", "tubeless.check.json"];
+    for (const file of files) copyFileSync(new URL(file, source), join(cwd, file));
     writeFileSync(join(cwd, "app.js"), "export const answer = 41;\n");
     git("init", "--quiet", "--template=", "--object-format=sha1", "--initial-branch=main");
-    git("add", "--", "app.js", "app.test.js", "bun.lock", "package.json", "tubeless.check.json");
+    git("add", "--", ...files);
     git("commit", "--quiet", "-m", "Fail the portable check fixture");
     expect(git("rev-parse", "HEAD")).toBe(manifest.source.commit);
     expect(git("rev-parse", "HEAD^{tree}")).toBe(manifest.source.treeSha);
@@ -115,43 +101,33 @@ it.runIf(process.platform !== "win32" && process.versions.node.startsWith("24.")
     const marker = randomUUID();
     const isolated =
       'test -z "${TUBELESS_TOKEN}${CF_ACCESS_CLIENT_SECRET}${CLOUDFLARE_API_TOKEN}${NODE_OPTIONS}" || exit 19';
-    writeFileSync(
-      join(bin, "git"),
-      `#!/bin/sh
-${isolated}
-case " $* " in
+    const shim = (name: string, script: string) =>
+      writeFileSync(join(bin, name), `#!/bin/sh\n${isolated}\n${script}\n`, { mode: 0o700 });
+    const remote = `https://github.com/${manifest.repository.fullName}.git`;
+    const fixtureRemote = shellWord(`url.file://${cwd}.insteadOf=${remote}`);
+    shim(
+      "git",
+      `case " $* " in
   *" fetch "*)
-    printf '%s\\n' "$@" >> "${fetchLog}"
+    printf '%s\\n' "$@" >> ${shellWord(fetchLog)}
     export GIT_ALLOW_PROTOCOL=file
-    exec "${gitPath}" -c "url.file://${cwd}.insteadOf=https://github.com/${manifest.repository.fullName}.git" "$@"
+    exec ${shellWord(gitPath)} -c ${fixtureRemote} "$@"
     ;;
-  *) printf '%s\n' 'Fixture Git warning' >&2; exec "${gitPath}" "$@" ;;
-esac
-`,
-      { mode: 0o700 }
-    );
-    for (const [tool, executable] of [
-      ["bun", bunPath],
-      ["node", process.execPath],
-    ]) {
-      const checkBun =
-        tool === "bun"
-          ? `case "$1" in
-  --version) printf '%s\\n' probe >> "${bunProbes}" ;;
-  install) test ! -e .git && ! git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 18 ;;
+  *) printf '%s\\n' 'Fixture Git warning' >&2; exec ${shellWord(gitPath)} "$@" ;;
 esac`
-          : "";
-      writeFileSync(
-        join(bin, tool),
-        `#!/bin/sh
-${isolated}
-if [ "$1" = --version ]; then printf '%s\\n' 'Fixture tool warning' >&2; fi
-${checkBun}
-exec "${executable}" "$@"
-`,
-        { mode: 0o700 }
-      );
-    }
+    );
+    shim(
+      "bun",
+      `case "$1" in
+  --version)
+    printf '%s\\n' 'Fixture tool warning' >&2
+    printf '%s\\n' probe >> ${shellWord(bunProbes)}
+    ;;
+  install) test ! -e .git && ! git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 18 ;;
+esac
+exec ${shellWord(bunPath)} "$@"`
+    );
+    shim("node", `exec ${shellWord(process.execPath)} "$@"`);
     vi.stubEnv("PATH", [bin, process.env.PATH].join(delimiter));
     vi.stubEnv("TMPDIR", scratch);
     vi.stubEnv("TUBELESS_TOKEN", marker);
@@ -159,14 +135,13 @@ exec "${executable}" "$@"
     vi.stubEnv("CLOUDFLARE_API_TOKEN", marker);
     vi.stubEnv("NODE_OPTIONS", marker);
 
-    const path = join(cwd, "manifest.json");
+    const path = join(root, "manifest.json");
     const run = async (input: ReproductionManifest) => {
       writeFileSync(path, JSON.stringify(input));
-      const output = await invoke(cwd, "--execute", "manifest.json");
+      const output = await invoke(cwd, "--execute", path);
       expect(output.stderr + output.stdout).not.toContain(marker);
       return output;
     };
-    writeFileSync(path, JSON.stringify(manifest));
     const dirtyStatus = git("status", "--short");
     const output = await run(manifest);
     expect(output.stderr, output.stdout).toBe("");
@@ -209,7 +184,7 @@ exec "${executable}" "$@"
     ).toHaveLength(1);
     expect(readFileSync(bunProbes, "utf8")).toBe("probe\n");
     expect(readFileSync(fetchLog, "utf8").trim().split("\n").slice(-2)).toEqual([
-      `https://github.com/${manifest.repository.fullName}.git`,
+      remote,
       manifest.source.commit,
     ]);
     expect(git("status", "--short")).toBe(dirtyStatus);

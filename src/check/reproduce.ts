@@ -10,22 +10,6 @@ import { readCheckToolVersion, runCheckProcess } from "./process.js";
 import { executeNodeCheckPlan } from "./recipe.js";
 import { prepareReproductionSource } from "./reproduction-source.js";
 
-function requireToolVersion(
-  tool: "node" | "bun",
-  required: string,
-  version: string | undefined
-): string {
-  if (version === undefined)
-    throw new Error(
-      `Reproduction requires ${tool} ${required} on PATH. Could not read its version.`
-    );
-  if ((tool === "node" ? version.split(".")[0] : version) !== required)
-    throw new Error(
-      `Reproduction requires ${tool === "node" ? "Node" : "Bun"} ${required}. Found ${version}.`
-    );
-  return version;
-}
-
 /** Run the admitted recipe with local tools, a temporary checkout and a fresh environment. */
 export async function reproduceCheck(manifest: ReproductionManifest, signal: AbortSignal) {
   if (process.platform === "win32") throw new Error("Reproduction requires a POSIX host.");
@@ -49,13 +33,20 @@ export async function reproduceCheck(manifest: ReproductionManifest, signal: Abo
     };
     const location = { cwd, env, signal };
     const { nodeCheck, runtime: recorded } = manifest;
-    const [nodeVersion, bunVersion] = await Promise.all([
+    const required = nodeCheck.plan.toolchain;
+    const [node, bun] = await Promise.all([
       readCheckToolVersion("node", location),
       readCheckToolVersion("bun", location),
     ]);
     signal.throwIfAborted();
-    const node = requireToolVersion("node", nodeCheck.plan.toolchain.node, nodeVersion);
-    const bun = requireToolVersion("bun", nodeCheck.plan.toolchain.bun, bunVersion);
+    if (node?.split(".")[0] !== required.node)
+      throw new Error(
+        `Reproduction requires Node ${required.node} on PATH. Found ${node ?? "no usable Node"}.`
+      );
+    if (bun !== required.bun)
+      throw new Error(
+        `Reproduction requires Bun ${required.bun} on PATH. Found ${bun ?? "no usable Bun"}.`
+      );
 
     await prepareReproductionSource(manifest, location);
     const plan = await readNodeCheckPlan(cwd).catch(() => {
