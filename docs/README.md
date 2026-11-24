@@ -10,6 +10,7 @@ Guides for developers and coding agents are also on the [website](https://tubele
 | [Recipe index](./recipes.md)                            | Finding a working example for your task                            |
 | [Core concepts](./concepts.md)                          | Dependencies, skips, failures, dry runs, and contexts              |
 | [CLI](./cli.md)                                         | `list`, `inspect`, `plan`, `graph`, `run`, `history`, exit codes   |
+| [Reproduction manifests](./reproduction-manifest.md)    | Rerunning an eligible Cloud Node check at its original revision    |
 | [Studio](./studio.md)                                   | Run history, project commands, and gateway hosting                 |
 | [Artifacts](./artifacts.md)                             | Typed loaders, savers, and recorded lineage                        |
 | [Step output observation](./step-output-observation.md) | Capturing and supplying raw outputs through host-owned persistence |

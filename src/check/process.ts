@@ -7,7 +7,8 @@ import type { CheckProcessOutcome } from "../utilities/check-report.js";
 export async function runCheckProcess(
   argv: readonly string[],
   timeoutMs: number,
-  context: Pick<PipelineStepContext<object>, "cwd" | "signal" | "log">
+  context: Pick<PipelineStepContext<object>, "cwd" | "signal" | "log">,
+  env?: NodeJS.ProcessEnv
 ): Promise<CheckProcessOutcome> {
   if (process.platform === "win32")
     throw new TypeError("The node-check-v1 recipe requires a POSIX host; Windows is unsupported.");
@@ -15,7 +16,7 @@ export async function runCheckProcess(
     return { status: "cancelled", exitCode: null, signal: null, outputComplete: false };
   const child = spawn(argv[0], argv.slice(1), {
     cwd: context.cwd,
-    env: {
+    env: env ?? {
       ...process.env,
       PATH: `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ""}`,
     },

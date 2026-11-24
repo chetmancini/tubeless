@@ -23,6 +23,7 @@ or later without Bun.
 | `tubeless plan`       | A pipeline or command export     | Previews selection without executing or requiring domain options    |
 | `tubeless graph`      | A pipeline or command export     | Writes Mermaid flowchart source                                     |
 | `tubeless run`        | A pipeline ID or command export  | Infers or validates command arguments and runs the pipeline         |
+| `tubeless reproduce`  | A Cloud reproduction manifest    | Reruns a pinned Node check locally with `--execute`                 |
 | `tubeless history`    | An optional run id               | Lists or shows recorded runs from SQLite or a finished NDJSON trace |
 | `tubeless upgrade`    | An optional `--store` path       | Rewrites an older SQLite run store after `--yes`                    |
 | `tubeless ui`         | An optional project file         | Serves the local run studio; see [studio](./studio.md)              |
@@ -419,6 +420,15 @@ is accepted only by deployment targets.
 
 `init` never overwrites: if any target file exists it names the conflicts and writes
 nothing. An unknown or repeated target is a usage error.
+
+## Reproduce a Cloud Node check
+
+Run `tubeless reproduce --execute <manifest.json>` with Git, Node 24 and Bun
+1.4.4 on PATH. The command verifies the original commit, tree, lockfile and plan
+in a temporary checkout before running the check. It emits the local
+execution's JSON with native outcomes and normalized reports. See
+[reproduction manifests](./reproduction-manifest.md) for the supported scope and
+what the execution flag authorizes.
 
 ## Exit codes
 

@@ -208,6 +208,20 @@ Schema-backed pipelines infer arguments; use definePipelineCommand for custom in
       },
     },
   },
+  reproduce: {
+    name: "reproduce",
+    description: "Rerun a pinned Cloud Node check locally",
+    usage: `Usage: tubeless reproduce --execute <manifest.json>
+
+Verify the pinned source and run its package scripts and tests with your local
+permissions. Only execute manifests and repository revisions you trust.
+Emits a JSON reproduction result. Requires Git, Node 24 and Bun 1.4.4 on PATH.
+`,
+    positional: "file",
+    options: {
+      execute: { type: "boolean", description: "Authorize executing the pinned repository source" },
+    },
+  },
   history: {
     name: "history",
     description: "Show recorded runs from the local SQLite store",

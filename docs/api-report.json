@@ -405,9 +405,21 @@
       "specifier": "tubeless/check-plan"
     },
     {
+      "declaration": "./dist/utilities/reproduction-manifest.d.ts",
+      "exports": [
+        "decodeReproductionManifest",
+        "digestNodeCheckPlan",
+        "parseReproductionManifest",
+        "REPRODUCTION_MANIFEST_MAX_BYTES",
+        "ReproductionManifest"
+      ],
+      "sha256": "2825c1d3fcbaa6c456f6cb20d078990b10170d2f14520c64cbfeaecb5743b30f",
+      "specifier": "tubeless/reproduction-manifest"
+    },
+    {
       "declaration": "./dist/check/node-check.d.ts",
       "exports": ["NodeCheckExecution", "readNodeCheckPlan", "runNodeCheck"],
-      "sha256": "cb8dc66d8dae0a3309240767553959113053a6344bfc1829db04f5b11fa09dd2",
+      "sha256": "26b048288ed63edf2a2cebe754735880b096a5ef0a95d3f250334f2b4eb2f882",
       "specifier": "tubeless/node/check"
     }
   ],

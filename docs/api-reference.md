@@ -29,7 +29,8 @@ Package: `tubeless`
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
 | `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
 | `tubeless/check-plan`            | `./dist/utilities/node-check-plan.d.ts`        | `23fef204664df9348fcfab6d1d87dd782f58d75cd9b61a868793d246ba80fb10` |                6 |
-| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `cb8dc66d8dae0a3309240767553959113053a6344bfc1829db04f5b11fa09dd2` |                3 |
+| `tubeless/reproduction-manifest` | `./dist/utilities/reproduction-manifest.d.ts`  | `2825c1d3fcbaa6c456f6cb20d078990b10170d2f14520c64cbfeaecb5743b30f` |                5 |
+| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `26b048288ed63edf2a2cebe754735880b096a5ef0a95d3f250334f2b4eb2f882` |                3 |
 
 ## Symbols
 
@@ -415,10 +416,20 @@ Package: `tubeless`
 | [`NodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L26)         | All commands, dependency edges and script bodies are part of admission identity.               |
 | [`resolveNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L184) | Resolve data only.                                                                             |
 
+### `tubeless/reproduction-manifest`
+
+| Symbol                                                                                                                           | Description                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [`decodeReproductionManifest`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/reproduction-manifest.ts#L63)     | Validate a JSON value, normalize its plan and verify the retained digest.                     |
+| [`digestNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/reproduction-manifest.ts#L53)            | SHA-256/base64url of UTF-8 JSON with recursively sorted object keys and original array order. |
+| [`parseReproductionManifest`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/reproduction-manifest.ts#L127)     | Parse bounded UTF-8 JSON and validate it without fetching or executing source.                |
+| [`REPRODUCTION_MANIFEST_MAX_BYTES`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/reproduction-manifest.ts#L5) | Maximum UTF-8 size of the complete reproduction manifest.                                     |
+| [`ReproductionManifest`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/reproduction-manifest.ts#L8)            | Retained facts for one secretless Cloud node-check-v1 run.                                    |
+
 ### `tubeless/node/check`
 
-| Symbol                                                                                                | Description                                                                                |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [`NodeCheckExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L21) | Original pipeline result, independent native outcomes and collected test-report envelopes. |
-| [`readNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L29)  | Load only JSON and a committed Bun text lock.                                              |
-| [`runNodeCheck`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L58)       | Execute an admitted plan with the ordinary Tubeless scheduler.                             |
+| Symbol                                                                                            | Description                                                                                |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [`NodeCheckExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/recipe.ts#L21) | Original pipeline result, independent native outcomes and collected test-report envelopes. |
+| [`readNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/check/recipe.ts#L29)  | Load only JSON and a committed Bun text lock.                                              |
+| [`runNodeCheck`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L8)    | Execute an admitted plan with the ordinary Tubeless scheduler.                             |

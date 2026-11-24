@@ -500,7 +500,7 @@
           {
             "patterns": [
               {
-                "regex": "(^|/)(check|cloudflare|node|testing)/",
+                "regex": "(^|/)(cloudflare|node|testing)/",
                 "allowTypeImports": true,
                 "message": "src/workbench may not import these modules at runtime. See the dependency table in src/README.md."
               },

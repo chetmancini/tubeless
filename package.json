@@ -201,6 +201,11 @@
       "import": "./dist/utilities/node-check-plan.js",
       "default": "./dist/utilities/node-check-plan.js"
     },
+    "./reproduction-manifest": {
+      "types": "./dist/utilities/reproduction-manifest.d.ts",
+      "import": "./dist/utilities/reproduction-manifest.js",
+      "default": "./dist/utilities/reproduction-manifest.js"
+    },
     "./node/check": {
       "types": "./dist/check/node-check.d.ts",
       "import": "./dist/check/node-check.js",
