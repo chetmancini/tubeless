@@ -467,6 +467,14 @@ try {
   assertPackedLauncher(installedPackage, tubelessBin, consumerRoot);
   assertPackedExecutable(tubelessBin, installedPackage, consumerRoot);
   assertPackedInit(tubelessBin, consumerRoot);
+  if (process.platform !== "win32" && nodeMajor === 24)
+    process.stdout.write(
+      run(
+        process.execPath,
+        [join(packageRoot, "scripts/fixtures/packed-reproduction.mjs"), tubelessBin],
+        consumerRoot
+      )
+    );
   run(
     process.execPath,
     [join(packageRoot, "scripts/fixtures/packed-cloud-check.mjs"), tubelessBin],

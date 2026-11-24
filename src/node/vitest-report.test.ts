@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { vitestCheckReport } from "./vitest-report.js";
 import {
@@ -157,9 +157,16 @@ describe("optional Vitest structured adapter", () => {
     if (result.state !== "available") throw new Error(result.state);
     expect(result.report.omittedTests).toBe(200 - result.report.tests.length);
     expect(Buffer.byteLength(JSON.stringify(result.report))).toBeLessThanOrEqual(L.bytes);
-    input.testResults[0].name = "../outside.spec.ts";
-    expect(vitestCheckReport(JSON.stringify(input), options).state).toBe("malformed");
   });
+
+  it.each(["../outside.spec.ts", resolve(options.root, "../outside.spec.ts")])(
+    "rejects report paths outside the source root (%s)",
+    (path) => {
+      const input = JSON.parse(raw());
+      input.testResults[0].name = path;
+      expect(vitestCheckReport(JSON.stringify(input), options).state).toBe("malformed");
+    }
+  );
 
   it.each([
     ["test-count", L.tests, 0],
