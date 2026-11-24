@@ -367,6 +367,7 @@ describe("tubeless __complete", () => {
         "--poll",
         "--json",
         "--execute",
+        "--output",
         "--help",
       ].sort()
     );
@@ -376,6 +377,9 @@ describe("tubeless __complete", () => {
     ["cloud", "list", ["--host", "--workspace", "--json", "--help"]],
     ["cloud", "inspect", ["--host", "--workspace", "--json", "--help"]],
     ["cloud", "cancel", ["--host", "--workspace", "--json", "--help"]],
+    ["cloud", "artifacts", ["--host", "--workspace", "--json", "--help"]],
+    ["cloud", "download", ["--host", "--workspace", "--output", "--help"]],
+    ["cloud", "manifest", ["--host", "--workspace", "--output", "--help"]],
     ["cloud", "reproduce", ["--execute", "--help"]],
     [
       "cloud",
@@ -442,6 +446,8 @@ describe("tubeless __complete", () => {
     ["cloud", "cancel", "--poll"],
     ["cloud", "list", "--execute"],
     ["cloud", "reproduce", "--json"],
+    ["cloud", "download", "--json"],
+    ["cloud", "manifest", "--execute"],
     ["auth", "status", "--no-browser"],
     ["auth", "login", "--json"],
   ])("rejects %s %s %s before running command effects", async (...args) => {

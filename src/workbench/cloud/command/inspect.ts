@@ -5,6 +5,13 @@ import type { CliRun } from "../protocol.js";
 
 type Output = ReturnType<typeof cloudOutput>;
 
+export function formatArtifact(
+  { name, size, contentType }: CliRun["artifacts"][number],
+  text: Output["text"]
+): string {
+  return `${text(name)} (${size} bytes, ${text(contentType)})`;
+}
+
 function describeError(error: StructuredError, text: Output["text"]): string {
   const codes = [error.code, error.sourceCode].filter(Boolean).join(", ");
   const cause = error.cause;
@@ -81,7 +88,6 @@ export function formatRunInspection(run: CliRun, output: Output, url: string): s
   }
   if (run.result !== undefined) lines.push(`Result: ${terminalSafeText(json(run.result))}`);
   if (run.artifacts.length) lines.push("Artifacts:");
-  for (const { name, size, contentType } of run.artifacts)
-    lines.push(`  ${text(name)} (${size} bytes, ${text(contentType)})`);
+  for (const artifact of run.artifacts) lines.push(`  ${formatArtifact(artifact, text)}`);
   return `${lines.join("\n")}\n`;
 }

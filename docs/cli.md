@@ -770,6 +770,34 @@ is lost or unusable, inspect the run under the same host and workspace before
 deciding whether to issue another request. The CLI sends a single POST per
 invocation.
 
+### Download retained files
+
+```sh
+tubeless cloud artifacts <run-id> --json
+tubeless cloud download <run-id> <artifact-name> --output ./report.bin
+tubeless cloud manifest <run-id> --output ./reproduction.json
+```
+
+`cloud artifacts` reads the run's retained artifact names, sizes in bytes and
+content types with read access. JSON is an array, with `[]` for a run that has
+no artifact metadata. A failed run lookup produces an error. Metadata may
+remain after the underlying bytes are deleted.
+
+`cloud download` saves the original artifact bytes. Automation tokens need
+both `read` and `artifacts:read` and access to that pipeline. Cloud restricts
+automation access to production deployment artifacts.
+
+`cloud manifest` needs read access to an eligible retained portable Node check.
+The CLI validates the manifest version, run ID and 64 KiB limit before saving.
+Run `cloud reproduce --execute <manifest.json>` as a separate command to fetch
+and execute the pinned source. See [reproduction manifests](./reproduction-manifest.md)
+for eligibility and execution requirements.
+
+Both downloads accept `--host` and `--workspace` and require an explicit path
+in an existing directory. The destination must be new and on a filesystem
+that supports hard links. The CLI installs the complete file atomically and
+reports its path on stderr. Use another path if the destination already exists.
+
 ### Follow and read results
 
 Foreground `cloud run`, `cloud follow <run-id>`, and `cloud logs <run-id> --follow`

@@ -29,7 +29,8 @@ import {
 } from "./protocol.js";
 import { terminalSafeText } from "../workbench-shared.js";
 import { redactCloudText } from "./credentials.js";
-import { BodyLimitError, cancelBody, readBoundedBody } from "../../utilities/read-body.js";
+import { cancelBody } from "../../utilities/read-body.js";
+import { readManifest, responseJson, writeArtifact } from "./response.js";
 import {
   FOLLOW_MEDIA_TYPE,
   isFollowCursor,
@@ -40,7 +41,6 @@ import {
 } from "./follow-protocol.js";
 
 const RUN_ENVELOPE_LIMIT = 68 * 1024;
-const RESPONSE_LIMIT = 4 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const FOLLOW_REQUEST_TIMEOUT_MS = 35_000;
 
@@ -75,6 +75,13 @@ export interface CloudClient {
   run(workspaceId: string, request: CliRunRequest, idempotencyKey: string): Promise<CliRun>;
   getRun(workspaceId: string, runId: string): Promise<CliRun>;
   cancelRun(workspaceId: string, runId: string): Promise<CliCancelResult>;
+  downloadArtifact(
+    workspaceId: string,
+    runId: string,
+    name: string,
+    write: (bytes: Uint8Array) => Promise<void>
+  ): Promise<void>;
+  getManifest(workspaceId: string, runId: string): Promise<Uint8Array>;
   requireRunFollowing(workspaceId: string, session?: CliSession): Promise<void>;
   followRun(
     workspaceId: string,
@@ -113,46 +120,6 @@ function validateRunInput(input: unknown): void {
   }
   if (encoded === undefined || Buffer.byteLength(encoded, "utf8") > CLOUD_INPUT_MAX_BYTES)
     throw new CloudClientError("Cloud run input exceeds the 64 KB JSON limit.", "invalid_request");
-}
-
-async function responseJson(response: Response, signal: AbortSignal): Promise<unknown> {
-  if (!response.headers.get("content-type")?.toLowerCase().includes("application/json")) {
-    await response.body?.cancel().catch(() => {});
-    throw new CloudClientError(
-      "Cloud returned a non-JSON response.",
-      "invalid_response",
-      response.status
-    );
-  }
-  const declaredLength = response.headers.get("content-length");
-  if (declaredLength !== null && Number(declaredLength) > RESPONSE_LIMIT) {
-    await response.body?.cancel().catch(() => {});
-    throw new CloudClientError(
-      "Cloud response exceeds the size limit.",
-      "invalid_response",
-      response.status
-    );
-  }
-  if (!response.body) {
-    throw new CloudClientError(
-      "Cloud returned an empty response.",
-      "invalid_response",
-      response.status
-    );
-  }
-  try {
-    const bytes = await readBoundedBody(response.body, RESPONSE_LIMIT, signal);
-    const body = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return JSON.parse(body) as unknown;
-  } catch (error) {
-    if (error instanceof BodyLimitError)
-      throw new CloudClientError(
-        "Cloud response exceeds the size limit.",
-        "invalid_response",
-        response.status
-      );
-    throw new CloudClientError("Cloud returned invalid JSON.", "invalid_response", response.status);
-  }
 }
 
 /** Bounded, origin-bound HTTP. Commands own admission and observation retry policy. */
@@ -308,14 +275,41 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       requestOptions
     );
 
-  const segment = (id: string) => {
-    if (!id || id === "." || id === ".." || (options.token && id.includes(options.token)))
-      throw new CloudClientError("Invalid Cloud workspace or run ID.", "invalid_request");
+  const segment = (id: string, label = "workspace or run ID") => {
+    if (
+      !id ||
+      id === "." ||
+      id === ".." ||
+      /[\ud800-\udfff]/u.test(id) ||
+      (options.token && id.includes(options.token))
+    )
+      throw new CloudClientError(`Invalid Cloud ${label}.`, "invalid_request");
     return encodeURIComponent(id);
   };
   const workspacePath = (workspace: string) => `/api/v1/workspaces/${segment(workspace)}`;
   const runPath = (workspace: string, runId: string) =>
     `${workspacePath(workspace)}/runs/${segment(runId)}`;
+  const download = <T>(
+    path: string,
+    accept: string,
+    consume: (response: Response, signal: AbortSignal) => Promise<T>
+  ) =>
+    request(
+      path,
+      async (response, signal) => {
+        if (!response.ok) throw responseError(response, await responseJson(response, signal));
+        if (response.status !== 200) {
+          cancelBody(response.body);
+          throw new CloudClientError(
+            "Cloud returned an incomplete download response.",
+            "invalid_response",
+            response.status
+          );
+        }
+        return consume(response, signal);
+      },
+      { accept }
+    );
   const session = () => requestJson("/api/v1/session", parseCliSession);
   return {
     host,
@@ -371,6 +365,18 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
           return { runId, status: value.status, alreadyFinished: value.alreadyFinished };
         },
         { body: {} }
+      ),
+    downloadArtifact: async (workspace, runId, name, write) =>
+      download(
+        `${runPath(workspace, runId)}/artifacts/${segment(name, "artifact name")}`,
+        "*/*",
+        (response, signal) => writeArtifact(response.body, signal, write)
+      ),
+    getManifest: async (workspace, runId) =>
+      download(
+        `${runPath(workspace, runId)}/reproduction`,
+        "application/json",
+        (response, signal) => readManifest(response, runId, signal)
       ),
     requireRunFollowing: async (workspace, discoveredSession) => {
       const capability =

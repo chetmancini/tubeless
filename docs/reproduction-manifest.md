@@ -1,7 +1,13 @@
 # Reproduce a Cloud Node check locally
 
-Save the reproduction manifest for an eligible Cloud run as a local JSON file.
-On Linux or macOS, put Git, Node 24 and Bun 1.4.4 on PATH, then run:
+Save the manifest for an eligible retained Cloud run with read access:
+
+```sh
+tubeless cloud manifest <run-id> --workspace <workspace-id> --output reproduction.json
+```
+
+The CLI validates the manifest before saving it to a new file. To execute the
+check on Linux or macOS, put Git, Node 24 and Bun 1.4.4 on PATH, then run:
 
 ```sh
 tubeless cloud reproduce --execute reproduction.json
