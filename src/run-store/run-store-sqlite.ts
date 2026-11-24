@@ -39,7 +39,7 @@ import {
   importSqliteAgentTranscript,
   listSqliteAgentTranscript,
   clearSqliteAgentTranscripts,
-} from "./agent-transcript-sqlite.js";
+} from "./agents/transcript/sqlite.js";
 import type { PipelineRunHistoryReader } from "./run-store-reader.js";
 import { listSqliteRunSummaries } from "./run-summary-sqlite.js";
 import type { AgentTranscriptReader, AgentTranscriptRecord } from "../tracing/agent-transcript.js";

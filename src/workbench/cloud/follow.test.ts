@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { captureIo } from "../workbench.test-support.js";
 import { createCloudClient } from "./client.js";
-import { runCloud } from "./command.js";
-import { service } from "./command.test-support.js";
+import { runCloud } from "./command/index.js";
+import { service } from "./command/index.test-support.js";
 import { FOLLOW_MEDIA_TYPE, type FollowEvent } from "./follow-protocol.js";
 
 const workspace = "fixture-workspace";

@@ -83,7 +83,6 @@ describe("default bash tool", () => {
   });
 
   it("escalates a timeout and tolerates a cleanup race after the process group closes", async () => {
-    const started = Date.now();
     const kill = process.kill.bind(process);
     let kills = 0;
     const spy = vi.spyOn(process, "kill").mockImplementation((pid, signal) => {
@@ -100,7 +99,6 @@ describe("default bash tool", () => {
       expect(result.stdout).toBe("ready");
       expect(result.signal).toBe("SIGKILL");
       expect(kills).toBe(2);
-      expect(Date.now() - started).toBeLessThan(3000);
     } finally {
       spy.mockRestore();
     }

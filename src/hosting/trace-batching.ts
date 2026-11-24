@@ -25,7 +25,10 @@ export class BatchingTraceExporter implements PipelineTraceExporter {
     ) {
       return this.flush();
     }
-    this.#timer ??= setTimeout(() => void this.flush().catch(() => {}), this.options.maxDelayMs);
+    this.#timer ??= setTimeout(() => {
+      // oxlint-disable-next-line landmines/no-silent-catch -- flush reports delivery failures via onFailure.
+      void this.flush().catch(() => {});
+    }, this.options.maxDelayMs);
   }
 
   flush(): Promise<void> {

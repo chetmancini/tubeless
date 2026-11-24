@@ -903,7 +903,6 @@ describe("code-mode executor contract", () => {
         throw new Error("isolate crashed");
       },
     };
-    const started = Date.now();
     expect(
       await runWith(executor, {
         ...script,
@@ -922,7 +921,6 @@ describe("code-mode executor contract", () => {
       message: "Sandbox stopped: isolate crashed",
     });
     expect(aborted).toHaveBeenCalledOnce();
-    expect(Date.now() - started).toBeLessThan(5000);
   });
 
   it("refuses calls a retained bridge makes after the script finishes", async () => {

@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { createServer } from "node:http";
 import { createInterface } from "node:readline";
 
@@ -120,10 +121,12 @@ export async function serveFakeMcpHttp(): Promise<{
   expireSession(): void;
   refuseSessions(): void;
   close(): Promise<void>;
+  received: EventEmitter;
   fake: ReturnType<typeof createFakeMcpServer>;
   requests: { method: string; session?: string; version?: string; auth?: string }[];
 }> {
   const fake = createFakeMcpServer();
+  const received = new EventEmitter();
   const requests: { method: string; session?: string; version?: string; auth?: string }[] = [];
   let session: string | undefined;
   let sessions = 0;
@@ -147,6 +150,7 @@ export async function serveFakeMcpHttp(): Promise<{
       return response.writeHead(404).end();
     }
     const reply = fake.handle(message);
+    received.emit(message.method ?? "reply");
     if (!reply) {
       if (message.id === undefined) return response.writeHead(202).end();
       response.writeHead(200, { "Content-Type": "text/event-stream" });
@@ -169,6 +173,7 @@ export async function serveFakeMcpHttp(): Promise<{
   return {
     url: `http://127.0.0.1:${port}/mcp`,
     fake,
+    received,
     requests,
     expireSession() {
       session = undefined;

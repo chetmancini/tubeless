@@ -4,7 +4,7 @@ import { createDefinitionIdentity } from "./pipeline-definition-identity.js";
 import { createPipelineTestRuntime } from "../testing/testing.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { decodeStoredTraceEvent } from "../run-store/run-store-event-decoder.js";
-import { compareDefinitions } from "../run-store/definition-diff.js";
+import { compareDefinitions } from "../run-store/definition/diff.js";
 import { validatePipelineDocument } from "../project/project-document.js";
 
 describe("inert graph metadata", () => {

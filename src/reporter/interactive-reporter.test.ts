@@ -1,8 +1,11 @@
+import { closeSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { v8StepCacheCodec } from "../utilities/cache-storage.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPipelineTestRuntime, overrideStep } from "../testing/testing.js";
 import { createPipelineReporter, type ReporterOutput } from "./interactive-reporter.js";
-import { renderTerminal } from "./live-ticker.test-support.js";
+import { renderTerminal } from "./live/ticker.test-support.js";
 import { createSteps, definePipeline, type PipelineLogger } from "../core/pipeline.js";
 
 function captureOutput(isTTY = true, columns = 100): ReporterOutput & { chunks: string[] } {
@@ -775,9 +778,6 @@ describe("createPipelineReporter", () => {
   });
 
   it("animates while a step blocks the main thread", async () => {
-    const { closeSync, openSync, readFileSync, unlinkSync, writeSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
     const path = join(tmpdir(), `tubeless-spinner-${process.pid}-${Date.now()}.log`);
     const fd = openSync(path, "w");
     try {

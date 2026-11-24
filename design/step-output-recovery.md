@@ -219,8 +219,8 @@ no leaked step values and no new runtime dependency.
 - [Application file adapter](../examples/recovery/file-output-store.ts): bind records
   to the execution, normalized input, graph, implementation, format, and codec;
   acknowledge per-step atomic file replacement and reject incompatible records.
-- [Integration tests](../src/testing/step-output-recovery.example.test.ts) and
-  [process fixture](../src/testing/step-output-recovery.test-support.ts): compare
+- [Integration tests](../src/testing/step-output/recovery.example.test.ts) and
+  [process fixture](../src/testing/step-output/recovery.test-support.ts): compare
   recovery with uninterrupted execution, terminate a host after an effect but
   before output persistence, and reconcile that effect with a business key.
 

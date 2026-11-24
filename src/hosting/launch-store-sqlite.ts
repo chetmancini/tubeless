@@ -1,10 +1,10 @@
-import { SqliteAttemptLedger } from "./attempt-ledger-sqlite.js";
+import { SqliteAttemptLedger } from "./attempt/ledger-sqlite.js";
 import type {
   HostedCollectorStore,
   CollectorCredential,
   StoredCollectorCredential,
   CollectorAuthorization,
-} from "./collector-store.js";
+} from "./collector/store.js";
 import {
   CollectorAuthorityError,
   CollectorInputError,
@@ -14,8 +14,8 @@ import {
   failureSchema,
   isCollectorCredentialId,
   isCollectorVerifier,
-} from "./collector-protocol.js";
-import { decodeAttemptBatch } from "./attempt-batch.js";
+} from "./collector/protocol.js";
+import { decodeAttemptBatch } from "./attempt/batch.js";
 import {
   HostedAttemptConflict,
   assertAttemptId,
@@ -23,7 +23,7 @@ import {
   type HostedAttemptDefinition,
   type HostedAttemptOwner,
   type HostedAttemptStore,
-} from "./attempt-store.js";
+} from "./attempt/store.js";
 import type { BatchAcknowledgement, HostedLaunchStore } from "./launch-store.js";
 import type { HostedLaunchAdmissionStore, HostedLaunchStatus } from "./launch-admission.js";
 import { createSqliteLaunchAdmissionStore } from "./launch-admission-sqlite.js";

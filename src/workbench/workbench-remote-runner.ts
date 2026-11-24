@@ -1,4 +1,4 @@
-import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt-batch.js";
+import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt/batch.js";
 import { createLaunchTracing } from "../hosting/launch-tracing.js";
 import {
   hostedCommandContext,

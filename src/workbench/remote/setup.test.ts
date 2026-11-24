@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { it, expect, vi } from "vitest";
 import { runRemote } from "../workbench-remote.js";
 import { CLOUDFLARE_DEV_DEPENDENCIES } from "../workbench-init-cloudflare.js";
-import { baseRun, pipeline, service, testDirectory } from "../cloud/command.test-support.js";
+import { baseRun, pipeline, service, testDirectory } from "../cloud/command/index.test-support.js";
 import { FOLLOW_MEDIA_TYPE } from "../cloud/follow-protocol.js";
 import type { RemoteProcess } from "./process.js";
 

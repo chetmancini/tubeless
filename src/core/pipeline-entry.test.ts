@@ -134,13 +134,13 @@ describe("module runtime boundaries", () => {
 
   it("keeps ticker workers independent of reporter orchestration and worker creation", () => {
     const allowed = new Set([
-      "reporter/live-ticker-worker.js",
-      "reporter/live-ticker-frame.js",
-      "reporter/live-ticker-protocol.js",
+      "reporter/live/worker.js",
+      "reporter/live/frame.js",
+      "reporter/live/protocol.js",
       "reporter/reporter-format.js",
       "reporter/terminal-text.js",
     ]);
-    for (const file of reachableFiles(["reporter/live-ticker-worker.js"])) {
+    for (const file of reachableFiles(["reporter/live/worker.js"])) {
       const name = relative(dist, file).split(sep).join("/");
       expect(allowed.has(name), `Ticker worker reaches ${name}`).toBe(true);
     }
@@ -169,9 +169,9 @@ describe("module runtime boundaries", () => {
       "core/progress.js",
       "run-store/run-store.js",
       "run-store/run-projection.js",
-      "run-store/agent-projection.js",
-      "run-store/agent-history.js",
-      "run-store/definition-projection.js",
+      "run-store/agents/projection.js",
+      "run-store/agents/history.js",
+      "run-store/definition/projection.js",
       "run-store/run-store-reader.js",
       "run-store/run-store-query.js",
       "run-store/run-history.js",
@@ -189,6 +189,7 @@ describe("module runtime boundaries", () => {
       "studio/server/history.js",
       "studio/server/run-details.js",
       "studio/shared/schema.js",
+      "utilities/hex.js",
       "utilities/read-body.js",
       "utilities/abort.js",
       "utilities/http-response.js",
@@ -205,7 +206,7 @@ describe("module runtime boundaries", () => {
     const entries = [
       "studio/server/api.js",
       "run-store/run-store.js",
-      "run-store/agent-history.js",
+      "run-store/agents/history.js",
     ];
     for (const file of reachableFiles(entries)) {
       const name = relative(dist, file).split(sep).join("/");
@@ -291,7 +292,7 @@ describe("module runtime boundaries", () => {
   });
 
   it("keeps the hosting kit free of workbench, storage adapters and the HTTP listener", () => {
-    const entries = readdirSync(resolve(dist, "hosting"))
+    const entries = readdirSync(resolve(dist, "hosting"), { encoding: "utf8", recursive: true })
       .filter((file) => file.endsWith(".js"))
       .map((file) => `hosting/${file}`);
     for (const file of reachableFiles(entries)) {
@@ -311,18 +312,18 @@ describe("module runtime boundaries", () => {
 
   it("keeps collector worker entrypoints free of CLI startup and concrete storage", () => {
     const entries = [
-      "workbench/collector-worker-runtime.js",
-      "workbench/collector-worker.js",
-      "workbench/collector-worker-host.js",
+      "workbench/collector/runtime.js",
+      "workbench/collector/worker.js",
+      "workbench/collector/host.js",
     ];
     for (const file of reachableFiles(entries)) {
       const name = relative(dist, file).split(sep).join("/");
       if (moduleName(file) === "workbench") {
         expect([
-          "workbench/collector-worker-runtime.js",
-          "workbench/collector-worker.js",
-          "workbench/collector-worker-host.js",
-          "workbench/collector-worker-protocol.js",
+          "workbench/collector/runtime.js",
+          "workbench/collector/worker.js",
+          "workbench/collector/host.js",
+          "workbench/collector/protocol.js",
           "workbench/pipeline-module.js",
         ]).toContain(name);
       }

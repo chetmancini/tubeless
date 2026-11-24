@@ -84,18 +84,24 @@ it("recreates the Studio stub for a retryable read and queues the child once", a
 });
 
 it("interrupts a stalled result read on parent abort and cancels through a fresh stub", async () => {
-  const read = vi
-    .fn<RunnerStageStore["readStage"]>()
-    .mockImplementation(() => new Promise(() => {}));
+  let markReading!: () => void;
+  const reading = new Promise<void>((resolve) => {
+    markReading = resolve;
+  });
+  const read = vi.fn<RunnerStageStore["readStage"]>(() => {
+    markReading();
+    return new Promise(() => {});
+  });
   const { signal, run, store, cancelStage, enqueueStage } = await fixture(read);
   const staleCancel = vi.fn<RunnerStageStore["cancelStage"]>();
   store.mockImplementation(() => ({ enqueueStage, readStage: read, cancelStage: staleCancel }));
   const result = run();
-  await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+  await reading;
   store.mockImplementation(() => ({ enqueueStage, readStage: read, cancelStage }));
   const failure = expect(result).rejects.toThrow("Parent stopped");
   signal.abort(new DOMException("Parent stopped", "AbortError"));
   await failure;
+  expect(read).toHaveBeenCalledOnce();
   expect(enqueueStage).toHaveBeenCalledOnce();
   expect(cancelStage).toHaveBeenCalledWith("launch", enqueueStage.mock.calls[0][0].id, undefined);
   expect(staleCancel).not.toHaveBeenCalled();

@@ -12,14 +12,14 @@ import {
 import {
   openNdjsonAgentTranscriptReader,
   readNdjsonAgentTranscriptRecords,
-} from "../run-store/agent-transcript-ndjson.js";
+} from "../run-store/agents/transcript/ndjson.js";
 import {
   readPipelineEventPages,
   readPipelineRunTree,
   type PipelineRunHistoryReader,
   type PipelineRunSummary,
 } from "../run-store/run-store-reader.js";
-import { projectAgentHistory } from "../run-store/agent-history.js";
+import { projectAgentHistory } from "../run-store/agents/history.js";
 import { formatAgentHistory } from "./agent/history.js";
 import { readAgentTranscript, formatAgentTranscript } from "./agent/transcript.js";
 import type { AgentTranscriptReader } from "../tracing/agent-transcript.js";

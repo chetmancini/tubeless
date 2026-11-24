@@ -133,7 +133,7 @@ export async function runUi(argv: readonly string[], io: WorkbenchCliIo): Promis
           const { startPipelineRunStudio } = await import("../studio/server/listener.js");
           if (parsed.values.transcript) {
             const { openNdjsonAgentTranscriptReader } =
-              await import("../run-store/agent-transcript-ndjson.js");
+              await import("../run-store/agents/transcript/ndjson.js");
             transcripts = await openNdjsonAgentTranscriptReader(
               path.resolve(io.cwd, parsed.values.transcript)
             );

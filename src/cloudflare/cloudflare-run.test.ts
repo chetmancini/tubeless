@@ -201,11 +201,11 @@ describe("run lifecycle", () => {
 
   it("cancels a live run and ends it cancelled", async () => {
     const storage = createFakeDurableStorage();
-    const { studio, batches, failures } = ingest();
+    const { studio, batches, failures, firstBatch } = ingest();
     const core = new RunObjectCore({ storage, commands, ingest: () => studio });
     await core.start({ ...job({ name: "ada" }), commandId: "waiting" });
     const alarm = core.alarm();
-    await vi.waitFor(() => expect(batches.length).toBeGreaterThan(0));
+    await firstBatch;
     expect(core.cancel()).toBe(true);
     expect(core.cancel()).toBe(false);
     await alarm;
@@ -227,7 +227,7 @@ describe("run lifecycle", () => {
 
   it("caps the watchdog alarm at the maximum run duration", async () => {
     const storage = createFakeDurableStorage();
-    const { studio, batches } = ingest();
+    const { studio, firstBatch } = ingest();
     const core = new RunObjectCore({ storage, commands, ingest: () => studio, now: () => 1_000 });
     await core.start({
       ...job({ name: "ada" }),
@@ -235,7 +235,7 @@ describe("run lifecycle", () => {
       maxRunDurationMs: 100 * MAX_RUN_DURATION_MS,
     });
     const alarm = core.alarm();
-    await vi.waitFor(() => expect(batches.length).toBeGreaterThan(0));
+    await firstBatch;
     expect(storage.alarmAtMs()).toBe(1_000 + MAX_RUN_DURATION_MS + 60_000);
     core.cancel();
     await alarm;

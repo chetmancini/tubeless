@@ -111,14 +111,14 @@ describe("typed step overrides", () => {
       run: ({ load }, context) => load + context.options.limit,
     });
     const pipeline = definePipeline({ id: "default-options", steps: [load, finish] });
-    const test = createPipelineTestRuntime();
+    const runtime = createPipelineTestRuntime();
     const controls = { overrides: [overrideStep(load, 2)] };
     // Exercise JavaScript callers; the test runtime's typed API requires options.
-    await expect(test.run(pipeline, undefined as never, controls)).resolves.toMatchObject({
+    await expect(runtime.run(pipeline, undefined as never, controls)).resolves.toMatchObject({
       status: "completed",
       value: 12,
     });
-    await expect(test.runOrThrow(pipeline, undefined as never, controls)).resolves.toBe(12);
+    await expect(runtime.runOrThrow(pipeline, undefined as never, controls)).resolves.toBe(12);
     expect(inputs).toEqual([{}, {}]);
     expect(inputs[0]).not.toBe(inputs[1]);
     expect(load.run).not.toHaveBeenCalled();

@@ -1,6 +1,7 @@
 import { chmod, link, mkdir, unlink, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import * as path from "node:path";
+import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { openSqlitePipelineRunStore } from "../run-store/run-store-sqlite.js";
 import { TUBELESS_WORKBENCH_EXIT_CODE, runWorkbenchCli } from "./workbench.js";
@@ -184,7 +185,6 @@ describe("workbench history integration", () => {
   });
 
   it("fails projected history when stdout cannot be written", async () => {
-    const { PassThrough } = await import("node:stream");
     const { directory } = await writeActualPipelineCommandModule();
     const io = captureIo(directory);
     const databasePath = path.join(directory, "history", "runs.sqlite");

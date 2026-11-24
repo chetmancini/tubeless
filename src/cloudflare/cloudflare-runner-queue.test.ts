@@ -5,7 +5,7 @@ import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
 import { StudioObjectCore } from "./cloudflare-studio.js";
 import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import { RUNNER_LEASE_MS, RUNNER_PATH, runnerProjectHeader } from "../hosting/runner-protocol.js";
-import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt-batch.js";
+import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt/batch.js";
 import type { PipelineTraceEvent } from "../tracing/tracing.js";
 import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
 

@@ -267,9 +267,13 @@ describe("Studio application tracing", () => {
 });
 
 it("keeps Studio busy until pre-run exporter rollback finishes", async () => {
+  const flushing = deferred();
   const cleanup = deferred();
   let signal!: AbortSignal;
-  const flush = vi.fn(() => cleanup.promise);
+  const flush = vi.fn(() => {
+    flushing.resolve();
+    return cleanup.promise;
+  });
   const entry = {
     ...registration(async () => {
       throw new Error("command preparation failed");
@@ -284,7 +288,8 @@ it("keeps Studio busy until pre-run exporter rollback finishes", async () => {
   const launcher = new WorkbenchStudioLauncher([entry], { export: vi.fn() });
   const response = launcher.launch("fixture", {});
   try {
-    await vi.waitFor(() => expect(flush).toHaveBeenCalledOnce());
+    await flushing.promise;
+    expect(flush).toHaveBeenCalledOnce();
     expect(signal.aborted).toBe(true);
     expect(launcher.isBusy()).toBe(true);
     cleanup.resolve();

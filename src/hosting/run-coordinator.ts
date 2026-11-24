@@ -187,6 +187,7 @@ export class HostedRunCoordinator<TDispatch = RunJob> implements PipelineRunStud
 
   #diagnose(job: RunJob, code: HostedRunDiagnostic["code"]): void {
     try {
+      // oxlint-disable-next-line landmines/no-silent-catch -- The optional observer must not interrupt launch acknowledgement.
       void Promise.resolve(
         this.deps.onDiagnostic?.({ code, launchId: job.launchId, commandId: job.commandId })
       ).catch(() => {});

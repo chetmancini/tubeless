@@ -151,7 +151,6 @@ export function createWorkerLoaderCodemodeExecutor(
         return executionResult(value);
       } finally {
         signal.removeEventListener("abort", onAbort!);
-        void running.catch(() => {});
       }
     },
   };

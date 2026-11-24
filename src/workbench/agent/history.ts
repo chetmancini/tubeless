@@ -1,5 +1,5 @@
-import type { StoredAgentModelUsage } from "../../run-store/agent-projection.js";
-import type { AgentHistory } from "../../run-store/agent-history.js";
+import type { StoredAgentModelUsage } from "../../run-store/agents/projection.js";
+import type { AgentHistory } from "../../run-store/agents/history.js";
 import { terminalSafeText } from "../workbench-shared.js";
 
 /**

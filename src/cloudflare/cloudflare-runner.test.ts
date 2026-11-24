@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Miniflare, NoOpLog } from "miniflare";
+import { Miniflare, NoOpLog, Response as MiniflareResponse } from "miniflare";
 import { stripTypeScriptTypes } from "node:module";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import {
@@ -144,15 +144,15 @@ beforeAll(async () => {
           dev: {
             outboundService: {
               type: "fetcher",
-              handler: async (request: Request) => {
+              handler: async (request) => {
                 if (request.url === `${ISSUER}/cdn-cgi/access/certs`)
-                  return Response.json({ keys: [publicKey] });
+                  return MiniflareResponse.json({ keys: [publicKey] });
                 const url = new URL(request.url);
                 if (url.hostname === "fixture.test" && url.pathname === "/stage-result")
-                  return new Response(null, {
+                  return new MiniflareResponse(null, {
                     status: holdStageResults.has(url.searchParams.get("launch")!) ? 423 : 200,
                   });
-                return new Response("Unexpected outbound request.", { status: 502 });
+                return new MiniflareResponse("Unexpected outbound request.", { status: 502 });
               },
             },
           },

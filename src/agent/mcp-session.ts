@@ -54,11 +54,12 @@ export async function openMcpSession(
   const transport = await open({
     receive(message) {
       if (message.id === undefined) return;
-      if (message.method !== undefined)
+      if (message.method !== undefined) {
+        // oxlint-disable-next-line landmines/no-silent-catch -- The server owns its request timeout, independently of our pending requests.
         void transport
           .send(reply({ ...message, id: message.id }), AbortSignal.timeout(timeoutMs))
           .catch(() => {});
-      else pending.get(message.id)?.(message);
+      } else pending.get(message.id)?.(message);
     },
     fail,
   });
@@ -79,7 +80,7 @@ export async function openMcpSession(
         else resolve(outcome);
       };
       const abort = () => {
-        // Best effort: tell the server to stop work this client will never observe.
+        // oxlint-disable-next-line landmines/no-silent-catch -- Remote cancellation is best effort, and the local request settles below.
         notify("notifications/cancelled", { requestId: id }).catch(() => {});
         settle(
           caller?.aborted

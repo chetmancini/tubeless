@@ -202,9 +202,9 @@ describe("definePipeline lifecycle and scheduling", () => {
       });
 
       expect(result.status).toBe("completed");
-      await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
-      expect(warn).toHaveBeenCalledWith("Pipeline hook failed: metrics unavailable for build");
       await new Promise((resolve) => setImmediate(resolve));
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledWith("Pipeline hook failed: metrics unavailable for build");
       expect(unhandled).not.toHaveBeenCalled();
     } finally {
       process.off("unhandledRejection", unhandled);
@@ -261,8 +261,8 @@ describe("definePipeline lifecycle and scheduling", () => {
       });
 
       expect(result.status).toBe("completed");
-      await vi.waitFor(() => expect(warn).toHaveBeenCalled());
       await new Promise((resolve) => setImmediate(resolve));
+      expect(warn).toHaveBeenCalled();
       expect(unhandled).not.toHaveBeenCalled();
     } finally {
       process.off("unhandledRejection", unhandled);

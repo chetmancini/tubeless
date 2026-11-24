@@ -1,5 +1,6 @@
 import { awaitWithAbort, throwIfAborted } from "../../utilities/abort.js";
 import { isJsonObject } from "../../utilities/canonical-json.js";
+import { cancelBody } from "../../utilities/read-body.js";
 import { CloudClientError, isCloudRunStatus, type CliLogLine, type CliRun } from "./protocol.js";
 
 export const FOLLOW_MEDIA_TYPE = "application/x-ndjson";
@@ -230,7 +231,7 @@ export async function readFollowStream(
       }
     }
   } finally {
-    void reader.cancel().catch(() => {});
+    cancelBody(reader);
     reader.releaseLock();
   }
 }

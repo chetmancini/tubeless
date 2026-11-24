@@ -6,6 +6,12 @@ export class BodyLimitError extends Error {
   }
 }
 
+/** Discard a stream or reader without letting cleanup delay or replace the outcome. */
+export function cancelBody(body: { cancel(): Promise<void> } | null): void {
+  // oxlint-disable-next-line landmines/no-silent-catch -- An errored stream also rejects cancellation.
+  void body?.cancel().catch(() => {});
+}
+
 /** Read owned bytes with bounded allocation; cancellation never waits on an untrusted source. */
 export async function readBoundedBody(
   body: ReadableStream<Uint8Array> | null,
@@ -28,7 +34,7 @@ export async function readBoundedBody(
       size += chunk.value.byteLength;
     }
   } finally {
-    void reader.cancel().catch(() => {});
+    cancelBody(reader);
     reader.releaseLock();
   }
   throwIfAborted(signal, "Body read");

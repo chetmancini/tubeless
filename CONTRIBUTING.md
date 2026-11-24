@@ -37,6 +37,14 @@ rebuilds. `make watch` rebuilds `src/` on change, regenerates the Studio client,
 and re-runs tests; `make studio-check` fails when the served bundle does not match
 its sources.
 
+Oxlint runs the Landmines rules configured in `.oxlintrc.json`. Tests should wait
+for observable events or use fake timers for timing assertions. The timeout
+allowlist records existing integration budgets by file and count. The Vitest
+diagnostics fixture deliberately exercises spec-file discovery and retries.
+Group related modules in a directory once three siblings would share a filename
+prefix. Update or remove an existing `no-prefix-cluster` allowance when its
+module count goes down.
+
 ## Public API and docs
 
 Before changing usage or public behavior, read [`docs/agent-guide.md`](./docs/agent-guide.md)
