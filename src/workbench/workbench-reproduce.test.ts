@@ -61,6 +61,7 @@ it.runIf(process.platform !== "win32" && process.versions.node.startsWith("24.")
   "reproduces the pinned failure from a real Git fetch while preserving dirty files and isolating child environments",
   async () => {
     const manifest = await parseReproductionManifest(readFileSync(pinned));
+    const requiredBun = manifest.nodeCheck.plan.toolchain.bun;
     const root = temporaryRoot();
     const cwd = join(root, "repository");
     const bin = join(root, "bin");
@@ -116,17 +117,22 @@ it.runIf(process.platform !== "win32" && process.versions.node.startsWith("24.")
   *) printf '%s\\n' 'Fixture Git warning' >&2; exec ${shellWord(gitPath)} "$@" ;;
 esac`
     );
-    shim(
-      "bun",
-      `case "$1" in
+    // Control just the version probe. Install and checks still use the installed Bun.
+    const shimBun = (version: string) =>
+      shim(
+        "bun",
+        `case "$1" in
   --version)
     printf '%s\\n' 'Fixture tool warning' >&2
     printf '%s\\n' probe >> ${shellWord(bunProbes)}
+    printf '%s\\n' ${shellWord(version)}
+    exit 0
     ;;
   install) test ! -e .git && ! git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 18 ;;
 esac
 exec ${shellWord(bunPath)} "$@"`
-    );
+      );
+    shimBun(requiredBun);
     shim("node", `exec ${shellWord(process.execPath)} "$@"`);
     vi.stubEnv("PATH", [bin, process.env.PATH].join(delimiter));
     vi.stubEnv("TMPDIR", scratch);
@@ -149,7 +155,7 @@ exec ${shellWord(bunPath)} "$@"`
     const reproduced = JSON.parse(output.stdout);
     expect(reproduced).toMatchObject({
       original: { source: manifest.source, runtime: manifest.runtime },
-      local: { node: process.versions.node, bun: "1.4.4" },
+      local: { node: process.versions.node, bun: requiredBun },
       differences:
         manifest.runtime.node === process.versions.node
           ? []
@@ -228,6 +234,17 @@ exec ${shellWord(bunPath)} "$@"`
         stderr: expect.stringContaining(message),
       });
     }
+
+    const fetches = readFileSync(fetchLog, "utf8");
+    const [major, minor, patch] = requiredBun.split(".");
+    const wrongBun = `${major}.${minor}.${Number(patch) + 1}`;
+    shimBun(wrongBun);
+    expect(await run(manifest)).toMatchObject({
+      code: exit.validation,
+      stdout: "",
+      stderr: expect.stringContaining(`requires Bun ${requiredBun} on PATH. Found ${wrongBun}.`),
+    });
+    expect(readFileSync(fetchLog, "utf8")).toBe(fetches);
   },
   60_000
 );
