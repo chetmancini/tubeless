@@ -13,10 +13,10 @@ It has no runtime dependencies. Version: ${PACKAGE.version}.
 ## When to use Tubeless
 
 Use it for data imports, releases that depend on validation checks, and CLI
-programs that need progress reporting. Pipelines run in your process. Crash
-recovery and distributed scheduling require an external execution system.
+programs that need progress reporting. Pipelines run in your process. Tubeless
+Cloud schedules the same files. Crash recovery for a long job still needs a host engine.
 
-- [Comparison](${absUrl("docs/comparison.md")}): In-process typed pipelines, not a scheduler. Pair with a host engine for crash recovery.
+- [Comparison](${absUrl("docs/comparison.md")}): In-process typed pipelines, Tubeless Cloud for schedules, and a host engine for crash recovery.
 
 ## Featured use case: Agents
 

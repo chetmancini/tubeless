@@ -5,39 +5,34 @@
 </p>
 <h1 align="center">Tubeless</h1>
 <p align="center">
-  Typed execution pipelines. Keep your workflow rolling.
+  Typed, agentic pipelines for TypeScript. Run locally, schedule on <a href="https://cloud.tubeless.io">Tubeless Cloud</a>.
 </p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/tubeless"><img alt="npm" src="https://img.shields.io/npm/v/tubeless?style=flat-square&labelColor=121212&color=c4a046"></a>
-  <a href="https://github.com/chetmancini/tubeless/actions/workflows/check.yml"><img alt="check" src="https://img.shields.io/github/actions/workflow/status/chetmancini/tubeless/check.yml?style=flat-square&label=check&labelColor=121212&color=2f6f4a"></a>
-  <a href="./LICENSE"><img alt="MIT" src="https://img.shields.io/npm/l/tubeless?style=flat-square&labelColor=121212&color=c4c0b4"></a>
-  <a href="./docs/getting-started.md#install"><img alt="Node" src="https://img.shields.io/node/v/tubeless?style=flat-square&labelColor=121212&color=c4c0b4"></a> <a href="https://www.npmjs.com/package/tubeless"><img alt="provenance" src="https://img.shields.io/badge/provenance-npm-2f6f4a?style=flat-square&labelColor=121212"></a>
+  <a href="https://www.npmjs.com/package/tubeless"><img alt="npm version" src="https://img.shields.io/npm/v/tubeless?style=flat-square&labelColor=121212&color=c4a046"></a>
+  <a href="https://www.npmjs.com/package/tubeless"><img alt="monthly downloads" src="https://img.shields.io/npm/dm/tubeless?style=flat-square&label=downloads&labelColor=121212&color=c4a046"></a>
+  <a href="https://github.com/chetmancini/tubeless/actions/workflows/check.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/chetmancini/tubeless/check.yml?style=flat-square&label=check&labelColor=121212&color=2f6f4a"></a>
+  <a href="./LICENSE"><img alt="MIT license" src="https://img.shields.io/npm/l/tubeless?style=flat-square&labelColor=121212&color=c4c0b4"></a>
+  <a href="./docs/getting-started.md#install"><img alt="Node.js version" src="https://img.shields.io/node/v/tubeless?style=flat-square&labelColor=121212&color=c4c0b4"></a>
+</p>
+<p align="center">
+  <img src="docs/assets/terminal.gif" width="720" alt="Live terminal reporter for examples/live-tui.ts: a step tree with progress, nested details, and a logs pane."><br>
+  <img src="docs/assets/studio.png" width="720" alt="Tubeless Studio on a completed live-tui run, with the step timeline and the Publish Manifest step selected.">
 </p>
 
-Tubeless is a TypeScript toolkit for work that unfolds in steps. It fits data
-pipelines, multi-step application workflows, and AI workloads—anywhere you want
-explicit dependencies, typed handoffs, and inspectable execution. The name is the
-cycling kind of tubeless: no inner tube, and no extra runtime to keep the work rolling.
-
-Pipelines run in your process with no runtime dependencies. You can preview
-execution, select a target and its dependencies, compose child pipelines, and
-track progress. The optional CLI and [Studio](./docs/studio.md) run locally or behind your authenticated admin gateway.
-For scheduling or crash recovery, pair it with a [queue or workflow engine](./docs/comparison.md).
-
-## Installation
-
-```sh
-npm install tubeless
-```
-
-The ESM library requires Node.js 22.18+. The CLI requires Bun 1.3.14+. Linux and macOS are supported; Windows is untested.
-See [installation and runtime support](./docs/getting-started.md#install).
-
-Tubeless is pre-1.0, so the public API may change between releases.
+Each step's output is the next step's typed input. `plan()` lists the steps that will run, and does not run them. A dry run still runs unmarked steps and skips a write marked `dryRun: "skip"`. The same file runs in your process or on Tubeless Cloud.
 
 ## Quick start
 
-This pipeline loads and normalizes strings. `step` creates a step; dependencies give typed inputs.
+Node.js 22.18 or later. The library is ESM-only, has no runtime dependencies, and runs the TypeScript below directly. Linux and macOS are supported; Windows is untested. The project needs `"type": "module"`. The `tubeless` command needs Bun 1.3.14 or later on `PATH`, including when npm or npx starts it. This snippet does not. Tubeless is pre-1.0, so the public API may change between releases.
+
+```sh
+mkdir import-rows && cd import-rows
+npm init -y
+npm pkg set type=module
+npm install tubeless
+```
+
+`import.ts`:
 
 ```ts
 import { createSteps, definePipeline } from "tubeless";
@@ -57,61 +52,69 @@ const normalize = step("normalize", {
   run: ({ load: rows }) => rows.map((row) => row.trim().toLowerCase()).filter(Boolean),
 });
 
-export const ImportPipeline = definePipeline({
+const ImportPipeline = definePipeline({
   id: "import",
   steps: [load, normalize],
 });
 
 const rows = await ImportPipeline.runOrThrow({ lines: [" Alpha ", "", "Beta"] });
-// ["alpha", "beta"]
+console.log(rows);
 ```
-
-The result is the last step's output (`normalize`). `runOrThrow` returns it or
-throws; use `run` for reports, `plan` for previews, and `toMermaid` for diagrams.
-See [getting started](./docs/getting-started.md).
-
-## Use the CLI
-
-A project made with `defineProject(id, [pipeline, command])` is directly usable by
-the CLI; schema-backed pipelines get inferred flags. See the [CLI guide](./docs/cli.md).
-From this repository:
 
 ```sh
-bunx tubeless list --project examples/tubeless.project.ts
-bunx tubeless inspect --project examples/tubeless.project.ts validated-import
-bunx tubeless run --project examples/tubeless.project.ts validated-import -- --source rows.txt
+node import.ts
 ```
 
-In your app, add `tubeless.project.ts` and omit `--project`. Pass application
-flags after `--`. Record runs with `--store` or `--trace`, then inspect them with
-`tubeless history` or the [local studio](./docs/studio.md).
+Prints `[ 'alpha', 'beta' ]`, the last step's output. Walkthrough: [getting started](./docs/getting-started.md).
 
-For Cloud pipelines see [Cloud CLI usage](./docs/cli.md#tubeless-cloud); to host Studio in
-your own Cloudflare account see [Deploy to Cloudflare](./docs/deploy-cloudflare.md).
+## Why Tubeless
 
-## Find your route
+A few `await` calls need no library. A pipeline helps when steps pass values along and you want to inspect the run.
 
-- Start with a [typed import](./examples/typed-import.ts) or add
-  [dry runs and write gates](./examples/publish-with-gates.ts) to a publishing job.
-- Build workflows with [child pipelines](./examples/child-pipeline.ts) and [fan-out](./examples/fan-out-progress.ts).
-- Run `tubeless agent --model gpt-5.4-mini` for a [conversation loop with live pipeline reporting](./docs/cli.md#prompt-a-workspace-agent), or build [agents](./docs/agents.md) with custom tools, subagents, and durable checkpoints.
+- TypeScript checks each handoff. Definitions reject a missing dependency, a duplicate id, or a cycle.
+- `plan()` lists selected steps and does not run handlers. `dryRun: "skip"` holds a write back. Unmarked steps still run in a dry run.
+- The terminal reporter, Mermaid, and [Studio](./docs/studio.md) show progress and recorded runs. The library stays in your process.
+- The same pipeline runs inside [Airflow](./docs/airflow.md), [Temporal](./docs/temporal.md), [Inngest](./docs/inngest.md), [Dagster](./docs/dagster.md), or [Step Functions](./docs/step-functions.md).
 
-The [recipe index](./docs/recipes.md) covers validation, retries, tracing, testing,
-and more. To author pipelines with a coding agent, install the
-[agent skill pack](./docs/agent-skills.md): `npx skills add chetmancini/tubeless`.
+| You need                                          | Use                                                                        |
+| ------------------------------------------------- | -------------------------------------------------------------------------- |
+| A few ordered or parallel calls                   | `await` and `Promise.all`                                                  |
+| A typed graph you can plan and dry-run in-process | Tubeless                                                                   |
+| Sleeps, retries, and resume after a crash         | [Trigger.dev](https://trigger.dev/) or [Inngest](https://www.inngest.com/) |
+| This kind of graph, in Python                     | [Apache Hamilton](https://hamilton.apache.org/)                            |
+
+Trigger.dev and Inngest are durable job platforms. Tubeless does not resume a step after the process exits. Call `runOrThrow` from one of their steps when you need both. Hamilton turns ordinary Python functions into a dataflow. Tubeless is TypeScript, with explicit `dependsOn` edges, `plan()`, dry-run policy, a CLI, and Studio. [Comparison](./docs/comparison.md).
+
+## Plan, draw, Studio, and skills
+
+```ts
+const plan = ImportPipeline.plan({ dryRun: true });
+console.log(ImportPipeline.toMermaid({ direction: "LR" }));
+```
+
+```ts
+const publish = step("publish", {
+  dependsOn: [normalize],
+  dryRun: "skip",
+  run: ({ normalize: rows }) => rows.length,
+});
+```
+
+`plan()` does not run handlers. With `publish` in the pipeline, `plan({ dryRun: true })` sets its `skipReason` to `"dry-run"`. See [publish with gates](./examples/publish-with-gates.ts). `tubeless plan` and `tubeless graph` print the same preview.
+Studio needs Bun. From this repository, the commands behind the pictures above are:
+
+```sh
+bunx tubeless run --store .tubeless/runs.sqlite examples/live-tui.ts -- --delay 200
+bunx tubeless ui --store .tubeless/runs.sqlite
+```
+
+They serve [http://127.0.0.1:4317](http://127.0.0.1:4317). A browser launch needs a schema-backed pipeline or `definePipelineCommand`. The quick start is library-only. [Studio guide](./docs/studio.md).
+`npx skills add chetmancini/tubeless` installs authoring skills, not the runtime. [Skill pack](./docs/agent-skills.md).
+
+## Run it on Tubeless Cloud, free
+
+[Tubeless Cloud](https://cloud.tubeless.io) runs these files from a GitHub repository. Each run is its own Cloudflare Worker. Start one from a cron line in `.tubeless/crontab`, a push, the dashboard, `tubeless cloud run`, the HTTP API, or [MCP](https://cloud.tubeless.io/docs/agents.md). The free plan is one person, 100 execution minutes, and 100 runs a month. No credit card. A run stops at 5 minutes of elapsed time or 10 seconds of CPU. If Tubeless is useful, [star the repository](https://github.com/chetmancini/tubeless). Stars help the next person find it.
 
 ## Documentation
 
-[Website](https://tubeless.io/) · [Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) ·
-[Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) ·
-[Comparison](./docs/comparison.md) · [API](./docs/api-reference.md) ·
-[Agent authoring guide](./docs/agent-guide.md)
-
-## Contributing
-
-Open an [issue](https://github.com/chetmancini/tubeless/issues) before a large change or public API change.
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for checks and [SECURITY.md](./SECURITY.md) to report vulnerabilities.
-
-## License
-
-[MIT](./LICENSE)
+[Website](https://tubeless.io/) · [Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) · [Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) · [Comparison](./docs/comparison.md) · [Recipes](./docs/recipes.md) · [API](./docs/api-reference.md) · [Issues](https://github.com/chetmancini/tubeless/issues) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [MIT](./LICENSE)
