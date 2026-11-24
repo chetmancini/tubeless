@@ -21,7 +21,7 @@ writeFileSync(
     <meta charset="utf-8" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500&family=IBM+Plex+Sans:wght@400&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600&family=IBM+Plex+Sans:wght@500&display=swap" rel="stylesheet" />
     <style>
       html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #f7f5ef; }
       svg { display: block; width: 1200px; height: 630px; }
