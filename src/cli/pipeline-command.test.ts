@@ -62,13 +62,13 @@ describe("definePipelineCommand", () => {
     expectTypeOf(command.targetIds).toEqualTypeOf<typeof pipeline.targetIds>();
     expectTypeOf(command.plan).parameter(0).toEqualTypeOf<Parameters<typeof pipeline.plan>[0]>();
 
-    function invalidCallsForTypechecking() {
+    // oxlint-disable-next-line no-constant-condition -- typecheck-only compile probes
+    if (false) {
       // @ts-expect-error Commands preserve literal step ids in planning controls.
       command.plan({ stepIds: ["typo"] });
       // @ts-expect-error Commands preserve literal target ids in planning controls.
       command.plan({ targets: ["typo"] });
     }
-    void invalidCallsForTypechecking;
   });
 
   it("inherits pipeline presentation and lets command presentation override it", () => {

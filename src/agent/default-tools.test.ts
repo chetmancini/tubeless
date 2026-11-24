@@ -52,9 +52,9 @@ describe("default agent tools", () => {
       }),
     };
     const call: AgentCall<typeof tools> = { id: "custom", tool: "read", input: 3 };
-    // @ts-expect-error An overridden read uses the custom input, not the default file input.
-    const invalid: AgentCall<typeof tools> = { id: "custom", tool: "read", input: { path: "x" } };
-    void invalid;
+    expectTypeOf<{ id: "custom"; tool: "read"; input: { path: "x" } }>().not.toExtend<
+      AgentCall<typeof tools>
+    >();
     const agent = defineAgentLoop({
       id: "custom-default",
       inputSchema: emptyInput,

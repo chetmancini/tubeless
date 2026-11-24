@@ -613,12 +613,10 @@ describe("single-agent execution", () => {
       kind: "continue",
       calls: [{ id: "one", tool: "text", input: "a" }],
     } satisfies AgentDecision<typeof tools, number>;
-    const invalid: AgentDecision<typeof tools, number> = {
-      kind: "continue",
-      // @ts-expect-error Unknown tools cannot be typed decisions.
-      calls: [{ id: "one", tool: "missing", input: 2 }],
-    };
-    void [valid, invalid];
+    expectTypeOf<{
+      kind: "continue";
+      calls: [{ id: "one"; tool: "missing"; input: 2 }];
+    }>().not.toExtend<AgentDecision<typeof tools, number>>();
     const agent = defineAgentLoop({
       ...base,
       tools,

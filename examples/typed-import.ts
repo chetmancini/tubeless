@@ -39,7 +39,6 @@ export function renderImportDiagram() {
   return ImportPipeline.toMermaid({ direction: "LR" });
 }
 
-export function planNormalizeTarget(lines: readonly string[]) {
-  void lines;
+export function planNormalizeTarget(_lines: readonly string[]) {
   return ImportPipeline.plan({ targets: ["normalize-rows"] });
 }

@@ -331,12 +331,9 @@ describe("pipeline defaults", () => {
     await expect(definePipeline(explicit).runOrThrow({})).resolves.toBe(5);
     // @ts-expect-error An empty pipeline cannot produce a number without a finalizer.
     definePipeline({ id: "empty-schema", steps: [], resultSchema });
-    // @ts-expect-error Reusable definitions also require a compatible finalizer.
-    const invalid: PipelineDefinition<readonly [typeof work], number> = {
-      id: "invalid",
-      steps: [work],
-    };
-    void invalid;
+    expectTypeOf<{ id: "invalid"; steps: readonly [typeof work] }>().not.toExtend<
+      PipelineDefinition<readonly [typeof work], number>
+    >();
   });
 
   it("preserves literal ids with an annotated finalizer instead of partial type arguments", async () => {

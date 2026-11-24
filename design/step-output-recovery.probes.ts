@@ -114,7 +114,7 @@ const invalidWriter: PipelineStepOutputObserver = {
   // @ts-expect-error A writer receives encoded bytes and metadata, not raw schema input.
   write: (_record: { readonly value: string }) => {},
 };
-void [synchronousObserver, invalidEncoder, invalidWriter];
+export { synchronousObserver, invalidEncoder, invalidWriter };
 
 // 5. A wrapper is one recovery slot; its child's internal IDs do not enter the map.
 const { fromPipeline } = createSteps<{ source: string }>();
@@ -140,7 +140,7 @@ void pipeline.runOrThrow({ source: "21" }, { suppliedOutputs: supplied });
 const hooks: PipelineHooks = {
   onStepComplete(event) {
     // @ts-expect-error Step lifecycle hooks remain metadata-only.
-    void event.value;
+    expectTypeOf<typeof event.value>();
   },
 };
-void hooks;
+export { hooks };

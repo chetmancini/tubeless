@@ -79,9 +79,9 @@ describe("default tool selection", () => {
     expectTypeOf<
       AgentOutcome<{ count: typeof count }, false, never>["tool"]
     >().toEqualTypeOf<"count">();
-    // @ts-expect-error bash is not selected
-    const call: AgentCall<{}, false, "read"> = { id: "b", tool: "bash", input: { command: "x" } };
-    void call;
+    expectTypeOf<{ id: "b"; tool: "bash"; input: { command: "x" } }>().not.toExtend<
+      AgentCall<{}, false, "read">
+    >();
   });
 
   it("rejects unknown names and passes the selection through the model-backed factory", async () => {

@@ -536,7 +536,8 @@ function RunDetail({
     if (!row) return;
     row.scrollIntoView({ block: "center", behavior: preferredScrollBehavior() });
     row.classList.remove("focused");
-    void row.offsetWidth;
+    // Flush the class removal so adding it again restarts the highlight.
+    row.getBoundingClientRect();
     row.classList.add("focused");
   }, [focusRequest]);
   if (selection.status !== "ready") {

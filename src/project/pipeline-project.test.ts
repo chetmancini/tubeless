@@ -196,7 +196,8 @@ describe("pipeline project", () => {
     expectTypeOf<PipelineResult<typeof selected>>().toEqualTypeOf<string | undefined>();
     expectTypeOf(selected.stepIds).toEqualTypeOf<readonly "read-alpha"[]>();
     expectTypeOf(selected.targetIds).toEqualTypeOf<readonly "read-alpha"[]>();
-    function invalidCallsForTypechecking() {
+    // oxlint-disable-next-line no-constant-condition -- typecheck-only compile probes
+    if (false) {
       // @ts-expect-error Commands preserve literal pipeline ids.
       project.get("missing");
       // @ts-expect-error Commands preserve domain input requirements.
@@ -208,7 +209,6 @@ describe("pipeline project", () => {
       // @ts-expect-error Command factories are no longer a project option.
       defineProject("removed-factory", [alpha], { commands: () => [alphaCommand] });
     }
-    void invalidCallsForTypechecking;
   });
 
   it("rejects standalone commands and malformed entries", () => {
