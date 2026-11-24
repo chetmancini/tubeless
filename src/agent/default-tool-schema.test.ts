@@ -21,11 +21,11 @@ it("infers object fields and preserves nullable optional inputs", async () => {
     "issues"
   );
 
-  const invalidSchemas = () => {
+  // oxlint-disable-next-line no-constant-condition -- typecheck-only compile probes
+  if (false) {
     // @ts-expect-error Accept object field maps, not an arbitrary scalar schema.
     toolObject(wireString());
     // @ts-expect-error Arrays are not object field maps either.
     toolObject(wireArray(wireString()));
-  };
-  void invalidSchemas;
+  }
 });

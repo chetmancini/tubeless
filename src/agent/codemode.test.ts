@@ -442,9 +442,9 @@ describe("code mode on defineAgentLoop", () => {
     expectTypeOf<AgentCall<{ upper: typeof upper }, true>["input"]>().toEqualTypeOf<{
       readonly code: string;
     }>();
-    // @ts-expect-error code-mode decisions cannot call registered tools directly
-    const direct: AgentCall<{ upper: typeof upper }, true> = { id: "d", tool: "upper", input: {} };
-    void direct;
+    expectTypeOf<{ id: "d"; tool: "upper"; input: {} }>().not.toExtend<
+      AgentCall<{ upper: typeof upper }, true>
+    >();
     expectTypeOf<AgentCall<{ upper: typeof upper }>["tool"]>().toEqualTypeOf<
       "upper" | keyof DefaultAgentTools
     >();

@@ -49,7 +49,6 @@ const enrichItems = step("enrich-items", {
 
       const persist = async () => {
         // Persist `enriched` here before recording the checkpoint.
-        void enriched;
       };
       if (checkpoint) await withCheckpointedBatch(checkpoint, batch, (id) => id, persist);
       else await persist();

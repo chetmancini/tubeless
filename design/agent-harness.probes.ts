@@ -186,7 +186,7 @@ const wrongOutcome: AgentOutcome<typeof tools> = {
   // @ts-expect-error Successful outputs remain correlated with tool names.
   value: "text",
 };
-void [mixed, empty, unknownTool, transformedInput, wrongInput, wrongFinish, wrongOutcome];
+export { mixed, empty, unknownTool, transformedInput, wrongInput, wrongFinish, wrongOutcome };
 
 const noCustomTools: AgentDecision<{}, string> = {
   kind: "continue",
@@ -198,7 +198,7 @@ const unknownCustomTool: AgentCall = {
   tool: "privateTool",
   input: {},
 };
-void [noCustomTools, unknownCustomTool];
+export { noCustomTools, unknownCustomTool };
 defineTool({
   description: "Invalid transformed output.",
   inputSchema: searchInputSchema,
@@ -361,7 +361,7 @@ const mixedTransition: IterationDecision<number, string> = {
   result: "done",
   state: 1,
 };
-void mixedTransition;
+export { mixedTransition };
 
 const { iteratePipeline } = createSteps<{ text: string }>();
 const finishWithoutValue = iteratePipeline("finish-without-value", {
