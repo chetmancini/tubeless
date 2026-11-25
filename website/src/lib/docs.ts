@@ -16,6 +16,7 @@ export const DOC_NAV = [
   { slug: "recipes", label: "Recipes", blurb: "Examples by use case." },
   { slug: "concepts", label: "Concepts", blurb: "Understand dependencies, results, failures, and execution controls." },
   { slug: "cli", label: "CLI", blurb: "Run commands, follow Cloud executions, and inspect history." },
+  { slug: "github-action", label: "GitHub Action", blurb: "Plan a pipeline on a pull request and publish the plan with a Mermaid graph." },
   { slug: "step-output-cache", label: "Step output caching", blurb: "Reuse deterministic outputs with explicit keys, versions, and cache policies." },
   { slug: "step-output-observation", label: "Step output observation", blurb: "Capture and supply raw values through host-owned encoding and persistence." },
   { slug: "step-output-recovery", label: "Step output recovery", blurb: "Restore saved raw outputs across host restarts with compatibility checks and business idempotency." },
