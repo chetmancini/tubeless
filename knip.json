@@ -10,6 +10,7 @@
     "src/studio/browser/entry.ts",
     "src/**/*.test.tsx",
     "scripts/check-pipeline.ts",
+    "scripts/node-check-benchmark/benchmark.ts",
     "examples/inngest/server.ts",
     "examples/inngest/send.ts",
     "examples/temporal/client.ts",

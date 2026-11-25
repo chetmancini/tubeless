@@ -1,3 +1,4 @@
+import { isJsonObject } from "../../utilities/canonical-json.js";
 import {
   BodyLimitError,
   cancelBody,
@@ -12,6 +13,23 @@ import { errorMessage } from "../workbench-shared.js";
 import { CloudClientError } from "./protocol.js";
 
 const RESPONSE_LIMIT = 4 * 1024 * 1024;
+
+export function parseAutomationAccess(value: unknown, workspace: string) {
+  if (
+    !isJsonObject(value) ||
+    value.workspaceId !== workspace ||
+    typeof value.principalId !== "string" ||
+    !value.principalId ||
+    !Array.isArray(value.scopes) ||
+    !value.scopes.every((scope: unknown): scope is string => typeof scope === "string")
+  )
+    throw new Error("Invalid Cloud automation discovery.");
+  return {
+    principalId: value.principalId,
+    scopes: value.scopes,
+    runFollowing: value.runFollowing,
+  };
+}
 
 export async function responseJson(response: Response, signal: AbortSignal): Promise<unknown> {
   if (!response.headers.get("content-type")?.toLowerCase().includes("application/json")) {

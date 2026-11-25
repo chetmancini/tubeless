@@ -30,7 +30,7 @@ import {
 import { terminalSafeText } from "../workbench-shared.js";
 import { redactCloudText } from "./credentials.js";
 import { cancelBody } from "../../utilities/read-body.js";
-import { readManifest, responseJson, writeArtifact } from "./response.js";
+import { parseAutomationAccess, readManifest, responseJson, writeArtifact } from "./response.js";
 import {
   FOLLOW_MEDIA_TYPE,
   isFollowCursor,
@@ -76,6 +76,7 @@ export interface CliCancelResult {
 export interface CloudClient {
   readonly host: string;
   session(): Promise<CliSession>;
+  automation(workspaceId: string): Promise<ReturnType<typeof parseAutomationAccess>>;
   logout(): Promise<void>;
   pipelines(workspaceId: string): Promise<CliPipeline[]>;
   run(workspaceId: string, request: CliRunRequest, idempotencyKey: string): Promise<CliRun>;
@@ -315,9 +316,14 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
       { accept }
     );
   const session = () => requestJson("/api/v1/session", parseCliSession);
+  const automation = (workspace: string) =>
+    requestJson(`${workspacePath(workspace)}/automation`, (value) =>
+      parseAutomationAccess(value, workspace)
+    );
   return {
     host,
     session,
+    automation,
     logout: () =>
       requestJson(
         "/api/v1/auth/logout",
@@ -386,18 +392,7 @@ export function createCloudClient(options: CloudClientOptions): CloudClient {
     requireRunFollowing: async (workspace, discoveredSession) => {
       const capability =
         options.token && isCloudAutomationToken(options.token)
-          ? await requestJson(`${workspacePath(workspace)}/automation`, (value) => {
-              if (
-                !isJsonObject(value) ||
-                value.workspaceId !== workspace ||
-                typeof value.principalId !== "string" ||
-                !value.principalId ||
-                !Array.isArray(value.scopes) ||
-                !value.scopes.every((scope: unknown) => typeof scope === "string")
-              )
-                throw new Error("Invalid Cloud automation discovery.");
-              return value.runFollowing;
-            })
+          ? (await automation(workspace)).runFollowing
           : (discoveredSession ?? (await session())).runFollowing;
       assertRunFollowingCapability(capability);
     },
