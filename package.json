@@ -80,15 +80,15 @@
     "@dagster-io/dagster-pipes": "0.1.0",
     "@inngest/test": "1.0.0",
     "@interfere/landmines": "0.3.1",
-    "@temporalio/activity": "1.26.0",
-    "@temporalio/client": "1.26.0",
-    "@temporalio/testing": "1.26.0",
-    "@temporalio/worker": "1.26.0",
-    "@temporalio/workflow": "1.26.0",
+    "@temporalio/activity": "1.27.0",
+    "@temporalio/client": "1.27.0",
+    "@temporalio/testing": "1.27.0",
+    "@temporalio/worker": "1.27.0",
+    "@temporalio/workflow": "1.27.0",
     "@types/aws-lambda": "8.10.164",
     "@types/node": "22.20.5",
-    "@vitest/coverage-v8": "5.1.1",
-    "cf": "1.0.0-rc.4",
+    "@vitest/coverage-v8": "5.1.2",
+    "cf": "1.0.0-rc.5",
     "inngest": "4.27.0",
     "knip": "6.48.0",
     "miniflare": "5.20261119.0-beta",
@@ -101,7 +101,7 @@
     "typescript": "7.0.2",
     "typescript-floor": "npm:typescript@5.4.5",
     "vite": "8.3.8",
-    "vitest": "5.1.1"
+    "vitest": "5.1.2"
   },
   "overrides": {
     "rimraf": "6.1.4"
