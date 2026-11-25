@@ -242,7 +242,10 @@ it("shares the execution identity and history between the CLI and a Worker trigg
         headers: Object.fromEntries(new Headers(init?.headers)),
         body: typeof init?.body === "string" ? init.body : undefined,
       });
-      return new Response(await response.text(), { status: response.status });
+      return new Response(await response.text(), {
+        status: response.status,
+        headers: Object.fromEntries(response.headers),
+      });
     }) satisfies typeof fetch,
     readStdin: async () => JSON.stringify({ name: "shared-origin" }),
   };

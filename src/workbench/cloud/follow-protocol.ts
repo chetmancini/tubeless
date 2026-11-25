@@ -1,6 +1,5 @@
-import { awaitWithAbort, throwIfAborted } from "../../utilities/abort.js";
 import { isJsonObject } from "../../utilities/canonical-json.js";
-import { cancelBody } from "../../utilities/read-body.js";
+import { NdjsonFormatError, readNdjson } from "../../utilities/read-body.js";
 import { CloudClientError, isCloudRunStatus, type CliLogLine, type CliRun } from "./protocol.js";
 
 export const FOLLOW_MEDIA_TYPE = "application/x-ndjson";
@@ -185,53 +184,27 @@ export async function readFollowStream(
   signal: AbortSignal,
   consume: (event: FollowEvent) => Promise<void>
 ): Promise<FollowBoundary> {
-  const line = new Uint8Array(MAX_EVENT_BYTES);
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  const reader = body.getReader();
-  let size = 0;
-  let total = 0;
   let count = 0;
   try {
-    for (;;) {
-      throwIfAborted(signal, "Cloud observation");
-      const chunk = await awaitWithAbort(reader.read(), signal, "Cloud observation");
-      if (chunk.done)
-        throw new CloudClientError(
-          "Cloud connection ended before a terminal event or observation boundary.",
-          "transport_error"
-        );
-      total += chunk.value.byteLength;
-      if (total > MAX_STREAM_BYTES) return invalidStream();
-      for (let start = 0; start < chunk.value.length;) {
-        const newline = chunk.value.indexOf(10, start);
-        const end = newline === -1 ? chunk.value.length : newline;
-        if (size + end - start >= line.length) return invalidStream();
-        line.set(chunk.value.subarray(start, end), size);
-        size += end - start;
-        if (newline === -1) break;
-        let value: unknown;
-        try {
-          value = JSON.parse(decoder.decode(line.subarray(0, size)));
-        } catch {
-          return invalidStream();
-        }
-        const event = parseEvent(value, workspace, runId);
-        // Cloud can close observation during the first disclosure check.
-        if (
-          ++count > MAX_STREAM_EVENTS ||
-          (count === 1
-            ? event.type !== "snapshot" && event.type !== "end"
-            : event.type === "snapshot")
-        )
-          return invalidStream();
-        await consume(event);
-        if (event.type === "terminal" || event.type === "end") return event;
-        size = 0;
-        start = newline + 1;
-      }
+    for await (const value of readNdjson(body, signal, MAX_EVENT_BYTES, MAX_STREAM_BYTES)) {
+      const event = parseEvent(value, workspace, runId);
+      // Cloud can close observation during the first disclosure check.
+      if (
+        ++count > MAX_STREAM_EVENTS ||
+        (count === 1
+          ? event.type !== "snapshot" && event.type !== "end"
+          : event.type === "snapshot")
+      )
+        return invalidStream();
+      await consume(event);
+      if (event.type === "terminal" || event.type === "end") return event;
     }
-  } finally {
-    cancelBody(reader);
-    reader.releaseLock();
+  } catch (error) {
+    if (error instanceof NdjsonFormatError) return invalidStream();
+    throw error;
   }
+  throw new CloudClientError(
+    "Cloud connection ended before a terminal event or observation boundary.",
+    "transport_error"
+  );
 }

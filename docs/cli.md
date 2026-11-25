@@ -629,10 +629,15 @@ as `cloud cancel`. Both use the host and workspace from the profile. With
 
 Use `tubeless remote run <command-id> --host <origin>` to submit to a self-hosted
 Cloudflare deployment. `--detach` returns an execution ID after durable admission.
-`remote status <id>` reads the current state, `status --follow` waits, and
-`remote cancel <id>` records a cancellation request. Pass `--json` for a single
-receipt or status object. Following exits with `0` for success, `6` for failure
-or unknown outcome, and `7` for cancellation or a local interruption.
+`remote status <id>` reads the current state. Foreground runs and
+`remote status <id> --follow` stream retained and live logs and progress from the
+root and its stages. The CLI resumes from its last processed event after a
+connection drop. To reattach from another terminal, use the execution ID.
+Older deployments continue to use status polling. Ctrl-C stops following.
+`remote cancel <id>` records a remote cancellation request.
+Pass `--json` for a single receipt or status object on stdout. Following exits
+with `0` for success, `6` for failure or unknown outcome, and `7` for
+cancellation or a local interruption.
 See [self-hosted authentication and status](./deploy-cloudflare.md#submit-and-follow-from-the-cli).
 
 `tubeless remote runner --host <origin> --deployment-id <id> [--project <file>]`

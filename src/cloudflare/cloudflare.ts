@@ -20,6 +20,7 @@ import type {
 import type { HostedExecutionStatus as CloudflareExecutionStatus } from "../hosting/execution-status.js";
 import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 import { isExecutionPath, serveExecutionRequest } from "./cloudflare-execution-api.js";
+import type { ReadExecutionFollowPage } from "../hosting/execution/follow-store.js";
 import { isRunnerPath } from "./cloudflare-runner-api.js";
 import { placeRunnerChild, type RunnerStageStore } from "../hosting/runner/child-placement.js";
 import { WorkerStageCore, type WorkerStageIdentity, type WorkerStageIngest } from "./stage/run.js";
@@ -150,6 +151,7 @@ interface StudioStub extends CloudflareStudioIngest, WorkerStageIngest {
   launch(request: HostedLaunchRequest): Promise<CloudflareLaunchResult>;
   getLaunch(launchId: string): Promise<CloudflareLaunchStatus | undefined>;
   getExecution(launchId: string): Promise<CloudflareExecutionStatus | undefined>;
+  readExecutionFollowPage: ReadExecutionFollowPage;
   cancelExecution(launchId: string): Promise<CloudflareExecutionStatus | undefined>;
 }
 
@@ -271,19 +273,13 @@ export function createCloudflareApp<TEnv = unknown>(
               "An Access identity is required.",
               "Use an authorized Access identity or service token."
             );
-          if (deploymentId === undefined)
-            return errorResponse(
-              503,
-              "execution_api_not_configured",
-              "The execution API requires a deploymentId.",
-              "Set deploymentId on createCloudflareApp and redeploy."
-            );
           return await serveExecutionRequest(request, url, {
             deployment: { projectId: project.id, deploymentId },
             launch: (commandId, values, idempotencyKey) =>
               submit(studio, commandId, values, { idempotencyKey, actor, trigger: "code" }),
             get: (id) => studio.getExecution(id),
             cancel: (id) => studio.cancelExecution(id),
+            readFollowPage: (id, cursor) => studio.readExecutionFollowPage(id, cursor),
           });
         }
         // Forward the original request: the Studio host checks mutation Origin against its URL.
@@ -332,6 +328,10 @@ export function createCloudflareApp<TEnv = unknown>(
 
     getExecution(launchId: string) {
       return this.#core.getExecution(launchId);
+    }
+
+    readExecutionFollowPage(launchId: string, cursor: number) {
+      return this.#core.readExecutionFollowPage(launchId, cursor);
     }
 
     cancelExecution(launchId: string) {

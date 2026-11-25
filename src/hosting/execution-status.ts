@@ -1,4 +1,13 @@
 import { HOSTED_FAILURE_REASONS } from "./run-contract.js";
+import {
+  wireBoolean,
+  wireEnum,
+  wireObject,
+  wireOptional,
+  wireString,
+  type WireSchema,
+} from "../tracing/wire-schema.js";
+
 export const HOSTED_EXECUTIONS_PATH = "/api/executions/v1";
 
 export const HOSTED_EXECUTION_STATES = [
@@ -32,4 +41,19 @@ export interface HostedExecutionStatus {
   readonly runId?: string;
   readonly target?: "cloudflare" | "local";
   readonly reason?: HostedExecutionReason;
+}
+
+const text = wireString({ allowEmpty: true });
+export const hostedExecutionStatusSchema: WireSchema<HostedExecutionStatus> = wireObject({
+  executionId: text,
+  commandId: text,
+  state: wireEnum(HOSTED_EXECUTION_STATES),
+  cancellationRequested: wireBoolean(),
+  runId: wireOptional(text),
+  target: wireOptional(wireEnum(["cloudflare", "local"])),
+  reason: wireOptional(wireEnum(HOSTED_EXECUTION_REASONS)),
+});
+
+export function executionIsActive(status: HostedExecutionStatus): boolean {
+  return status.state === "queued" || status.state === "running";
 }

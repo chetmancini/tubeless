@@ -173,6 +173,37 @@ it("keeps local launches queued, pins claims, and joins the real mixed example i
     expect(JSON.stringify(detail)).toContain("transform-locally");
     const [stage] = detail.children;
     expect(stage).toMatchObject({ pipelineId: transformId, status: "completed" });
+    const followPath = `/api/executions/v1/${mixed}/events`;
+    expect((await inWorkerd("runner")(`${http}${followPath}`, undefined)).status).toBe(403);
+    const stream = await call(followPath);
+    expect(stream.headers.get("content-type")).toBe("application/x-ndjson");
+    const frames = (await stream.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(frames[0]).toMatchObject({ type: "snapshot", cursor: 0, executionId: mixed });
+    expect(frames).toContainEqual(
+      expect.objectContaining({
+        type: "log",
+        payload: expect.objectContaining({
+          runId: stage.runId,
+          parentRunId: runId,
+          pipelineId: transformId,
+          message: "Local file transformed",
+        }),
+      })
+    );
+    expect(frames).toContainEqual(
+      expect.objectContaining({
+        type: "progress",
+        payload: expect.objectContaining({
+          runId: stage.runId,
+          attemptId: expect.any(String),
+          message: "Local file ready",
+        }),
+      })
+    );
+    expect(frames.at(-1)).toMatchObject({ type: "terminal", payload: { state: "completed" } });
     const stageDetail = await (await call(`/api/runs/${stage.runId}`)).json();
     expect(stageDetail.run).toMatchObject({
       parentRunId: runId,

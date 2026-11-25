@@ -12,12 +12,10 @@ export function cancelBody(body: { cancel(): Promise<void> } | null): void {
   void body?.cancel().catch(() => {});
 }
 
-/** Consume byte chunks in order, waiting for the consumer before reading again. */
-export async function consumeBody(
+async function* readBodyChunks(
   body: ReadableStream<Uint8Array>,
-  signal: AbortSignal | undefined,
-  consume: (chunk: Uint8Array) => void | Promise<void>
-): Promise<void> {
+  signal?: AbortSignal
+): AsyncGenerator<Uint8Array> {
   const reader = body.getReader();
   try {
     for (;;) {
@@ -26,12 +24,23 @@ export async function consumeBody(
       const chunk = signal ? await awaitWithAbort(pending, signal, "Body read") : await pending;
       throwIfAborted(signal, "Body read");
       if (chunk.done) return;
-      const consumed = consume(chunk.value);
-      if (consumed) await consumed;
+      yield chunk.value;
     }
   } finally {
     cancelBody(reader);
     reader.releaseLock();
+  }
+}
+
+/** Consume byte chunks in order, waiting for the consumer before reading again. */
+export async function consumeBody(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+  consume: (chunk: Uint8Array) => void | Promise<void>
+): Promise<void> {
+  for await (const chunk of readBodyChunks(body, signal)) {
+    const consumed = consume(chunk);
+    if (consumed) await consumed;
   }
 }
 
@@ -52,4 +61,44 @@ export async function readBoundedBody(
   });
   throwIfAborted(signal, "Body read");
   return bytes.subarray(0, size);
+}
+
+export class NdjsonFormatError extends Error {
+  constructor(cause?: unknown) {
+    super("Invalid NDJSON stream.", { cause });
+  }
+}
+
+/** Decode complete records and discard a partial record if the connection ends. */
+export async function* readNdjson(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal,
+  maxLineBytes: number,
+  maxStreamBytes: number
+): AsyncGenerator<unknown> {
+  const line = new Uint8Array(maxLineBytes);
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let size = 0;
+  let total = 0;
+  for await (const chunk of readBodyChunks(body, signal)) {
+    total += chunk.byteLength;
+    if (total > maxStreamBytes) throw new NdjsonFormatError();
+    for (let start = 0; start < chunk.length;) {
+      const newline = chunk.indexOf(10, start);
+      const end = newline === -1 ? chunk.length : newline;
+      if (size + end - start >= line.length) throw new NdjsonFormatError();
+      line.set(chunk.subarray(start, end), size);
+      size += end - start;
+      if (newline === -1) break;
+      let value: unknown;
+      try {
+        value = JSON.parse(decoder.decode(line.subarray(0, size)));
+      } catch (error) {
+        throw new NdjsonFormatError(error);
+      }
+      yield value;
+      size = 0;
+      start = newline + 1;
+    }
+  }
 }

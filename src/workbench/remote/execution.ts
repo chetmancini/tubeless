@@ -1,11 +1,9 @@
 import {
   HOSTED_EXECUTIONS_PATH,
-  HOSTED_EXECUTION_REASONS,
-  HOSTED_EXECUTION_STATES,
+  hostedExecutionStatusSchema,
   type HostedExecutionStatus,
 } from "../../hosting/execution-status.js";
 import { parseStudioLaunchRequest } from "../../studio/shared/protocol.js";
-import { abortableSleep } from "../../utilities/abort.js";
 import { isJsonObject } from "../../utilities/canonical-json.js";
 import { isLaunchIdentifier } from "../../utilities/launch-identifier.js";
 import { readBoundedBody } from "../../utilities/read-body.js";
@@ -15,6 +13,7 @@ import { manageCliSignal } from "../../cli/cli-signal.js";
 import { errorMessage, terminalSafeText, type WorkbenchCliIo } from "../workbench-shared.js";
 import type { CloudCommandDependencies } from "../cloud/shared.js";
 import { workerHeaders } from "./access.js";
+import { followWorkerExecution } from "./follow.js";
 import type { RemoteProcessContext } from "./process.js";
 import type { WorkerRemote } from "./profiles.js";
 
@@ -35,9 +34,10 @@ export type RemoteExecution =
 class HostedRequestError extends Error {
   constructor(
     message: string,
-    readonly status?: number
+    readonly status?: number,
+    cause?: unknown
   ) {
-    super(message);
+    super(message, { cause });
   }
 }
 
@@ -99,31 +99,17 @@ async function requestExecution(
 }
 
 function executionStatus(data: unknown, id: string): HostedExecutionStatus {
-  if (!isJsonObject(data))
-    throw new HostedRequestError("The Worker returned an invalid execution status.");
-  const { commandId, cancellationRequested, runId, target } = data;
-  const state = HOSTED_EXECUTION_STATES.find((state) => state === data.state);
-  const reason = HOSTED_EXECUTION_REASONS.find((reason) => reason === data.reason);
-  if (
-    data.executionId !== id ||
-    typeof commandId !== "string" ||
-    !state ||
-    typeof cancellationRequested !== "boolean" ||
-    (runId !== undefined && typeof runId !== "string") ||
-    (data.reason !== undefined && !reason) ||
-    (target !== undefined && target !== "cloudflare" && target !== "local")
-  ) {
-    throw new HostedRequestError("The Worker returned an invalid execution status.");
+  try {
+    const status = hostedExecutionStatusSchema.decode(data, "Worker status");
+    if (status.executionId !== id) throw new Error("Execution ID mismatch.");
+    return status;
+  } catch (cause) {
+    throw new HostedRequestError(
+      "The Worker returned an invalid execution status.",
+      undefined,
+      cause
+    );
   }
-  return {
-    executionId: id,
-    commandId,
-    state,
-    cancellationRequested,
-    ...(runId === undefined ? {} : { runId }),
-    ...(reason === undefined ? {} : { reason }),
-    ...(target === undefined ? {} : { target }),
-  };
 }
 
 async function prepareSubmission(
@@ -238,12 +224,21 @@ export async function executeOnWorker(
     const follow = request.kind === "run" || (request.kind === "status" && request.follow === true);
     const initial =
       request.kind === "cancel" ? await send(`${path}/cancel`, "POST") : await send(path);
-    let status = executionStatus(initial, id);
-    while (follow && (status.state === "queued" || status.state === "running")) {
-      if (dependencies.sleep) await dependencies.sleep(2_000, signal);
-      else await abortableSleep(2_000, signal, "Follow execution");
-      status = executionStatus(await send(path), id);
-    }
+    const snapshot = executionStatus(initial, id);
+    const status = follow
+      ? await followWorkerExecution({
+          initial: snapshot,
+          capability: isJsonObject(initial) ? initial.runFollowing : undefined,
+          getStatus: async () => executionStatus(await send(path), id),
+          endpoint: `${host}${HOSTED_EXECUTIONS_PATH}${path}`,
+          headers,
+          fetcher,
+          io,
+          json: request.json,
+          signal,
+          sleep: dependencies.sleep,
+        })
+      : snapshot;
     showStatus(status, host, request.json ?? false, io);
     return !follow || status.state === "completed" ? 0 : status.state === "cancelled" ? 7 : 6;
   } catch (error) {

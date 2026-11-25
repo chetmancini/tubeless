@@ -5,6 +5,9 @@ import { parseStudioLaunchRequest } from "../studio/shared/protocol.js";
 import { isJsonObject } from "../utilities/canonical-json.js";
 import { jsonResponse } from "../utilities/http-response.js";
 import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
+import { executionFollowResponse } from "./cloudflare-execution-follow.js";
+import { EXECUTION_FOLLOW_CAPABILITY } from "../hosting/execution/follow.js";
+import type { ReadExecutionFollowPage } from "../hosting/execution/follow-store.js";
 
 export function isExecutionPath(pathname: string): boolean {
   return pathname === HOSTED_EXECUTIONS_PATH || pathname.startsWith(`${HOSTED_EXECUTIONS_PATH}/`);
@@ -15,12 +18,20 @@ export async function serveExecutionRequest(
   request: Request,
   url: URL,
   app: {
-    deployment: { projectId: string; deploymentId: string };
+    deployment: { projectId: string; deploymentId: string | undefined };
     launch(commandId: string, values: HostedLaunchValues, key: string): Promise<HostedLaunchResult>;
     get(id: string): Promise<HostedExecutionStatus | undefined>;
     cancel(id: string): Promise<HostedExecutionStatus | undefined>;
+    readFollowPage: ReadExecutionFollowPage;
   }
 ): Promise<Response> {
+  if (app.deployment.deploymentId === undefined)
+    return errorResponse(
+      503,
+      "execution_api_not_configured",
+      "The execution API requires a deploymentId.",
+      "Set deploymentId on createCloudflareApp and redeploy."
+    );
   if (request.method === "POST") {
     const origin = request.headers.get("origin");
     if (
@@ -80,7 +91,7 @@ export async function serveExecutionRequest(
     return jsonResponse(result, 400);
   }
 
-  const match = /^\/([^/]+)(\/cancel)?$/.exec(path);
+  const match = /^\/([^/]+)(?:\/(cancel|events))?$/.exec(path);
   // Execution identifiers use only URL-safe characters. The CLI also percent-encodes colons.
   let id: string | undefined;
   if (match) {
@@ -91,7 +102,8 @@ export async function serveExecutionRequest(
     }
   }
   if (isLaunchIdentifier(id)) {
-    const cancel = match?.[2] !== undefined;
+    const action = match?.[2];
+    const cancel = action === "cancel";
     if (request.method !== (cancel ? "POST" : "GET"))
       return errorResponse(
         405,
@@ -99,12 +111,34 @@ export async function serveExecutionRequest(
         "Method not allowed.",
         "Use GET for status or POST to request cancellation."
       );
+    if (action === "events") {
+      const raw = url.searchParams.get("cursor") ?? "0";
+      const cursor = Number(raw);
+      if (!/^\d{1,16}$/.test(raw) || !Number.isSafeInteger(cursor))
+        return errorResponse(
+          400,
+          "invalid_cursor",
+          "Invalid execution cursor.",
+          "Use the last cursor from this execution or omit it to read from the beginning."
+        );
+      const page = await app.readFollowPage(id, cursor);
+      return page
+        ? executionFollowResponse(id, cursor, page, app.readFollowPage)
+        : executionNotFound();
+    }
     const status = await (cancel ? app.cancel(id) : app.get(id));
     if (status) {
       const cancelling = cancel && status.cancellationRequested && status.state === "running";
-      return jsonResponse(status, cancelling ? 202 : 200);
+      return jsonResponse(
+        cancel ? status : { ...status, runFollowing: EXECUTION_FOLLOW_CAPABILITY },
+        cancelling ? 202 : 200
+      );
     }
   }
+  return executionNotFound();
+}
+
+function executionNotFound(): Response {
   return errorResponse(
     404,
     "execution_not_found",

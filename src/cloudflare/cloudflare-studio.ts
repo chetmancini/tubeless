@@ -22,6 +22,7 @@ import {
   type RunnerStageJob,
 } from "../hosting/runner-protocol.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
+import { createExecutionFollowReader } from "../hosting/execution/follow-store.js";
 import {
   createHostedLaunchAdmission,
   type HostedLaunchRequest,
@@ -66,6 +67,7 @@ export class StudioObjectCore implements CloudflareStudioIngest {
   readonly #now: () => number;
   readonly #admission: ReturnType<typeof createHostedLaunchAdmission>;
   #host: Promise<StudioHost> | undefined;
+  #follow: ReturnType<typeof createExecutionFollowReader> | undefined;
 
   constructor(private readonly deps: StudioObjectDependencies) {
     this.#now = deps.now ?? Date.now;
@@ -175,6 +177,13 @@ export class StudioObjectCore implements CloudflareStudioIngest {
         this.deps.localPipelines
       ),
     };
+  }
+
+  readExecutionFollowPage(launchId: string, cursor: number) {
+    const status = this.getExecution(launchId);
+    if (!status) return undefined;
+    this.#follow ??= createExecutionFollowReader(this.deps.storage);
+    return this.#follow(status, cursor);
   }
 
   cancelExecution(launchId: string) {
