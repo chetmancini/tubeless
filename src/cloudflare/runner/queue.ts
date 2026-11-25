@@ -1,26 +1,45 @@
-import { CloudflareRunnerClaims, digestRunnerLease } from "./cloudflare-runner-claims.js";
-import type { RunnerStageObservation } from "./cloudflare-child-placement.js";
-import { HostedAttemptConflict } from "../hosting/attempt/store.js";
-import { decodeRunnerBatch } from "../hosting/attempt/batch.js";
-import type { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
+import type { WorkerStageIdentity } from "../stage/run.js";
+import { initializeRunnerQueue } from "./queue-schema.js";
+import { WorkerStageDispatch } from "../stage/dispatch.js";
+import { CloudflareRunnerClaims, digestRunnerLease } from "./claims.js";
+import type { RunnerStageObservation } from "../../hosting/runner/child-placement.js";
+import { HostedAttemptConflict } from "../../hosting/attempt/store.js";
+import { decodeRunnerBatch } from "../../hosting/attempt/batch.js";
+import type { SqliteHostedLaunchStore } from "../../hosting/launch-store-sqlite.js";
 import {
   boundedRunnerJson,
   decodeRunnerReport,
+  decodeStageResult,
   RUNNER_INTERRUPTED,
   type RunnerJob,
   type RunnerStageResult,
-} from "../hosting/runner-protocol.js";
-import type { HostedExecutionReason } from "../hosting/execution-status.js";
-import type { StudioIngest } from "../hosting/run-contract.js";
-import type { PipelineTraceEvent } from "../tracing/tracing.js";
-import type { DurableStorageLike } from "./cloudflare-storage.js";
-import type { DurableRunStore } from "./cloudflare-run-store.js";
+} from "../../hosting/runner-protocol.js";
+import type { HostedExecutionReason } from "../../hosting/execution-status.js";
+import type { StudioIngest } from "../../hosting/run-contract.js";
+import type { PipelineTraceEvent } from "../../tracing/tracing.js";
+import type { DurableStorageLike } from "../cloudflare-storage.js";
+import type { DurableRunStore } from "../cloudflare-run-store.js";
 
 const cancelled = { error: "The remote stage was cancelled." } as const;
+const workerInterrupted = {
+  error: "The Worker stage stopped before confirming its result and may have performed effects.",
+  interrupted: true,
+} as const;
+
+function workerStageExpiry(
+  cancelledByParent: boolean,
+  dispatched: boolean
+): Extract<RunnerStageResult, { error: string }> {
+  if (cancelledByParent) return cancelled;
+  if (dispatched) return workerInterrupted;
+  return { error: "The Worker stage was not dispatched before its deadline." };
+}
+
 const expired = { error: RUNNER_INTERRUPTED, interrupted: true } as const;
 
 export class CloudflareRunnerQueue {
   readonly claims: CloudflareRunnerClaims;
+  readonly workerStages: WorkerStageDispatch;
 
   constructor(
     private readonly deps: {
@@ -32,44 +51,24 @@ export class CloudflareRunnerQueue {
       schedule: () => Promise<void>;
     }
   ) {
-    deps.storage.sql.exec(`CREATE TABLE IF NOT EXISTS tubeless_runner_queue (
-      id TEXT PRIMARY KEY NOT NULL,
-      launch_id TEXT NOT NULL,
-      deployment_id TEXT NOT NULL,
-      pipeline_id TEXT NOT NULL,
-      definition_id TEXT NOT NULL,
-      job_json TEXT,
-      deadline_at_ms INTEGER,
-      lease_until_ms INTEGER,
-      lease_digest TEXT,
-      cancelled INTEGER NOT NULL DEFAULT 0,
-      incompatible INTEGER NOT NULL DEFAULT 0,
-      result_json TEXT,
-      recovery_binding TEXT,
-      recovery_attempt_id TEXT
-    )`);
-    const columns = deps.storage.sql.exec("PRAGMA table_info(tubeless_runner_queue)").toArray();
-    if (!columns.some(({ name }) => name === "recovery_binding"))
-      deps.storage.sql.exec("ALTER TABLE tubeless_runner_queue ADD COLUMN recovery_binding TEXT");
-    if (!columns.some(({ name }) => name === "recovery_attempt_id"))
-      deps.storage.sql.exec(
-        "ALTER TABLE tubeless_runner_queue ADD COLUMN recovery_attempt_id TEXT"
-      );
-    deps.storage.sql.exec(`CREATE UNIQUE INDEX IF NOT EXISTS tubeless_runner_recovery_attempt
-      ON tubeless_runner_queue(recovery_attempt_id) WHERE recovery_attempt_id IS NOT NULL`);
-    deps.storage.sql.exec(
-      `CREATE INDEX IF NOT EXISTS tubeless_runner_launch ON tubeless_runner_queue(launch_id)`
-    );
-    deps.storage.sql.exec(`CREATE INDEX IF NOT EXISTS tubeless_runner_queued
-      ON tubeless_runner_queue(deployment_id, pipeline_id, definition_id) WHERE job_json IS NOT NULL AND lease_digest IS NULL`);
-    this.claims = new CloudflareRunnerClaims(deps);
+    initializeRunnerQueue(deps.storage.sql);
+    this.claims = new CloudflareRunnerClaims({
+      ...deps,
+      activeStageRunIds: (id) => this.activeStageRunIds(id),
+    });
+    this.workerStages = new WorkerStageDispatch({
+      ...deps,
+      claims: this.claims,
+      enqueue: (job, binding) => this.enqueue(job, binding, "cloudflare"),
+      cancel: (launchId, stageId) => this.cancel(launchId, stageId),
+    });
   }
 
   get #sql() {
     return this.deps.storage.sql;
   }
 
-  enqueue(job: RunnerJob, binding?: string): void {
+  enqueue(job: RunnerJob, binding?: string, target: "local" | "cloudflare" = "local"): void {
     if (binding !== undefined) {
       const [saved] = this.#sql
         .exec("SELECT recovery_binding FROM tubeless_runner_queue WHERE id = ?", job.id)
@@ -82,8 +81,8 @@ export class CloudflareRunnerQueue {
     }
     this.#sql.exec(
       `INSERT INTO tubeless_runner_queue
-        (id, launch_id, deployment_id, pipeline_id, definition_id, job_json, deadline_at_ms, recovery_binding)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, launch_id, deployment_id, pipeline_id, definition_id, job_json, deadline_at_ms, recovery_binding, target, worker_dispatch_at_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       job.id,
       job.launchId,
       job.deploymentId,
@@ -91,7 +90,9 @@ export class CloudflareRunnerQueue {
       job.definitionId,
       JSON.stringify(job),
       job.kind === "stage" ? job.deadlineAtMs : null,
-      binding ?? null
+      binding ?? null,
+      target,
+      target === "cloudflare" ? this.deps.now() : null
     );
   }
 
@@ -112,30 +113,43 @@ export class CloudflareRunnerQueue {
     return "runner_waiting";
   }
 
+  settleWorkerStage(job: WorkerStageIdentity, message?: string): Promise<void> {
+    return this.deps.storage.transaction(async () => {
+      const row = this.claims.active(this.workerStages.lookup(job));
+      if (!row) return;
+      this.#failStage(
+        job.launchId,
+        job.id,
+        row.cancelled ? cancelled : message === undefined ? workerInterrupted : { error: message }
+      );
+      await this.deps.schedule();
+    });
+  }
+
   async append(
-    token: string,
-    deploymentId: string,
+    source: WorkerStageIdentity | { token: string; deploymentId: string },
     bytes: Uint8Array
   ): Promise<{ accepted: boolean }> {
-    const [batch, leaseDigest] = await Promise.all([
+    const [batch, owner] = await Promise.all([
       decodeRunnerBatch(bytes),
-      digestRunnerLease(token),
+      "token" in source
+        ? digestRunnerLease(source.token).then((digest) => ({
+            digest,
+            deploymentId: source.deploymentId,
+          }))
+        : source,
     ]);
     return this.deps.storage.transaction(async () => {
-      const lease = this.#sql
-        .exec(
-          `SELECT * FROM tubeless_runner_queue WHERE lease_digest = ? AND deployment_id = ?
-         AND (recovery_attempt_id = ? OR (recovery_attempt_id IS NULL AND id = ?))`,
-          leaseDigest,
-          deploymentId,
-          batch.attemptId,
-          batch.attemptId
-        )
-        .toArray()[0];
+      const local = "digest" in owner;
+      if (!local && batch.attemptId !== owner.id) return { accepted: false };
+      const lease = local
+        ? this.claims.leaseForAttempt(batch.attemptId, owner.digest, owner.deploymentId)
+        : this.workerStages.lookup(owner);
       const row = this.claims.active(lease);
       // A sealed receipt proves an already committed batch, even after the parent consumes the result.
+      if (!row && !(lease?.job_json === null && (lease.lease_digest || lease.lease_until_ms)))
+        return { accepted: false };
       const ledger = this.deps.store.attemptLedger;
-      if (!row && lease?.job_json !== null) return { accepted: false };
       const status = ledger.check(batch);
       if (status.kind === "replay") return { accepted: true };
       if (!row || status.kind === "gap") return { accepted: false };
@@ -155,7 +169,7 @@ export class CloudflareRunnerQueue {
       );
       const firstBatch = status.runId === undefined;
       const events = firstBatch
-        ? this.#withRunnerLog(batch.events, batch.attemptId, root)
+        ? this.#withRunnerLog(batch.events, batch.attemptId, root, local ? "local" : "Cloudflare")
         : [...batch.events];
 
       if (!stage) {
@@ -164,12 +178,12 @@ export class CloudflareRunnerQueue {
         // Rejected writes roll back their new run bindings.
         if (!(await this.deps.ingest.appendEvents(job.launchId, batch.sequence, events)).accepted)
           throw new HostedAttemptConflict("events");
-        if (
-          row.recoveryAttemptId &&
-          events.some((event) => event.name === "pipeline.completed" && event.runId === root)
-        ) {
-          this.#close(job.id, undefined, true);
-          this.claims.clearJournal(job.launchId);
+        if (events.some((event) => event.name === "pipeline.completed" && event.runId === root)) {
+          if (row.recoveryAttemptId) {
+            this.#close(job.id, undefined, true);
+            this.claims.clearJournal(job.launchId);
+          }
+          this.clearFinishedLaunch(job.launchId);
           await this.deps.schedule();
         }
       } else if (batch.report === undefined) {
@@ -193,7 +207,7 @@ export class CloudflareRunnerQueue {
           report.runId !== root ||
           report.pipelineId !== job.pipelineId ||
           report.parentRunId !== stage.parentRunId ||
-          report.dryRun !== stage.dryRun ||
+          report.dryRun !== ("controls" in stage ? stage.controls.dryRun === true : stage.dryRun) ||
           report.definitionIdentity?.definitionId !== job.definitionId ||
           report.correlationId !== stage.correlationId ||
           completion.payload.status !== report.status ||
@@ -214,7 +228,8 @@ export class CloudflareRunnerQueue {
   #withRunnerLog(
     events: readonly PipelineTraceEvent[],
     attemptId: string,
-    root: string
+    root: string,
+    runner: "local" | "Cloudflare"
   ): PipelineTraceEvent[] {
     const index = events.findIndex(
       (event) => event.runId === root && event.name === "pipeline.started"
@@ -224,7 +239,10 @@ export class CloudflareRunnerQueue {
     const log: PipelineTraceEvent = {
       ...identity,
       name: "pipeline.log",
-      payload: { level: "log", message: `Runner local · attempt ${attemptId}` },
+      payload: {
+        level: "log",
+        message: `Runner ${runner} · attempt ${attemptId}`,
+      },
     };
     return [...events.slice(0, index + 1), log, ...events.slice(index + 1)];
   }
@@ -248,6 +266,7 @@ export class CloudflareRunnerQueue {
           await this.deps.ingest.reportFailure(job.launchId, error);
         this.#close(id);
         if (row.recoveryAttemptId) this.claims.clearJournal(job.launchId);
+        this.clearFinishedLaunch(job.launchId);
       } else {
         if (typeof result !== "string")
           throw new TypeError("Remote stage results belong in the terminal trace batch.");
@@ -264,8 +283,10 @@ export class CloudflareRunnerQueue {
 
   #close(id: string, result?: RunnerStageResult, sealed = false): void {
     this.#sql.exec(
-      `UPDATE tubeless_runner_queue SET job_json = NULL, lease_until_ms = NULL, deadline_at_ms = NULL,
-       lease_digest = CASE WHEN ? = 1 THEN lease_digest ELSE NULL END, result_json = ? WHERE id = ?`,
+      `UPDATE tubeless_runner_queue SET job_json = NULL, deadline_at_ms = NULL, worker_dispatch_at_ms = NULL,
+       lease_until_ms = CASE WHEN ? AND target = 'cloudflare' THEN lease_until_ms END,
+       lease_digest = CASE WHEN ? THEN lease_digest END, result_json = ? WHERE id = ?`,
+      sealed ? 1 : 0,
       sealed ? 1 : 0,
       result === undefined ? null : boundedRunnerJson(result, "Remote stage result"),
       id
@@ -306,11 +327,7 @@ export class CloudflareRunnerQueue {
         : this.deps.events.listChildProgress(runId, afterId);
     if (hasMore) return { events, hasMore };
     if (typeof row.result_json !== "string") return { events };
-    const result = JSON.parse(row.result_json) as RunnerStageResult;
-    return {
-      events,
-      result: "error" in result ? result : { report: decodeRunnerReport(result.report) },
-    };
+    return { events, result: decodeStageResult(JSON.parse(row.result_json)) };
   }
 
   activeStageRunIds(launchId: string): string[] {
@@ -318,7 +335,7 @@ export class CloudflareRunnerQueue {
       .exec(
         `SELECT id FROM tubeless_runner_queue
          WHERE launch_id = ? AND id <> launch_id
-           AND job_json IS NOT NULL AND lease_digest IS NOT NULL`,
+           AND job_json IS NOT NULL AND lease_until_ms IS NOT NULL`,
         launchId
       )
       .toArray();
@@ -332,9 +349,9 @@ export class CloudflareRunnerQueue {
     }
     this.#sql.exec(
       `UPDATE tubeless_runner_queue SET cancelled = 1,
-        job_json = CASE WHEN lease_digest IS NOT NULL THEN job_json END,
-        deadline_at_ms = CASE WHEN lease_digest IS NOT NULL THEN deadline_at_ms END,
-        result_json = CASE WHEN lease_digest IS NULL THEN ? ELSE result_json END
+        job_json = CASE WHEN lease_until_ms IS NOT NULL THEN job_json END,
+        deadline_at_ms = CASE WHEN lease_until_ms IS NOT NULL THEN deadline_at_ms END,
+        result_json = CASE WHEN lease_until_ms IS NULL THEN ? ELSE result_json END
        WHERE launch_id = ? AND job_json IS NOT NULL AND (? IS NULL OR id = ?)`,
       JSON.stringify(cancelled),
       launchId,
@@ -354,14 +371,14 @@ export class CloudflareRunnerQueue {
     for (const stage of activeStages)
       this.#interruptStage(
         String(stage.id),
-        "The parent execution ended before the local stage confirmed completion."
+        "The parent execution ended before the remote stage confirmed completion."
       );
     this.#sql.exec(
-      "UPDATE tubeless_runner_queue SET result_json = NULL, recovery_binding = NULL WHERE launch_id = ? AND id <> launch_id AND job_json IS NULL AND lease_digest IS NOT NULL",
+      "UPDATE tubeless_runner_queue SET result_json = NULL, recovery_binding = NULL WHERE launch_id = ? AND id <> launch_id AND job_json IS NULL AND COALESCE(lease_digest, lease_until_ms) IS NOT NULL",
       launchId
     );
     this.#sql.exec(
-      "DELETE FROM tubeless_runner_queue WHERE launch_id = ? AND id <> launch_id AND job_json IS NULL AND lease_digest IS NULL",
+      "DELETE FROM tubeless_runner_queue WHERE launch_id = ? AND id <> launch_id AND job_json IS NULL AND COALESCE(lease_digest, lease_until_ms) IS NULL",
       launchId
     );
   }
@@ -369,7 +386,12 @@ export class CloudflareRunnerQueue {
   nextAlarm(): number | undefined {
     const row = this.#sql
       .exec(
-        "SELECT MIN(COALESCE(lease_until_ms, deadline_at_ms)) AS at FROM tubeless_runner_queue WHERE job_json IS NOT NULL"
+        `SELECT MIN(at) AS at FROM (
+          SELECT COALESCE(lease_until_ms, deadline_at_ms) AS at FROM tubeless_runner_queue WHERE job_json IS NOT NULL
+          UNION ALL
+          SELECT worker_dispatch_at_ms AS at FROM tubeless_runner_queue
+          WHERE job_json IS NOT NULL AND cancelled = 0 AND worker_dispatch_at_ms IS NOT NULL
+        )`
       )
       .toArray()[0];
     return typeof row?.at === "number" ? row.at : undefined;
@@ -379,8 +401,8 @@ export class CloudflareRunnerQueue {
     const now = this.deps.now();
     const due = this.#sql
       .exec(
-        `SELECT id, launch_id, json_extract(job_json, '$.kind') AS kind, lease_digest,
-                recovery_attempt_id, deadline_at_ms, cancelled FROM tubeless_runner_queue
+        `SELECT id, launch_id, json_extract(job_json, '$.kind') AS kind, lease_until_ms,
+                recovery_attempt_id, deadline_at_ms, cancelled, target FROM tubeless_runner_queue
        WHERE job_json IS NOT NULL AND COALESCE(lease_until_ms, deadline_at_ms) <= ?`,
         now
       )
@@ -401,9 +423,11 @@ export class CloudflareRunnerQueue {
         this.#failStage(
           launchId,
           id,
-          row.lease_digest === null
-            ? { error: "The local runner did not claim the stage before its deadline." }
-            : expired
+          row.target === "cloudflare"
+            ? workerStageExpiry(row.cancelled === 1, row.lease_until_ms !== null)
+            : row.lease_until_ms === null
+              ? { error: "The local runner did not claim the stage before its deadline." }
+              : expired
         );
       }
     }
@@ -422,7 +446,14 @@ export class CloudflareRunnerQueue {
       if (this.deps.store.executions.status(launchId)?.state === "running" && deadlineAtMs > now) {
         const previous = this.deps.store.attemptLedger.latest(recoveryAttemptId)?.runId;
         if (previous)
-          this.deps.events.append(this.deps.store.interruptRuns(previous, RUNNER_INTERRUPTED, now));
+          this.deps.events.append(
+            this.deps.store.interruptRuns(
+              previous,
+              RUNNER_INTERRUPTED,
+              now,
+              this.activeStageRunIds(launchId)
+            )
+          );
         this.#sql.exec(
           "UPDATE tubeless_runner_queue SET lease_digest = NULL, lease_until_ms = NULL WHERE id = ?",
           id
@@ -433,5 +464,6 @@ export class CloudflareRunnerQueue {
     await this.deps.ingest.reportFailure(launchId, RUNNER_INTERRUPTED, "runner_interrupted");
     this.#close(id);
     if (typeof recoveryAttemptId === "string") this.claims.clearJournal(launchId);
+    this.clearFinishedLaunch(launchId);
   }
 }

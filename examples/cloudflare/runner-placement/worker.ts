@@ -1,6 +1,13 @@
 import { env } from "cloudflare:workers";
 import { createCloudflareApp } from "tubeless/cloudflare";
-import { deploymentId, runnerProject, runnerServiceId, transformId } from "./project.ts";
+import {
+  deploymentId,
+  runnerProject,
+  runnerServiceId,
+  transformId,
+  roundTripId,
+  workerChildId,
+} from "./project.ts";
 
 interface Bindings {
   readonly TUBELESS_BUCKET: {
@@ -18,22 +25,34 @@ const project = runnerProject({
   async publish(text) {
     await bucket.put("published.txt", text);
   },
+  async prefix(text, dryRun, signal) {
+    const object = await bucket.get("prefix.txt");
+    if (!object) throw new Error("Upload prefix.txt to the Worker bucket.");
+    const result = (await object.text()) + text;
+    signal?.throwIfAborted();
+    if (!dryRun) await bucket.put("worker-result.txt", result);
+    return result;
+  },
 });
 
 const app = createCloudflareApp(project, {
   deploymentId,
   recoverInterruptedRuns: true,
-  localRunner: { serviceId: runnerServiceId, pipelines: [transformId] },
+  localRunner: {
+    serviceId: runnerServiceId,
+    pipelines: [transformId, roundTripId],
+    workerChildren: [workerChildId],
+  },
 });
 export default {
   ...app.worker,
   async scheduled(event: { scheduledTime: number }, env: unknown): Promise<void> {
     const receipt = await app.launch(
       env,
-      "fetch-transform-publish",
-      { text: "source.txt" },
+      roundTripId,
+      { text: "local-source.txt" },
       {
-        idempotencyKey: `import.${event.scheduledTime}`,
+        idempotencyKey: `local-file.${event.scheduledTime}`,
         trigger: "schedule",
       }
     );

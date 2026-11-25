@@ -1,19 +1,22 @@
 import { expect, it } from "vitest";
-import { deploymentId, transformId } from "../../examples/cloudflare/runner-placement/project.js";
-import runnerProject from "../../examples/cloudflare/runner-placement/runner.project.js";
-import { createFakeDurableStorage } from "./cloudflare-storage.test-support.js";
-import { StudioObjectCore } from "./cloudflare-studio.js";
-import { hostedProjectCommands } from "../hosting/hosting-commands.js";
+import {
+  deploymentId,
+  transformId,
+} from "../../../examples/cloudflare/runner-placement/project.js";
+import runnerProject from "../../../examples/cloudflare/runner-placement/runner.project.js";
+import { createFakeDurableStorage } from "../cloudflare-storage.test-support.js";
+import { StudioObjectCore } from "../cloudflare-studio.js";
+import { hostedProjectCommands } from "../../hosting/hosting-commands.js";
 import {
   RUNNER_LEASE_MS,
   RUNNER_JOURNAL_VERSION,
   RUNNER_PATH,
   runnerProjectHeader,
-} from "../hosting/runner-protocol.js";
-import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt/batch.js";
-import type { PipelineTraceEvent } from "../tracing/tracing.js";
-import { PIPELINE_TRACE_VERSION } from "../tracing/tracing-constants.js";
-import { encodeJournalValue } from "../hosting/journal-value.js";
+} from "../../hosting/runner-protocol.js";
+import { encodeAttemptBatches, encodeRunnerCompletion } from "../../hosting/attempt/batch.js";
+import type { PipelineTraceEvent } from "../../tracing/tracing.js";
+import { PIPELINE_TRACE_VERSION } from "../../tracing/tracing-constants.js";
+import { encodeJournalValue } from "../../hosting/journal-value.js";
 
 const http = "http://localhost";
 const projectId = "runner-placement";
@@ -67,6 +70,8 @@ it("keeps queued local work when upgrading the launch and runner tables", async 
   if (!receipt.accepted) throw new Error(receipt.errors.join("\n"));
   storage.sql.exec("ALTER TABLE tubeless_launches DROP COLUMN recovery_generation");
   storage.sql.exec("ALTER TABLE tubeless_runner_queue DROP COLUMN recovery_binding");
+  storage.sql.exec("ALTER TABLE tubeless_runner_queue DROP COLUMN worker_dispatch_at_ms");
+  storage.sql.exec("ALTER TABLE tubeless_runner_queue DROP COLUMN target");
   storage.sql.exec("DROP INDEX tubeless_runner_recovery_attempt");
   storage.sql.exec("ALTER TABLE tubeless_runner_queue DROP COLUMN recovery_attempt_id");
 

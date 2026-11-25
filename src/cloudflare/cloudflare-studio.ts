@@ -1,4 +1,5 @@
-import { sha256Hex } from "../utilities/sha256.js";
+import type { WorkerStageIdentity } from "./stage/run.js";
+import { errorResponse } from "../studio/server/http.js";
 import type { HostedFailureReason, RunJob, StudioIngest } from "../hosting/run-contract.js";
 import type { HostedCommand, HostedOutput } from "../hosting/hosting-commands.js";
 import { createStudioHost, type StudioHost } from "../hosting/hosting-studio.js";
@@ -13,9 +14,13 @@ import type { AgentTranscriptRecord } from "../tracing/agent-transcript.js";
 import { PipelineRunStudioHistoryBusyError } from "../studio/server/state.js";
 import { HOST_TERMINATED } from "./cloudflare-run-contract.js";
 import type { CloudflareStudioIngest } from "./cloudflare-studio-ingest.js";
-import { CloudflareRunnerQueue } from "./cloudflare-runner-queue.js";
+import { CloudflareRunnerQueue } from "./runner/queue.js";
 import { serveRunnerRequest } from "./cloudflare-runner-api.js";
-import type { RunnerJob } from "../hosting/runner-protocol.js";
+import {
+  boundedRunnerJson,
+  stageDispatchBinding,
+  type RunnerStageJob,
+} from "../hosting/runner-protocol.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import {
   createHostedLaunchAdmission,
@@ -32,7 +37,7 @@ const SILENT_OUTPUT: HostedOutput = {
 };
 
 export interface RunStubLike {
-  start(job: RunJob): Promise<void>;
+  start(job: RunJob | RunnerStageJob): Promise<void>;
   cancel(): Promise<boolean> | boolean;
 }
 
@@ -47,6 +52,7 @@ export interface StudioObjectDependencies {
   readonly projectId: string;
   readonly deploymentId?: string;
   readonly recoverInterruptedRuns?: boolean;
+  readonly workerChildren?: ReadonlyMap<string, string>;
   readonly localPipelines?: ReadonlyMap<string, string>;
   readonly inputPolicy?: ReadonlyMap<string, ReadonlySet<string>>;
 }
@@ -117,6 +123,7 @@ export class StudioObjectCore implements CloudflareStudioIngest {
                 pipelineId: job.commandId,
                 definitionId,
                 run: job,
+                workerChildren: deps.workerChildren && Object.fromEntries(deps.workerChildren),
               });
             }
             await this.#scheduleReconcile();
@@ -185,26 +192,20 @@ export class StudioObjectCore implements CloudflareStudioIngest {
     const { projectId, deploymentId, localPipelines } = this.deps;
     if (deploymentId === undefined || localPipelines === undefined)
       throw new Error("Local runner unavailable.");
-    return serveRunnerRequest(request, this.#runners, projectId, deploymentId, localPipelines);
+    return serveRunnerRequest(
+      request,
+      this.#runners,
+      projectId,
+      deploymentId,
+      localPipelines,
+      this.deps.workerChildren
+    );
   }
 
-  async enqueueStage(job: RunnerJob & { kind: "stage" }, generation?: number): Promise<void> {
-    const {
-      launchId,
-      deploymentId,
-      pipelineId,
-      definitionId,
-      stage: { parentRunId: _parent, ...stage },
-    } = job;
-    // Tracing parents and the remaining wall-clock budget change when orchestration is recreated.
-    const binding =
-      generation === undefined
-        ? undefined
-        : await sha256Hex(
-            new TextEncoder().encode(
-              JSON.stringify([launchId, deploymentId, pipelineId, definitionId, stage])
-            )
-          );
+  async enqueueStage(job: RunnerStageJob, generation?: number): Promise<void> {
+    boundedRunnerJson(job, "Remote stage request");
+    const { launchId, deploymentId, pipelineId, definitionId } = job;
+    const binding = generation === undefined ? undefined : await stageDispatchBinding(job);
     return this.deps.storage.transaction(async () => {
       const status = this.getExecution(launchId);
       if (
@@ -230,6 +231,18 @@ export class StudioObjectCore implements CloudflareStudioIngest {
       this.#runners.cancel(launchId, id);
       await this.#scheduleReconcile();
     });
+  }
+
+  workerStageStatus(job: WorkerStageIdentity) {
+    return this.#runners.workerStages.status(job);
+  }
+
+  appendWorkerStage(job: WorkerStageIdentity, bytes: Uint8Array) {
+    return this.#runners.append(job, bytes);
+  }
+
+  settleWorkerStage(job: WorkerStageIdentity, message?: string) {
+    return this.#runners.settleWorkerStage(job, message);
   }
 
   async launch(request: HostedLaunchRequest): Promise<HostedLaunchResult> {
@@ -330,14 +343,16 @@ export class StudioObjectCore implements CloudflareStudioIngest {
       );
     }
     // Commit the delivery snapshot and its next alarm before crossing RPC.
-    const actions = await this.deps.storage.transaction(async () => {
+    const { actions, stages } = await this.deps.storage.transaction(async () => {
       await this.#runners.expire();
-      const pending = executions.takeDue(now, now + DELIVERY_RETRY_MS);
+      const retryAt = now + DELIVERY_RETRY_MS;
+      const actions = executions.takeDue(now, retryAt);
+      const stages = this.#runners.workerStages.takeDue(now, retryAt);
       await this.#scheduleReconcile();
-      return pending;
+      return { actions, stages };
     });
-    await Promise.all(
-      actions.map(async (action) => {
+    await Promise.all([
+      ...actions.map(async (action) => {
         try {
           const run = this.deps.runStub(action.launchId);
           if (action.kind === "dispatch") await run.start(action.job);
@@ -346,7 +361,31 @@ export class StudioObjectCore implements CloudflareStudioIngest {
         } catch (error) {
           console.error(error);
         }
-      })
+      }),
+      ...stages.map(async (job) => {
+        try {
+          const run = this.deps.runStub(`stage:${job.id}`);
+          await run.start(job);
+          this.#runners.workerStages.delivered(job.id);
+        } catch (error) {
+          console.error(error);
+        }
+      }),
+    ]);
+  }
+}
+
+export function studioUnavailable(request: Request): Response {
+  if (new URL(request.url).pathname.startsWith("/api/")) {
+    return errorResponse(
+      503,
+      "studio_unavailable",
+      "Studio is temporarily unavailable.",
+      "Retry in a moment."
     );
   }
+  return new Response("Studio is temporarily unavailable. Retry in a moment.\n", {
+    status: 503,
+    headers: { "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" },
+  });
 }

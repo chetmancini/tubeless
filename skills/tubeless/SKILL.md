@@ -164,9 +164,10 @@ Optional capabilities:
   `--remote`. For manual Cloudflare setup use `tubeless init cloudflare` and
   `docs/deploy-cloudflare.md`;
   use `tubeless remote runner` with a separate Bun project for pipelines placed
-  on a local runner. See the runner placement recipe for matched definitions.
-  Set `recoverInterruptedRuns` for versioned Worker-root launches that should
-  restore acknowledged outputs after a restart. Runs are limited to 14 minutes
+  on a local runner. Allowlist Worker children in `localRunner.workerChildren`
+  for explicit `fromPipeline` calls from a Bun root. See the runner placement
+  recipe for matched definitions. Set `recoverInterruptedRuns` for versioned
+  Worker and Bun roots that should restore acknowledged outputs after a restart. Runs are limited to 14 minutes
   and secrets stay out of config text bindings.
   Set `deploymentId` for trusted `app.launch` and `tubeless remote run` submissions.
   Follow or request cancellation by the execution ID.

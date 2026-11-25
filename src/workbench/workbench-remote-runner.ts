@@ -1,5 +1,6 @@
-import { encodeAttemptBatches, encodeRunnerCompletion } from "../hosting/attempt/batch.js";
-import { createLaunchTracing } from "../hosting/launch-tracing.js";
+import { createRunnerAttempt } from "../hosting/runner/trace.js";
+import { executeHostedStage } from "../hosting/runner/run-stage.js";
+import { placeRunnerChild, type RunnerStageStore } from "../hosting/runner/child-placement.js";
 import type { PipelineExecutionJournal } from "../core/pipeline-types.js";
 import { decodeJournalValue, encodeJournalValue } from "../hosting/journal-value.js";
 import {
@@ -9,6 +10,7 @@ import {
 } from "../hosting/hosting-commands.js";
 import {
   RUNNER_HEARTBEAT_MS,
+  RUNNER_CLAIM_BYTES,
   RUNNER_JOURNAL_BYTES,
   RUNNER_JOURNAL_VERSION,
   RUNNER_LEASE_MS,
@@ -17,13 +19,10 @@ import {
   boundedRunnerJson,
   decodeRunnerClaim,
   runnerProjectHeader,
-  runnerChildControls,
-  runnerValue,
+  decodeStageResult,
   type RunnerClaim,
 } from "../hosting/runner-protocol.js";
-import { boundHostedEvent, executeHostedRun } from "../hosting/run.js";
-import { BatchingTraceExporter } from "../hosting/trace-batching.js";
-import type { PipelineTraceEvent } from "../tracing/tracing.js";
+import { executeHostedRun, type HostedChildPlacement } from "../hosting/run.js";
 import type { AnyProjectPipeline } from "../project/pipeline-project.js";
 import { abortableSleep, throwIfAborted } from "../utilities/abort.js";
 import { isJsonObject } from "../utilities/canonical-json.js";
@@ -66,11 +65,13 @@ function runnerTransport(fetcher: typeof fetch, host: string, headers: Headers):
     });
     let result: unknown;
     try {
-      const bytes = await readBoundedBody(
-        response.body,
-        operation === "journal" ? RUNNER_JOURNAL_BYTES : RUNNER_REPLY_BYTES,
-        deadline
-      );
+      const replyBytes =
+        operation === "journal"
+          ? RUNNER_JOURNAL_BYTES
+          : operation === "claim"
+            ? RUNNER_CLAIM_BYTES
+            : RUNNER_REPLY_BYTES;
+      const bytes = await readBoundedBody(response.body, replyBytes, deadline);
       result = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch (error) {
       if (response.ok) throw error;
@@ -146,6 +147,49 @@ function remoteJournal(options: {
   };
 }
 
+function workerStageStore(options: {
+  id: string;
+  token: string;
+  send: Send;
+  controller: AbortController;
+  leaseSignal: AbortSignal;
+}): RunnerStageStore {
+  const { id, token, send, controller, leaseSignal } = options;
+  const call = async (operation: string, fields: object, requestSignal: AbortSignal) => {
+    let body: string;
+    try {
+      body = boundedRunnerJson({ id, token, ...fields }, "Worker stage request");
+    } catch (error) {
+      throw new RunnerRequestError(413, errorMessage(error));
+    }
+    const response = await send(operation, body, requestSignal);
+    if (response.cancelled === true) {
+      const cancellation = new DOMException("The execution was cancelled.", "AbortError");
+      controller.abort(cancellation);
+      throw cancellation;
+    }
+    if (response.accepted !== true)
+      throw new RunnerRequestError(
+        409,
+        "The Worker did not confirm this stage under the active lease."
+      );
+    return response;
+  };
+  return {
+    async enqueueStage(job) {
+      await call("stage-enqueue", { job }, controller.signal);
+    },
+    async readStage(_launchId, stageId) {
+      const { result } = await call("stage-read", { stageId }, controller.signal);
+      return { events: [], ...(result === undefined ? {} : { result: decodeStageResult(result) }) };
+    },
+    async cancelStage(_launchId, stageId) {
+      // A recoverable runner stopping locally leaves the stage for the next lease.
+      if (!leaseSignal.aborted) await call("stage-cancel", { stageId }, leaseSignal);
+    },
+  };
+}
+
 async function executeClaim(options: {
   claim: RunnerClaim;
   startedAt: number;
@@ -213,29 +257,23 @@ async function executeClaim(options: {
   const heartbeat = maintainLease().catch((error: unknown) => {
     if (!keepAlive.signal.aborted) abandon(error);
   });
-  const attemptId = recoveryAttemptId ?? job.id;
-  let nextSequence = 0;
-  const sendBatch = async (body: Uint8Array) => {
-    const ack = await withRetry(() => send("events", body, keepAlive.signal, token), {
-      maxAttempts: 3,
-      baseDelayMs: 200,
-      signal: keepAlive.signal,
-      shouldRetry: retryable,
-    });
-    if (ack.accepted !== true) throw new Error("Studio rejected runner events.");
-    nextSequence++;
-  };
-  const exporter = new BatchingTraceExporter(
-    async (_sequence, events) => {
-      for (const body of encodeAttemptBatches(
-        attemptId,
-        nextSequence,
-        events.map(boundHostedEvent)
-      ))
-        await sendBatch(body);
+  const {
+    exporter,
+    prepareCompletion,
+    send: sendBatch,
+  } = createRunnerAttempt({
+    id: recoveryAttemptId ?? job.id,
+    onFailure: abandon,
+    async send(body) {
+      const ack = await withRetry(() => send("events", body, keepAlive.signal, token), {
+        maxAttempts: 3,
+        baseDelayMs: 200,
+        signal: keepAlive.signal,
+        shouldRetry: retryable,
+      });
+      if (ack.accepted !== true) throw new Error("Studio rejected runner events.");
     },
-    { maxEvents: 50, maxDelayMs: 250, onFailure: abandon }
-  );
+  });
   try {
     let terminalBatch: Uint8Array | undefined;
     let result: string | null = null;
@@ -252,6 +290,28 @@ async function executeClaim(options: {
           throw new Error(
             parsed.kind === "error" ? parsed.errors.join("\n") : "Help cannot be executed."
           );
+        const { workerChildren } = job;
+        const placeChild: HostedChildPlacement | undefined =
+          workerChildren &&
+          ((_job, _deadlineAtMs, flush) =>
+            placeRunnerChild({
+              definitions: new Map(Object.entries(workerChildren)),
+              launchId: job.launchId,
+              deploymentId: job.deploymentId,
+              recover: recoveryAttemptId !== undefined,
+              shouldRetry: retryable,
+              // The outbox deduplicates enqueue. Retry until lease loss or cancellation.
+              dispatchAttempts: Number.MAX_SAFE_INTEGER,
+              interruptedStage: "outcome_unknown",
+              flush,
+              store: workerStageStore({
+                id: job.id,
+                token,
+                send,
+                controller,
+                leaseSignal: keepAlive.signal,
+              }),
+            }));
         const run = await executeHostedRun({
           job: { ...job.run, maxRunDurationMs: Math.ceil(remaining) },
           entry,
@@ -259,6 +319,7 @@ async function executeClaim(options: {
           output: io,
           controller,
           exporter,
+          placeChild,
           ...(recoveryAttemptId === undefined
             ? {}
             : {
@@ -280,57 +341,15 @@ async function executeClaim(options: {
             ? null
             : `The local pipeline exited (${run.exitCode}) without confirming a terminal run.`;
       } else {
-        const { parentRunId, correlationId, itemKey, stepId, input, controls } = job.stage;
-        let completion: PipelineTraceEvent | undefined;
-        const stageExporter = {
-          export(event: PipelineTraceEvent) {
-            if (event.name === "pipeline.completed" && event.parentRunId === parentRunId)
-              completion = event;
-            else return exporter.export(event);
-          },
-          flush: () => exporter.flush(),
-        };
-        const tracing = createLaunchTracing({
-          context: {
-            pipelineId: pipeline.id,
-            cwd: io.cwd,
-            signal: controller.signal,
-            launchId: job.launchId,
-          },
+        const { completion, report } = await executeHostedStage({
+          job,
+          pipeline,
+          cwd: io.cwd,
+          signal: controller.signal,
+          exporter,
           configurations: [entry.tracing],
-          exporters: [stageExporter],
         });
-        let report;
-        try {
-          report = await pipeline.run(input, runnerChildControls(controls), {
-            cwd: io.cwd,
-            log: console,
-            signal: controller.signal,
-            parentRunId,
-            correlationId,
-            tracing: {
-              ...(tracing.prepare() ?? { exporter: stageExporter }),
-              itemKey,
-              parentStep: { runId: parentRunId, stepId },
-            },
-          });
-        } finally {
-          await tracing.close();
-        }
-        await exporter.flush();
-        if (completion?.runId !== report.runId)
-          throw new Error("The local stage did not record a terminal event.");
-        const transferable =
-          report.finalized && report.value !== undefined
-            ? { ...report, value: runnerValue(report.value, "Remote stage result") }
-            : report;
-        boundedRunnerJson({ report: transferable }, "Remote stage result");
-        terminalBatch = encodeRunnerCompletion(
-          job.id,
-          nextSequence,
-          boundHostedEvent(completion),
-          transferable
-        );
+        terminalBatch = prepareCompletion(completion, report);
       }
     } catch (error) {
       await exporter.flush().catch(() => {});
@@ -380,7 +399,7 @@ export async function runRemoteRunner(options: {
       "The runner project needs at least one pipeline with an implementationVersion."
     );
   const poll = boundedRunnerJson(
-    { manifest, journalVersion: RUNNER_JOURNAL_VERSION },
+    { manifest, journalVersion: RUNNER_JOURNAL_VERSION, workerStages: true },
     "Runner manifest"
   );
   headers.set("x-tubeless-project", runnerProjectHeader(loaded.project.id));

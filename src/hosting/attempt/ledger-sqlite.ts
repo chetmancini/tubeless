@@ -67,6 +67,18 @@ export class SqliteAttemptLedger {
     return row && { sequence: Number(row.sequence), runId: String(row.run_id) };
   }
 
+  ownsRun(attemptId: string, runId: string): boolean {
+    return (
+      this.sql
+        .exec(
+          "SELECT 1 FROM tubeless_attempt_runs WHERE run_id = ? AND attempt_id = ?",
+          runId,
+          attemptId
+        )
+        .toArray().length > 0
+    );
+  }
+
   runIds(attemptIds: readonly string[]): string[] {
     if (attemptIds.length === 0) return [];
     return this.sql

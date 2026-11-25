@@ -1,4 +1,5 @@
-import { isAuthoredPipelineId } from "../core/pipeline-ids.js";
+import { DEFAULT_MAX_ATTEMPTS } from "../utilities/retry.js";
+import { maxRunDuration, resolveRunnerPlacement } from "./cloudflare-placement-config.js";
 import type { HostedFailureReason, RunJob } from "../hosting/run-contract.js";
 import { DurableObject } from "cloudflare:workers";
 import type { AnyProjectPipeline, PipelineProject } from "../project/pipeline-project.js";
@@ -6,9 +7,9 @@ import { hostedProjectCommands } from "../hosting/hosting-commands.js";
 import { errorResponse } from "../studio/server/http.js";
 import type { PipelineTraceEvent, PipelineTraceExporterOptions } from "../tracing/tracing.js";
 import { createAccessAuthenticator, parseAccessConfig } from "./cloudflare-access.js";
-import { MAX_RUN_DURATION_MS, type CloudflareRunTraceContext } from "./cloudflare-run-contract.js";
+import type { CloudflareRunTraceContext } from "./cloudflare-run-contract.js";
 import { RunObjectCore } from "./cloudflare-run.js";
-import { StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
+import { studioUnavailable, StudioObjectCore, type RunStubLike } from "./cloudflare-studio.js";
 import type { CloudflareStudioIngest } from "./cloudflare-studio-ingest.js";
 import type {
   HostedLaunchRequest,
@@ -20,8 +21,10 @@ import type { HostedExecutionStatus as CloudflareExecutionStatus } from "../host
 import { isLaunchIdentifier } from "../utilities/launch-identifier.js";
 import { isExecutionPath, serveExecutionRequest } from "./cloudflare-execution-api.js";
 import { isRunnerPath } from "./cloudflare-runner-api.js";
-import { placeCloudflareChild, type RunnerStageStore } from "./cloudflare-child-placement.js";
-import { MAX_RUNNER_MANIFEST_PIPELINES, type RunnerJob } from "../hosting/runner-protocol.js";
+import { placeRunnerChild, type RunnerStageStore } from "../hosting/runner/child-placement.js";
+import { WorkerStageCore, type WorkerStageIdentity, type WorkerStageIngest } from "./stage/run.js";
+import { retryableCloudflareRpc } from "./cloudflare-tracing.js";
+import type { RunnerStageJob } from "../hosting/runner-protocol.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
 import type {
   LaunchActor,
@@ -87,6 +90,8 @@ export interface CloudflareAppOptions<TEnv = unknown> {
     /** Client ID of the Access service token enrolled for local work. */
     readonly serviceId: string;
     readonly pipelines: readonly string[];
+    /** Registered, versioned Worker pipelines that a Bun root can call via fromPipeline. */
+    readonly workerChildren?: readonly string[];
   };
   /** Extra destinations composed with project exporters and Studio ingestion. */
   readonly tracing?: PipelineTraceExporterOptions<CloudflareTraceContext<TEnv>>;
@@ -136,7 +141,10 @@ interface NamespaceLike<T> {
   getByName(name: string): T;
 }
 
-interface StudioStub extends CloudflareStudioIngest, RunnerStageStore {
+interface StudioStub extends CloudflareStudioIngest, WorkerStageIngest {
+  enqueueStage(job: RunnerStageJob, generation?: number): Promise<void>;
+  readStage: RunnerStageStore["readStage"];
+  cancelStage(launchId: string, id: string, generation?: number): Promise<void>;
   serveRunner(request: Request): Promise<Response>;
   serve(request: Request, actor?: LaunchActor): Promise<Response>;
   launch(request: HostedLaunchRequest): Promise<CloudflareLaunchResult>;
@@ -163,31 +171,6 @@ interface DurableObjectStateLike {
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-function maxRunDuration(value: number | undefined): number {
-  if (value === undefined) return MAX_RUN_DURATION_MS;
-  if (!Number.isInteger(value) || value <= 0 || value > MAX_RUN_DURATION_MS) {
-    throw new Error(
-      `limits.maxRunDurationMs must be a positive integer no greater than ${MAX_RUN_DURATION_MS}.`
-    );
-  }
-  return value;
-}
-
-function studioUnavailable(request: Request): Response {
-  if (new URL(request.url).pathname.startsWith("/api/")) {
-    return errorResponse(
-      503,
-      "studio_unavailable",
-      "Studio is temporarily unavailable.",
-      "Retry in a moment."
-    );
-  }
-  return new Response("Studio is temporarily unavailable. Retry in a moment.\n", {
-    status: 503,
-    headers: { "cache-control": "no-store", "content-type": "text/plain; charset=utf-8" },
-  });
-}
-
 /** Compose a single-tenant Tubeless deployment for a Worker with two SQLite Durable Objects. */
 export function createCloudflareApp<TEnv = unknown>(
   project: PipelineProject<string, readonly AnyProjectPipeline[]>,
@@ -204,27 +187,11 @@ export function createCloudflareApp<TEnv = unknown>(
   const commands = new Map(
     hostedProjectCommands(project).map((entry) => [entry.descriptor.id, entry])
   );
-  const runnerService = options.localRunner?.serviceId;
-  let localPipelines: ReadonlyMap<string, string> | undefined;
-  if (options.localRunner !== undefined) {
-    if (!deploymentId || !runnerService || runnerService.length > 1024)
-      throw new Error("Local runner placement requires deploymentId and an Access serviceId.");
-    if (
-      options.localRunner.pipelines.length < 1 ||
-      options.localRunner.pipelines.length > MAX_RUNNER_MANIFEST_PIPELINES
-    )
-      throw new Error(`Configure 1–${MAX_RUNNER_MANIFEST_PIPELINES} local runner pipelines.`);
-    localPipelines = new Map(
-      options.localRunner.pipelines.map((id) => {
-        const identity = commands.get(id)?.command.plan().definition?.identity;
-        if (!isAuthoredPipelineId(id) || !identity?.implementationVersion)
-          throw new Error(
-            `Local runner pipeline ${JSON.stringify(id)} requires a registered, versioned definition.`
-          );
-        return [id, identity.definitionId];
-      })
-    );
-  }
+  const { runnerService, localPipelines, workerChildren } = resolveRunnerPlacement(
+    commands,
+    deploymentId,
+    options.localRunner
+  );
   const inputPolicy = launchInputPolicy(commands, options.recordInputs);
   const submit = (
     studio: StudioStub,
@@ -344,6 +311,7 @@ export function createCloudflareApp<TEnv = unknown>(
         deploymentId,
         inputPolicy,
         localPipelines,
+        workerChildren,
         recoverInterruptedRuns: options.recoverInterruptedRuns,
         runStub: (launchId) => env.TUBELESS_RUN.getByName(launchId),
       });
@@ -374,7 +342,7 @@ export function createCloudflareApp<TEnv = unknown>(
       return this.#core.serveRunner(request);
     }
 
-    enqueueStage(job: RunnerJob & { kind: "stage" }, generation?: number) {
+    enqueueStage(job: RunnerStageJob, generation?: number) {
       return this.#core.enqueueStage(job, generation);
     }
 
@@ -384,6 +352,18 @@ export function createCloudflareApp<TEnv = unknown>(
 
     cancelStage(launchId: string, id: string, generation?: number) {
       return this.#core.cancelStage(launchId, id, generation);
+    }
+
+    workerStageStatus(job: WorkerStageIdentity) {
+      return this.#core.workerStageStatus(job);
+    }
+
+    appendWorkerStage(job: WorkerStageIdentity, bytes: Uint8Array) {
+      return this.#core.appendWorkerStage(job, bytes);
+    }
+
+    settleWorkerStage(job: WorkerStageIdentity, message?: string) {
+      return this.#core.settleWorkerStage(job, message);
     }
 
     admit(launchId: string, generation?: number): Promise<{ admitted: boolean }> {
@@ -419,53 +399,70 @@ export function createCloudflareApp<TEnv = unknown>(
 
   class TubelessRun extends DurableObject<TubelessEnv> {
     readonly #core: RunObjectCore;
+    readonly #stage: WorkerStageCore;
 
     constructor(ctx: unknown, env: TubelessEnv) {
       super(ctx, env);
       const state = ctx as DurableObjectStateLike;
+      const tracing: PipelineTraceExporterOptions<CloudflareRunTraceContext> | undefined =
+        options.tracing && {
+          exporters: (context) =>
+            options.tracing!.exporters({
+              ...context,
+              // SAFETY: the application supplies its Worker bindings type at registration.
+              env: env as TEnv,
+            }),
+          onExporterError: options.tracing.onExporterError,
+        };
+      const ingest = () => studioBinding(env);
+      this.#stage = new WorkerStageCore({
+        storage: state.storage,
+        commands,
+        deploymentId,
+        definitions: workerChildren,
+        getPipeline: (id) => project.get(id),
+        ingest,
+        tracing,
+      });
       this.#core = new RunObjectCore({
         storage: state.storage,
         commands,
         deploymentId,
-        ingest: () => studioBinding(env),
+        ingest,
         placeChild:
           localPipelines && deploymentId
             ? (job, deadlineAtMs, flush, generation) =>
-                placeCloudflareChild({
+                placeRunnerChild({
                   definitions: localPipelines,
                   launchId: job.launchId,
                   deploymentId,
-                  deadlineAtMs,
                   flush,
-                  generation,
-                  store: () => studioBinding(env),
+                  recover: generation !== undefined,
+                  shouldRetry: retryableCloudflareRpc,
+                  dispatchAttempts: generation === undefined ? 1 : DEFAULT_MAX_ATTEMPTS,
+                  interruptedStage: generation === undefined ? "failed" : "outcome_unknown",
+                  store: {
+                    enqueueStage: (stage) =>
+                      ingest().enqueueStage({ ...stage, deadlineAtMs }, generation),
+                    readStage: (...args) => ingest().readStage(...args),
+                    cancelStage: (launchId, id) => ingest().cancelStage(launchId, id, generation),
+                  },
                 })
             : undefined,
-        tracing:
-          options.tracing === undefined
-            ? undefined
-            : {
-                exporters: (context) =>
-                  options.tracing!.exporters({
-                    ...context,
-                    // SAFETY: the application supplies its Worker bindings type at registration.
-                    env: env as TEnv,
-                  }),
-                onExporterError: options.tracing.onExporterError,
-              },
+        tracing,
       });
     }
 
-    start(job: RunJob): Promise<void> {
-      return this.#core.start(job);
+    start(job: RunJob | RunnerStageJob): Promise<void> {
+      return "kind" in job ? this.#stage.start(job) : this.#core.start(job);
     }
 
     cancel(): boolean {
       return this.#core.cancel();
     }
 
-    alarm(): Promise<void> {
-      return this.#core.alarm();
+    async alarm(): Promise<void> {
+      if (!(await this.#stage.alarm())) await this.#core.alarm();
     }
   }
 

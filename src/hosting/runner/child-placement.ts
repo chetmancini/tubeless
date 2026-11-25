@@ -1,18 +1,17 @@
-import { failExecutionJournal } from "../core/execution-journal.js";
-import { JOURNAL_OUTCOME_UNKNOWN } from "../tracing/tracing-constants.js";
-import { sha256Hex } from "../utilities/sha256.js";
-import { createSingleChildTraceProgress } from "../core/child-progress.js";
-import type { StoredPipelineEvent } from "../run-store/run-store.js";
-import type { ChildPlacement } from "../core/child-placement.js";
+import { failExecutionJournal } from "../../core/execution-journal.js";
+import { JOURNAL_OUTCOME_UNKNOWN } from "../../tracing/tracing-constants.js";
+import { sha256Hex } from "../../utilities/sha256.js";
+import { createSingleChildTraceProgress } from "../../core/child-progress.js";
+import type { StoredPipelineEvent } from "../../run-store/run-store.js";
+import type { ChildPlacement } from "../../core/child-placement.js";
 import {
-  boundedRunnerJson,
   runnerChildControls,
   runnerValue,
-  type RunnerJob,
+  type RunnerStageRequest,
   type RunnerStageResult,
-} from "../hosting/runner-protocol.js";
-import { abortableSleep, awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
-import { withRetry } from "../utilities/retry.js";
+} from "../runner-protocol.js";
+import { abortableSleep, awaitWithAbort, throwIfAborted } from "../../utilities/abort.js";
+import { withRetry } from "../../utilities/retry.js";
 
 export type RunnerStageObservation = {
   readonly events: readonly StoredPipelineEvent[];
@@ -22,29 +21,23 @@ export type RunnerStageObservation = {
 );
 
 export interface RunnerStageStore {
-  enqueueStage(job: RunnerJob & { kind: "stage" }, generation?: number): Promise<void>;
+  enqueueStage(job: RunnerStageRequest): Promise<void>;
   readStage(launchId: string, id: string, afterId: number): Promise<RunnerStageObservation>;
-  cancelStage(launchId: string, id: string, generation?: number): Promise<void>;
+  cancelStage(launchId: string, id: string): Promise<void>;
 }
 
-function canRetryRpc(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    "retryable" in error &&
-    error.retryable === true &&
-    !("overloaded" in error && error.overloaded === true)
-  );
-}
-
-export function placeCloudflareChild(options: {
+export function placeRunnerChild(options: {
   readonly definitions: ReadonlyMap<string, string>;
   readonly launchId: string;
   readonly deploymentId: string;
-  readonly deadlineAtMs: number;
-  readonly generation?: number;
+  readonly recover: boolean;
+  readonly shouldRetry: (error: unknown) => boolean;
+  readonly dispatchAttempts: number;
+  readonly interruptedStage: "failed" | "outcome_unknown";
   readonly flush: () => Promise<void>;
-  readonly store: () => RunnerStageStore;
+  readonly store: RunnerStageStore;
 }): ChildPlacement {
+  const { store, shouldRetry } = options;
   return ({
     pipeline,
     plan,
@@ -58,67 +51,62 @@ export function placeCloudflareChild(options: {
     const definitionId = options.definitions.get(pipeline.id);
     if (!definitionId) return undefined;
     return (async () => {
-      const { generation } = options;
+      const recovery = options.recover;
       if (
         plan.definition?.identity.definitionId !== definitionId ||
         context.parentRunId === undefined
       )
-        throw new Error(
-          `The deployed local runner definition for ${pipeline.id} does not match this child.`
-        );
+        throw new Error(`The deployed definition for ${pipeline.id} does not match this child.`);
       const stage = {
         parentRunId: context.parentRunId,
         stepId,
         correlationId: context.correlationId,
         itemKey: context.tracing?.itemKey,
-        // The source validates transfer shape. The Bun pipeline owns domain validation.
+        // The source validates transfer shape. The destination owns domain validation.
         input: runnerValue(input, "Remote stage input") as object,
         controls: runnerChildControls(controls),
       };
-      if (generation !== undefined && journalPath === undefined)
+      if (recovery && journalPath === undefined)
         failExecutionJournal(context, new Error("A recovered stage requires a journal path."));
       const job = {
         kind: "stage",
-        id:
-          generation === undefined
-            ? crypto.randomUUID()
-            : await sha256Hex(new TextEncoder().encode(JSON.stringify(journalPath))),
+        id: !recovery
+          ? crypto.randomUUID()
+          : await sha256Hex(new TextEncoder().encode(JSON.stringify(journalPath))),
         launchId: options.launchId,
         deploymentId: options.deploymentId,
         pipelineId: pipeline.id,
         definitionId,
-        deadlineAtMs: options.deadlineAtMs,
         stage,
       } as const;
-      boundedRunnerJson(job, "Remote stage request");
       await options.flush();
       throwIfAborted(context.signal, "Queue remote stage");
       const onProgress = createSingleChildTraceProgress(plan, reportProgress);
       let afterId = -1;
       let delayMs = 500;
       try {
-        if (generation === undefined) await options.store().enqueueStage(job);
-        else {
-          try {
-            await withRetry(() => options.store().enqueueStage(job, generation), {
-              shouldRetry: canRetryRpc,
-              signal: context.signal,
-            });
-          } catch (error) {
-            throwIfAborted(context.signal, "Queue remote stage");
-            failExecutionJournal(context, error);
-          }
+        try {
+          await withRetry(() => store.enqueueStage(job), {
+            maxAttempts: options.dispatchAttempts,
+            maxDelayMs: 5_000,
+            shouldRetry,
+            signal: context.signal,
+          });
+        } catch (error) {
+          throwIfAborted(context.signal, "Queue remote stage");
+          if (recovery) failExecutionJournal(context, error);
+          throw error;
         }
         for (;;) {
           throwIfAborted(context.signal, "Wait for remote stage");
           let observation: RunnerStageObservation;
           try {
-            const read = options.store().readStage(job.launchId, job.id, afterId);
+            const read = store.readStage(job.launchId, job.id, afterId);
             observation = context.signal
               ? await awaitWithAbort(read, context.signal, "Wait for remote stage")
               : await read;
           } catch (error) {
-            if (!canRetryRpc(error)) throw error;
+            if (!shouldRetry(error)) throw error;
             await abortableSleep(delayMs, context.signal, "Reconnect to Studio");
             delayMs = Math.min(delayMs * 2, 5_000);
             continue;
@@ -130,7 +118,7 @@ export function placeCloudflareChild(options: {
           const { result } = observation;
           if (result) {
             if ("error" in result) {
-              if (result.interrupted && generation !== undefined)
+              if (result.interrupted && options.interruptedStage === "outcome_unknown")
                 failExecutionJournal(
                   context,
                   Object.assign(
@@ -147,11 +135,7 @@ export function placeCloudflareChild(options: {
           await abortableSleep(delayMs, context.signal, "Wait for remote stage");
         }
       } finally {
-        if (context.signal?.aborted)
-          await options
-            .store()
-            .cancelStage(job.launchId, job.id, generation)
-            .catch(() => {});
+        if (context.signal?.aborted) await store.cancelStage(job.launchId, job.id).catch(() => {});
       }
     })();
   };

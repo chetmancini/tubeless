@@ -1,6 +1,6 @@
-import { SqliteJournalRecords } from "../hosting/execution-journal-sqlite.js";
-import { encodeJournalValue } from "../hosting/journal-value.js";
-import type { SqliteHostedLaunchStore } from "../hosting/launch-store-sqlite.js";
+import { SqliteJournalRecords } from "../../hosting/execution-journal-sqlite.js";
+import { encodeJournalValue } from "../../hosting/journal-value.js";
+import type { SqliteHostedLaunchStore } from "../../hosting/launch-store-sqlite.js";
 import {
   RUNNER_LEASE_MS,
   RUNNER_DRAIN_MS,
@@ -8,10 +8,10 @@ import {
   type RunnerJob,
   type RunnerStageInput,
   type RunnerJournalOperation,
-} from "../hosting/runner-protocol.js";
-import { sha256Hex } from "../utilities/sha256.js";
-import type { StudioIngest } from "../hosting/run-contract.js";
-import type { DurableStorageLike } from "./cloudflare-storage.js";
+} from "../../hosting/runner-protocol.js";
+import { sha256Hex } from "../../utilities/sha256.js";
+import type { StudioIngest } from "../../hosting/run-contract.js";
+import type { DurableStorageLike } from "../cloudflare-storage.js";
 
 type ClaimedJob =
   | Omit<Extract<RunnerJob, { kind: "root" }>, "run">
@@ -20,7 +20,7 @@ type ClaimedJob =
     });
 
 type QueueRow = {
-  job: ClaimedJob;
+  job: ClaimedJob | RunnerJob;
   recoveryAttemptId?: string;
   deadlineAtMs: number;
   cancelled: boolean;
@@ -50,6 +50,7 @@ export class CloudflareRunnerClaims {
       store: SqliteHostedLaunchStore;
       ingest: StudioIngest;
       now: () => number;
+      activeStageRunIds(launchId: string): readonly string[];
       schedule: () => Promise<void>;
     }
   ) {
@@ -79,7 +80,8 @@ export class CloudflareRunnerClaims {
   async claim(
     deploymentId: string,
     manifest: ReadonlyMap<string, string>,
-    supportsRecovery: boolean
+    supportsRecovery: boolean,
+    supportsWorkerStages = false
   ): Promise<{ claim?: RunnerClaim; diagnostic?: string }> {
     return this.deps.storage.transaction(async () => {
       const now = this.deps.now();
@@ -89,7 +91,7 @@ export class CloudflareRunnerClaims {
           SELECT q.id, CAST(NOT EXISTS (
             SELECT 1 FROM json_each(?) m WHERE m.key = q.pipeline_id AND m.value = q.definition_id
           ) AS INTEGER) AS incompatible
-          FROM tubeless_runner_queue q WHERE q.deployment_id = ? AND q.job_json IS NOT NULL AND q.lease_digest IS NULL
+          FROM tubeless_runner_queue q WHERE q.deployment_id = ? AND q.job_json IS NOT NULL AND q.lease_digest IS NULL AND q.target = 'local'
         )
         UPDATE tubeless_runner_queue
         SET incompatible = compatibility.incompatible FROM compatibility
@@ -101,22 +103,25 @@ export class CloudflareRunnerClaims {
         .exec(
           `SELECT q.job_json, q.deadline_at_ms FROM tubeless_runner_queue q
          JOIN json_each(?) m ON m.key = q.pipeline_id AND m.value = q.definition_id
-         WHERE q.deployment_id = ? AND q.job_json IS NOT NULL AND q.lease_digest IS NULL AND q.cancelled = 0
+         WHERE q.deployment_id = ? AND q.job_json IS NOT NULL AND q.lease_digest IS NULL AND q.target = 'local' AND q.cancelled = 0
            AND (q.deadline_at_ms IS NULL OR q.deadline_at_ms > ?)
            AND (? OR json_extract(q.job_json, '$.run.recoveryDefinitionId') IS NULL)
+           AND (? OR json_extract(q.job_json, '$.workerChildren') IS NULL)
          ORDER BY q.rowid LIMIT 1`,
           entries,
           deploymentId,
           now,
-          supportsRecovery ? 1 : 0
+          supportsRecovery ? 1 : 0,
+          supportsWorkerStages ? 1 : 0
         )
         .toArray()[0];
       if (!row) {
         const waiting = this.#sql
           .exec(
             `SELECT deployment_id, pipeline_id, incompatible,
-                    json_extract(job_json, '$.run.recoveryDefinitionId') AS requires_recovery FROM tubeless_runner_queue
-           WHERE job_json IS NOT NULL AND lease_digest IS NULL ORDER BY rowid LIMIT 1`
+                    json_extract(job_json, '$.run.recoveryDefinitionId') AS requires_recovery,
+                    json_type(job_json, '$.workerChildren') AS requires_worker_stages FROM tubeless_runner_queue
+           WHERE job_json IS NOT NULL AND lease_digest IS NULL AND target = 'local' ORDER BY rowid LIMIT 1`
           )
           .toArray()[0];
         return waiting
@@ -128,7 +133,11 @@ export class CloudflareRunnerClaims {
                       waiting.requires_recovery !== null &&
                       waiting.incompatible === 0
                     ? "Waiting work requires a runner with execution journal support."
-                    : `Runner is missing the compatible definition for ${String(waiting.pipeline_id)}.`,
+                    : !supportsWorkerStages &&
+                        waiting.requires_worker_stages !== null &&
+                        waiting.incompatible === 0
+                      ? "Waiting work requires a runner with Worker stage support."
+                      : `Runner is missing the compatible definition for ${String(waiting.pipeline_id)}.`,
             }
           : {};
       }
@@ -148,7 +157,11 @@ export class CloudflareRunnerClaims {
         const admitted =
           recoveryAttemptId === undefined
             ? (await this.deps.ingest.admit(job.launchId)).admitted
-            : this.deps.store.admitRecovery(job.launchId, undefined, []) === "admitted";
+            : this.deps.store.admitRecovery(
+                job.launchId,
+                undefined,
+                this.deps.activeStageRunIds(job.launchId)
+              ) === "admitted";
         if (!admitted) {
           this.#sql.exec(
             "UPDATE tubeless_runner_queue SET job_json = NULL, deadline_at_ms = NULL WHERE id = ?",
@@ -177,10 +190,23 @@ export class CloudflareRunnerClaims {
   lease(id: string, leaseDigest: string, deploymentId: string) {
     return this.#sql
       .exec(
-        "SELECT * FROM tubeless_runner_queue WHERE id = ? AND lease_digest = ? AND deployment_id = ?",
+        `SELECT * FROM tubeless_runner_queue
+         WHERE target = 'local' AND id = ? AND lease_digest = ? AND deployment_id = ?`,
         id,
         leaseDigest,
         deploymentId
+      )
+      .toArray()[0];
+  }
+
+  leaseForAttempt(attemptId: string, leaseDigest: string, deploymentId: string) {
+    return this.#sql
+      .exec(
+        `SELECT * FROM tubeless_runner_queue WHERE target = 'local' AND lease_digest = ?
+       AND deployment_id = ? AND COALESCE(recovery_attempt_id, id) = ?`,
+        leaseDigest,
+        deploymentId,
+        attemptId
       )
       .toArray()[0];
   }
@@ -189,7 +215,7 @@ export class CloudflareRunnerClaims {
     if (!row || row.job_json === null || Number(row.lease_until_ms) <= this.deps.now())
       return undefined;
     return {
-      job: JSON.parse(String(row.job_json)) as ClaimedJob,
+      job: JSON.parse(String(row.job_json)) as QueueRow["job"],
       recoveryAttemptId:
         typeof row.recovery_attempt_id === "string" ? row.recovery_attempt_id : undefined,
       cancelled: row.cancelled === 1,

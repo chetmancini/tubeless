@@ -7,8 +7,8 @@ import type {
   PipelineStepContext,
 } from "./pipeline-types.js";
 
-/** Private host capability for explicit child composition. */
-export const CHILD_PLACEMENT: unique symbol = Symbol("tubeless.childPlacement");
+/** Private host capability shared by the installed CLI and the project runtime. */
+export const CHILD_PLACEMENT: unique symbol = Symbol.for("tubeless.childPlacement.v1");
 
 export type ChildPlacement = (input: {
   pipeline: Pipeline<object, unknown, string, string>;

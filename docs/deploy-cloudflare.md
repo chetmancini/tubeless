@@ -280,21 +280,27 @@ the same `tubeless remote run`, Studio, or `app.launch` entry points.
 
 A top-level command listed in `localRunner.pipelines` waits for Bun. Other top-level
 commands run on Cloudflare. A Worker-run pipeline can use `fromPipeline` to call a
-listed child on Bun and consume the child's result in its next step. Unplaced
-children run in their parent's runtime. Iteration and fan-out use their existing
-in-process placement rules.
+listed child on Bun and consume the child's result in its next step. Set
+`localRunner.workerChildren` to the registered, versioned Worker pipelines that
+a Bun root can call through `fromPipeline`. Use disjoint lists. Unplaced children
+run in their parent's runtime, and iteration and fan-out run in process.
+Both project catalogs must define the child with the same identity. The
+destination provides the real handler, and the other catalog can use a
+placeholder that throws if invoked. Upgrade the runner CLI and both catalogs
+together. Older runners leave these local launches queued.
 
 For a runnable example, use [the Worker entry](../examples/cloudflare/runner-placement/worker.ts)
 and [the Bun project](../examples/cloudflare/runner-placement/runner.project.ts).
 Point the Cloudflare scaffold at that Worker entry, keep its `TUBELESS_BUCKET`
 binding, set the runner's Access Client ID in `project.ts`, and upload an object
 named `source.txt` to the bucket. Launch `fetch-transform-publish` with
-`{"text":"source.txt"}` from the CLI or configure its Worker schedule. Cloudflare
+`{"text":"source.txt"}` from the CLI. Cloudflare
 reads the input object, Bun transforms it and writes `normalized.txt`, and
 Cloudflare writes the returned value to `published.txt`. The shared project
 factory supplies the same registered definitions in both environments. The
 Worker's placeholder for the local transform fails if invoked directly, and its
-imports never reach the filesystem implementation.
+imports never reach the filesystem implementation. The same example also
+provides [a Bun root with a Worker child](#verify-the-bun-to-worker-round-trip).
 
 The versioned stage handoff takes at most 64 KiB per request and per result.
 It supports plain objects, dense arrays, strings, finite JSON numbers, booleans,
@@ -355,7 +361,7 @@ blocked and honors a recorded cancellation after restart.
 
 The journal accepts plain data with no shared or circular references,
 including explicit `undefined` and negative zero. Each encoded binding or result
-is limited to 64 KiB. The Bun handoff retains its JSON value limits. Put effects
+is limited to 64 KiB. The stage handoff retains its JSON value limits. Put effects
 in step handlers and keep option mapping and finalizers free of effects because
 orchestration can re-enter them. Dry runs skip the journal. See the
 [execution journal contract](./execution-journal.md).
@@ -378,8 +384,12 @@ Keep the runner credential on the machine that owns the project's local data.
 Step outputs can reference files, so a replacement must also have the required
 files and environment in its working directory. The Studio journal stores the
 encoded step values until terminal settlement. Recovery for a Bun root uses
-its own journal. A Bun child placed by a Worker still uses the stage handoff
-described above.
+its own journal. A Bun root rejoins an already dispatched Worker child under
+the same stage ID. A committed stage result survives the loss of its completion
+reply. The stage stays linked to the original parent attempt, and Studio links
+the resumed attempt under the same execution ID. If the Worker stops after an
+effect and before committing its result, the launch reports `outcome_unknown`
+with reason `journal_outcome_unknown` and dependent steps stay blocked.
 
 ### Smoke test a deployed Worker and Bun runner
 
@@ -400,11 +410,41 @@ described above.
    `status` reaches `completed`, `published.txt` in R2 contains the normalized text,
    and `normalize-writes.ndjson` beside the Bun project contains one entry for that
    input. Repeat `remote run` with the same key and confirm it returns the same
-   execution ID without adding an entry. You can also start a separate execution
-   through the example's Worker schedule using a distinct input marker.
+   execution ID without adding an entry.
 
-The workerd fault-injection tests cover a lost reply after stage completion
-commits and a lost lease after a write without a committed result.
+### Verify the Bun-to-Worker round trip
+
+1. Use the same [Worker entry](../examples/cloudflare/runner-placement/worker.ts)
+   and [Bun project](../examples/cloudflare/runner-placement/runner.project.ts).
+   The Worker config places `local-file-via-worker` on Bun and allowlists
+   `prefix-on-worker` in `localRunner.workerChildren`. Redeploy and restart the
+   enrolled runner from the same revision with `recoverInterruptedRuns` enabled.
+2. Upload `prefix.txt` to the Worker's `TUBELESS_BUCKET`. Put
+   `local-source.txt` beside the Bun project file. From the launch shell, submit
+   with a fresh key and an input file containing `{"text":"local-source.txt"}`.
+
+   ```sh
+   tubeless remote run local-file-via-worker --host https://studio.example.com \
+     --input-file input.json --idempotency-key round-trip.42 --detach --json
+   tubeless remote status <execution-id> --host https://studio.example.com --follow
+   ```
+
+   You can also configure the Worker's cron trigger to run the same command.
+   The trigger logs the execution ID and uses the scheduled time as its
+   idempotency key.
+
+3. Confirm `completed` and check that `local-result.txt` on Bun matches
+   `worker-result.txt` in the bucket. In Studio, open the execution ID, then open
+   the child run under `prefix-in-cloudflare`. The root shows the local runner
+   and the linked stage logs the Cloudflare attempt.
+4. Submit with a fresh key and `"dryRun": true` in the same input object. The
+   Worker reads the prefix and the run completes without updating either result
+   file. To request cancellation for an active run, use
+   `tubeless remote cancel <execution-id> --host https://studio.example.com`.
+   Worker handlers receive the cancellation through their step signal.
+
+The workerd tests fault both handoff directions. They restart the hosts after a
+committed result loses its reply and after an effect leaves no committed result.
 
 ## Application trace exporters
 
