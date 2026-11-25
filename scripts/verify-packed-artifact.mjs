@@ -69,6 +69,14 @@ function run(command, args, cwd) {
   return result.stdout;
 }
 
+function install(cwd, packages) {
+  run(
+    npm,
+    ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", ...packages],
+    cwd
+  );
+}
+
 // Name the compiler and the module resolution on failure: these compiles share one path.
 function compileConsumer(compiler, compilation, cwd) {
   const resolution = compilation.moduleResolution ?? compilation.module;
@@ -152,9 +160,7 @@ function assertPackedLauncher(installedPackage, tubelessBin, consumerRoot) {
   if (!readFileSync(launcher, "utf8").startsWith("#!/usr/bin/env node")) {
     throw new Error("Packed tubeless launcher is not a Node.js executable");
   }
-  // The installed bin must start on Node.js and explain what to install when Bun
-  // is absent. A PATH holding only a `node` symlink resolves the shebang while
-  // hiding every other executable, Bun included.
+  // The installed bin must start on Node.js and name Bun when a node-only PATH hides it.
   const nodeOnlyPath = join(temporaryRoot, "node-only-bin");
   mkdirSync(nodeOnlyPath, { recursive: true });
   symlinkSync(process.execPath, join(nodeOnlyPath, "node"));
@@ -244,12 +250,11 @@ try {
     join(consumerRoot, "package.json"),
     JSON.stringify({ name: "tubeless-packed-smoke", private: true, type: "module" })
   );
-  run(
-    npm,
-    ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", tarball],
-    consumerRoot
-  );
-
+  // Declarations and peer-free entries are checked before optional peers are installed.
+  install(consumerRoot, [tarball]);
+  if (existsSync(join(consumerRoot, "node_modules", "ai"))) {
+    throw new Error("Packed tubeless installed the optional ai peer");
+  }
   const installedPackage = join(consumerRoot, "node_modules", packageJson.name);
   for (const relativePath of [
     "README.md",
@@ -268,6 +273,7 @@ try {
     "examples/agent-workspace.ts",
     "examples/agent-model.ts",
     "examples/agent-model-anthropic.ts",
+    "examples/agent-model-ai-sdk.ts",
     "examples/agent-delegation.ts",
     "examples/agent-pipeline.ts",
     "examples/agent-openai.ts",
@@ -301,8 +307,7 @@ try {
   assertPackedSourceMaps(installedPackage);
   assertPackedDocumentationLinks(installedPackage);
 
-  // Consumer declarations must compile without ambient Node typings or skipLibCheck.
-  // Every fixture is copied and compiled, so a new entry-point fixture needs no script edit.
+  // Fixtures compile without ambient Node typings, skipLibCheck, or optional peers.
   const fixtureDirectory = join(packageRoot, "scripts/fixtures/packed-consumer");
   const fixtureFiles = readdirSync(fixtureDirectory)
     .filter((name) => name.endsWith(".ts"))
@@ -354,10 +359,8 @@ try {
   run("node", ["--experimental-strip-types", "cloudflare-cache.ts"], consumerRoot);
   run("node", ["--experimental-strip-types", "cloudflare-transcript.ts"], consumerRoot);
 
-  // The Cloudflare entry imports cloudflare:workers, which only workerd resolves; its
-  // runtime loading is covered by src/cloudflare/cloudflare-app.test.ts. The
-  // tubeless/cloudflare/cache entry is not workerd-only and is imported below.
-  const workerdOnlyExports = new Set(["./cloudflare"]);
+  // ./cloudflare imports cloudflare:workers. ./agent/ai-sdk imports the optional ai peer.
+  const deferredExports = new Set(["./cloudflare", "./agent/ai-sdk"]);
   for (const relativePath of [
     "dist/cloudflare/cloudflare.js",
     "dist/cloudflare/cloudflare.d.ts",
@@ -370,14 +373,21 @@ try {
       throw new Error(`Packed tubeless artifact is missing ${relativePath}`);
     }
   }
-  const smokeProgram = Object.keys(packageJson.exports)
-    .filter((subpath) => !workerdOnlyExports.has(subpath))
-    .map((subpath) =>
-      JSON.stringify(subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`)
-    )
-    .map((specifier) => `await import(${specifier});`)
+  const subpaths = Object.keys(packageJson.exports);
+  const specifier = (subpath) =>
+    JSON.stringify(subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`);
+  const peerFreeImports = subpaths
+    .filter((subpath) => !deferredExports.has(subpath))
+    .map((subpath) => `await import(${specifier(subpath)});`)
     .join("\n");
-  run("node", ["--input-type=module", "--eval", smokeProgram], consumerRoot);
+  run(process.execPath, ["--input-type=module", "--eval", peerFreeImports], consumerRoot);
+  // The main test suite exercises the pinned dev version. Check the peer floor here.
+  install(consumerRoot, ["ai@7.0.0"]);
+  writeFileSync(
+    join(consumerRoot, "packed-ai-sdk.mjs"),
+    readFileSync(join(packageRoot, "scripts/fixtures/packed-ai-sdk.mjs"))
+  );
+  run(process.execPath, ["packed-ai-sdk.mjs"], consumerRoot);
 
   // Exercise the worker bootstrap from the installed tarball, including file-worker
   // startup when the caller itself was launched with --input-type module.
@@ -482,7 +492,7 @@ try {
   );
 
   process.stdout.write(
-    `Packed tubeless artifact layout, declarations, imports, and executable verified with typescript ${packageJson.devDependencies.typescript} and typescript-floor ${floorVersion}.\n`
+    `Packed tubeless artifact layout, declarations, imports, and executable verified with typescript ${packageJson.devDependencies.typescript} and typescript-floor ${floorVersion}. AI SDK 7.0.0 tool round trip verified.\n`
   );
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });

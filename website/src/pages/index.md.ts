@@ -8,7 +8,7 @@ export const GET: APIRoute = () => new Response(`# Tubeless
 
 Tubeless is a TypeScript library by Chet Mancini for data pipelines and multi-step
 workflows. Define dependencies, preview execution, and inspect step results.
-It has no runtime dependencies. Version: ${PACKAGE.version}.
+The core has no runtime dependencies. Version: ${PACKAGE.version}.
 
 ## When to use Tubeless
 

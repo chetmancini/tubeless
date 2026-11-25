@@ -41,7 +41,7 @@ Guides:
 - Graph metadata and discovery: ./graph-metadata.md
 - Child pipelines and fan-out: ./child-pipeline-composition.md
 - Remote steps and worker threads: ./remote-step-composition.md
-- In-process agents: ./agents.md
+- In-process agents and the Vercel AI SDK model adapter: ./agents.md#vercel-ai-sdk
 - Comparison with other job runners: ./comparison.md
 
 Hosting:

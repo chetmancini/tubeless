@@ -59,7 +59,8 @@ once before any decision or tool call. Tasks are limited to 16 KiB.
 ### Choose a model provider
 
 `model` accepts any `AgentModel`. Two optional, dependency-free adapters share option
-names, so switching providers changes one import:
+names, so switching providers changes one import. A third adapter accepts any
+[Vercel AI SDK](#vercel-ai-sdk) language model:
 
 ```ts
 import { anthropicModel } from "tubeless/agent/anthropic"; // ANTHROPIC_API_KEY
@@ -89,21 +90,64 @@ import { openaiModel } from "tubeless/agent/openai"; // OPENAI_API_KEY
 - Reasoning settings are omitted by default so models that reject them stay
   compatible. Support depends on the model.
 - Provider requests do not follow redirects; configure the final base URL.
-- Tool and result schemas must fit the provider's strict subset. Both adapters wrap
+- Tool and result schemas must fit the provider's strict subset. The adapters wrap
   tool arguments in `{ input }` and reject `$ref`-style references locally (supply an
   inline `inputJsonSchema` instead). OpenAI additionally requires every object to set
   `additionalProperties: false` and list all properties in `required`. Anthropic
   strict mode allows optional properties, but at most 20 tools per request including
   the finish tool; set `strict: false`, narrow `defaultTools`, or use
-  [code mode](#code-mode) for larger sets. Failures surface at definition as
-  `TUBELESS_AGENT_INVALID_DEFINITION` (via `AgentModel.checkDescriptors`, which both
+  [code mode](#code-mode) for larger sets. The AI SDK adapter does not require closed
+  objects or every property. Failures surface at definition as
+  `TUBELESS_AGENT_INVALID_DEFINITION` (via `AgentModel.checkDescriptors`, which the
   adapters implement; wrapping an adapter in your own function drops that hook).
 - Large tool batches are shown to the model as marked previews (`truncated: true`)
   while the harness keeps full outcomes. Compaction can lose exact history, so the
   prompt tells the model to re-read sources when exact text matters.
 
-Executable recipes: [OpenAI](../examples/agent-model.ts) and
-[Claude](../examples/agent-model-anthropic.ts).
+Executable recipes: [OpenAI](../examples/agent-model.ts),
+[Claude](../examples/agent-model-anthropic.ts), and
+[Vercel AI SDK](../examples/agent-model-ai-sdk.ts).
+
+### Vercel AI SDK
+
+`aiSdkModel()` from `tubeless/agent/ai-sdk` runs any Vercel AI SDK language model
+(`ai` package, v7 or later). The core package stays dependency-free; install `ai`
+only when you import this entry. Provider packages such as `@ai-sdk/openai` stay
+in your application.
+
+```ts
+import { openai } from "@ai-sdk/openai";
+import { defineAgent } from "tubeless/agent";
+import { aiSdkModel } from "tubeless/agent/ai-sdk";
+
+export const agent = defineAgent({
+  id: "ai-sdk-agent",
+  model: aiSdkModel({ model: openai("gpt-5.4-mini") }),
+});
+```
+
+The same options accept `anthropic("claude-opus-5-5")` from `@ai-sdk/anthropic`,
+`google("gemini-2.5-flash")` from `@ai-sdk/google`, `groq("llama-3.3-70b-versatile")`
+from `@ai-sdk/groq`, any other AI SDK `LanguageModel`, or an AI Gateway id such as
+`"openai/gpt-5.4-mini"`. A gateway id is resolved by `ai` and makes a network request.
+
+Tool calls and structured final answers use the same decision shape as the native
+adapters: tool arguments are `{ input }`, and the finish tool is `{ result }`.
+`$ref` schemas fail at definition. The adapter replays the AI SDK's response messages
+in order, including text, reasoning and provider metadata such as thought signatures.
+Tubeless dispatches client-side calls and adds their results to the conversation.
+The adapter makes one non-streaming SDK step per request and retains the full history.
+`reasoningEffort` uses the SDK's portable `reasoning` option, available since `ai@7.0.0`,
+and accepts levels through `xhigh`. `timeoutMs` defaults to 60000 and fails the run
+when reached. `maxRetries` defaults to 2 SDK retries per decision request. A text-only
+response gets one reminder before the decision fails. History exceeding 1 MiB fails
+the decision. Large tool results are marked `truncated: true`.
+
+```sh
+npm install "ai@>=7" @ai-sdk/openai
+```
+
+Recipe: [examples/agent-model-ai-sdk.ts](../examples/agent-model-ai-sdk.ts).
 
 `AgentModel` is a provider-independent callback: given the task, instructions, its
 previous plain-data `conversation` (initially `null`) and the latest tool outcomes,
@@ -305,7 +349,9 @@ credentials. Use scripted models in CI and make live provider runs an explicit c
 
 ## Connect a model
 
-To integrate any other provider, write a `decide` callback for `defineAgentLoop`
+Providers with a Vercel AI SDK package can use [`aiSdkModel()`](#vercel-ai-sdk)
+instead of a hand-rolled callback. To integrate any other provider, write a
+`decide` callback for `defineAgentLoop`
 and keep the same tools, state, limits and execution. The
 [OpenAI recipe](../examples/agent-openai.ts) does this with built-in `fetch` and a
 [decision adapter](../examples/agent-openai-decision.ts) that is application code,

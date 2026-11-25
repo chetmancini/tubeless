@@ -330,6 +330,12 @@
       "specifier": "tubeless/agent/anthropic"
     },
     {
+      "declaration": "./dist/agent/ai-sdk.d.ts",
+      "exports": ["AiSdkLanguageModel", "aiSdkModel", "AiSdkModelOptions"],
+      "sha256": "bd825ba22f18b79367febee8a6ff5bc0f00db482e73b9fed89eaba21081240d5",
+      "specifier": "tubeless/agent/ai-sdk"
+    },
+    {
       "declaration": "./dist/cloudflare/cloudflare.d.ts",
       "exports": [
         "CloudflareApp",
