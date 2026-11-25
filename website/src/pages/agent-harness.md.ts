@@ -55,7 +55,7 @@ ${readFileSync(join(__REPO_ROOT__, "examples/agent-model.ts"), "utf8").trim()}
 
 It gives the model a coding prompt, project instructions from AGENTS.md, conversation history, and six workspace tools: read, edit, write, bash, list, and search.
 
-Add your own tools and instructions as needed. The core is provider-independent: use the OpenAI adapter shown here, swap in anthropicModel() from tubeless/agent/anthropic, pass any Vercel AI SDK model to aiSdkModel() from tubeless/agent/ai-sdk, point a native adapter at a compatible API with baseUrl, supply another model callback, or write your own decision logic with defineAgentLoop.
+Add your own tools and instructions as needed. The core is provider-independent. Use the OpenAI adapter shown here, swap in anthropicModel() from tubeless/agent/anthropic, point a native adapter at a compatible API with baseUrl, supply another model callback, or write your own decision logic with defineAgentLoop. For a Vercel AI SDK model, install the optional ai peer (v7 or later) and use aiSdkModel() from tubeless/agent/ai-sdk.
 
 Install tubeless, set OPENAI_API_KEY in your environment, then run from a disposable workspace with Bun 1.3.14+:
 

@@ -81,6 +81,7 @@ export default defineProject(
     // For built-in Claude chat without a project: tubeless agent --provider anthropic.
     // From the checkout, use --model-module ./examples/agent-providers.ts --provider baseten.
     ClaudeCodingAgent,
+    // For an AI SDK model, install ai v7 or later and adapt ../agent-model-ai-sdk.ts in your project.
     EnvironmentWorkspaceAgent,
     // Permitted code mode: one script chains workspace tools; each nested call is a child run.
     CodemodeAgent,
