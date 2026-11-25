@@ -4,7 +4,7 @@ import { aiSdkModel } from "tubeless/agent/ai-sdk";
 
 /**
  * Workspace agent for any Vercel AI SDK language model.
- * Install `ai` and a provider package, then pass that model. Live runs make paid API requests.
+ * Install `ai` v7 or later and a provider package, then pass that model. Live runs make paid API requests.
  *
  * import { openai } from "@ai-sdk/openai";
  * export const agent = defineAiSdkCodingAgent(openai("gpt-5.4-mini"));

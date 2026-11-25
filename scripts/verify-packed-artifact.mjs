@@ -250,11 +250,11 @@ try {
     join(consumerRoot, "package.json"),
     JSON.stringify({ name: "tubeless-packed-smoke", private: true, type: "module" })
   );
-  const optionalPeers = Object.entries(packageJson.peerDependenciesMeta ?? {})
-    .filter(([name, meta]) => meta?.optional === true && packageJson.devDependencies?.[name])
-    .map(([name]) => `${name}@${packageJson.devDependencies[name]}`);
   // Declarations and peer-free entries are checked before optional peers are installed.
   install(consumerRoot, [tarball]);
+  if (existsSync(join(consumerRoot, "node_modules", "ai"))) {
+    throw new Error("Packed tubeless installed the optional ai peer");
+  }
   const installedPackage = join(consumerRoot, "node_modules", packageJson.name);
   for (const relativePath of [
     "README.md",
@@ -376,19 +376,18 @@ try {
   const subpaths = Object.keys(packageJson.exports);
   const specifier = (subpath) =>
     JSON.stringify(subpath === "." ? packageJson.name : `${packageJson.name}/${subpath.slice(2)}`);
-  const smoke = (included) =>
-    run(
-      "node",
-      [
-        "--input-type=module",
-        "--eval",
-        included.map((subpath) => `await import(${specifier(subpath)});`).join("\n"),
-      ],
-      consumerRoot
-    );
-  smoke(subpaths.filter((subpath) => !deferredExports.has(subpath)));
-  install(consumerRoot, optionalPeers);
-  smoke(subpaths.filter((subpath) => subpath === "./agent/ai-sdk"));
+  const peerFreeImports = subpaths
+    .filter((subpath) => !deferredExports.has(subpath))
+    .map((subpath) => `await import(${specifier(subpath)});`)
+    .join("\n");
+  run(process.execPath, ["--input-type=module", "--eval", peerFreeImports], consumerRoot);
+  // The main test suite exercises the pinned dev version. Check the peer floor here.
+  install(consumerRoot, ["ai@7.0.0"]);
+  writeFileSync(
+    join(consumerRoot, "packed-ai-sdk.mjs"),
+    readFileSync(join(packageRoot, "scripts/fixtures/packed-ai-sdk.mjs"))
+  );
+  run(process.execPath, ["packed-ai-sdk.mjs"], consumerRoot);
 
   // Exercise the worker bootstrap from the installed tarball, including file-worker
   // startup when the caller itself was launched with --input-type module.
@@ -493,7 +492,7 @@ try {
   );
 
   process.stdout.write(
-    `Packed tubeless artifact layout, declarations, imports, and executable verified with typescript ${packageJson.devDependencies.typescript} and typescript-floor ${floorVersion}.\n`
+    `Packed tubeless artifact layout, declarations, imports, and executable verified with typescript ${packageJson.devDependencies.typescript} and typescript-floor ${floorVersion}. AI SDK 7.0.0 tool round trip verified.\n`
   );
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });
