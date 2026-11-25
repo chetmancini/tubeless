@@ -205,8 +205,12 @@ tubeless remote cancel <execution-id> --host https://studio.example.com
 `run` waits for a terminal state by default. `--detach` returns the durable
 receipt `{"executionId":"…"}` with `--json`, or just the ID without it. The
 execution ID is the `launchId` that trusted Worker code gets back from `app.launch`.
-Use `status` for a snapshot or `status --follow` to wait. Ctrl-C stops the local
-wait. Use `cancel` to request that remote execution stop. The CLI uses the deployed
+Use `status` for a snapshot or `status --follow` to stream retained and live logs
+and progress. Output identifies the stage run and step attempt when available.
+The CLI reconnects from the last event it processed. If you stop following with
+Ctrl-C, use `status --follow` with the same execution ID to read retained output
+from the beginning. Use `cancel` to request that remote execution stop. Older
+Workers support status polling. The CLI uses the deployed
 command catalog and can run from any directory. Use `--input-file -` for stdin;
 omitting it submits `{}`. Include built-in controls such as `dryRun` in that
 object. Both the submission and the normalized intent are bounded to 64 KiB.
@@ -241,6 +245,20 @@ Include `X-Tubeless-Execution: 1` on writes, and `Content-Type: application/json
 on submission. Requests with a browser `Origin` header must use the Worker's own
 origin. The Worker verifies Access's signed assertion and derives launch attribution
 from it.
+
+A status read advertises `runFollowing: { "version": 1, "transport": "ndjson" }`
+when the Worker supports `GET /api/executions/v1/<executionId>/events`. The route
+uses the same Access checks as status. Each NDJSON record contains `version`,
+`executionId`, a numeric `cursor`, `type`, and `payload`. The stream begins with a
+`snapshot`. It can send `status`, `log`, `progress`, and `heartbeat` records before
+a `terminal` snapshot. A `gap` with reason `history_unavailable` indicates that
+history was removed or could not be recovered. The durable terminal status can
+still be available.
+
+An `end` record closes one response window. Reopen the stream with
+`?cursor=<last-processed-cursor>` after `end` or a transport disconnect. Cursors
+apply to the same execution. Omit the cursor to read from the beginning. Output
+events advance the cursor. Status and boundary records carry the current cursor.
 
 ## Place work on a local Bun runner
 
@@ -405,6 +423,10 @@ with reason `journal_outcome_unknown` and dependent steps stay blocked.
      --input-file input.json --idempotency-key recovery-smoke.42 --detach --json
    tubeless remote status <execution-id> --host https://studio.example.com --follow
    ```
+
+   Look for the Bun child's log and progress. Press Ctrl-C and follow the same
+   execution ID again to confirm that retained output is available and the run
+   continues.
 
 3. After the Bun stage completes, restart the runner with the same release. Confirm
    `status` reaches `completed`, `published.txt` in R2 contains the normalized text,

@@ -46,6 +46,7 @@ export default defineProject(
     // Use remote create from your own project root to deploy its pipeline catalog.
     // For Cloudflare cron and CLI launches with a durable ID, see ../cloudflare/scheduled-worker.ts.
     // For Worker and Bun handoffs in both directions, see ../cloudflare/runner-placement/worker.ts.
+    // Follow a detached Cloudflare execution with remote status <execution-id> --follow.
     ValidatedPipeline,
     // Its app exporters are configured by TracingExampleProject when launched separately.
     ...TracingExampleProject.commands,

@@ -22,6 +22,7 @@ import {
   type RunnerStageJob,
 } from "../hosting/runner-protocol.js";
 import type { DurableStorageLike } from "./cloudflare-storage.js";
+import { readExecutionFollowPage } from "../hosting/execution/follow-store.js";
 import {
   createHostedLaunchAdmission,
   type HostedLaunchRequest,
@@ -175,6 +176,11 @@ export class StudioObjectCore implements CloudflareStudioIngest {
         this.deps.localPipelines
       ),
     };
+  }
+
+  readExecutionFollowPage(launchId: string, cursor: number) {
+    const status = this.getExecution(launchId);
+    return status && readExecutionFollowPage(this.deps.storage.sql, status, cursor);
   }
 
   cancelExecution(launchId: string) {

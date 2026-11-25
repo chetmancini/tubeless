@@ -267,8 +267,10 @@ manifest decoder for data-only inspection.
   non-secret parameter keys. See the
   [scheduled Worker example](../examples/cloudflare/scheduled-worker.ts).
 - Submit to the same self-hosted deployment with `tubeless remote run <command-id> --host <origin>`.
-  Follow or cancel by the returned execution ID. Set an immutable `deploymentId`
-  and use a Cloudflare Access service token. See [the CLI setup](./deploy-cloudflare.md#submit-and-follow-from-the-cli).
+  Stream logs and progress with `remote status <execution-id> --follow` or use
+  `remote cancel <execution-id>` to request cancellation. Set an immutable
+  `deploymentId` and use a Cloudflare Access service token. See
+  [the CLI setup](./deploy-cloudflare.md#submit-and-follow-from-the-cli).
 - For a local Bun target, list versioned pipeline IDs in `createCloudflareApp`'s
   `localRunner.pipelines`, start `tubeless remote runner` with the same deployment
   revision and its own Access service token, and submit through the existing

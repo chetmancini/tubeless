@@ -355,6 +355,9 @@ describe("tubeless/cloudflare on workerd", { timeout: 60_000 }, () => {
     const { executionId } = (await response.json()) as { executionId: string };
     const executionPath = `${path}/${executionId}`;
     expect((await call(executionPath, {}, false)).status).toBe(401);
+    expect((await call(`${executionPath}/events`, {}, false)).status).toBe(401);
+    expect((await call(`${executionPath}/events?cursor=-1`)).status).toBe(400);
+    expect((await call(`${path}/missing/events`)).status).toBe(404);
     expect((await call(`${executionPath}/cancel`, mutation(headers), false)).status).toBe(401);
     await vi.waitFor(async () => {
       expect(await (await call(executionPath)).json()).toMatchObject({
