@@ -201,6 +201,12 @@ manifest decoder for data-only inspection.
   and resume with the cursor in
   `cloud_follow_error.recovery` on stderr. For older services, attach with
   `--poll`. See [Cloud CLI](./cli.md#tubeless-cloud).
+- Use `cloud artifacts <run-id> --json` for retained artifact metadata. Use
+  `cloud download <run-id> <artifact-name> --output <path>` for bytes with
+  `read` and `artifacts:read` scopes. Use `cloud manifest <run-id> --output <path>`
+  to save an eligible run's manifest with read scope. Both downloads require a
+  new destination. Run `cloud reproduce --execute <manifest.json>` separately
+  when authorized to execute the pinned source.
 
 ## Declarative documents
 

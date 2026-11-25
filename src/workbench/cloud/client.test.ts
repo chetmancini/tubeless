@@ -685,6 +685,64 @@ describe("Cloud HTTP client", () => {
     expect(fetcher.mock.calls[1][1]?.signal?.aborted).toBe(true);
   });
 
+  it("keeps downloading past the request deadline while artifact bytes arrive", async () => {
+    vi.useFakeTimers();
+    const stream = new TransformStream<Uint8Array>();
+    const writer = stream.writable.getWriter();
+    const client = createCloudClient({
+      host,
+      token: "credential",
+      timeoutMs: 10,
+      fetch: () =>
+        new Promise<Response>((resolve) => {
+          setTimeout(() => resolve(new Response(stream.readable)), 9);
+        }),
+    });
+    const write = vi.fn(async (_bytes: Uint8Array) => {});
+    const download = expect(
+      client.downloadArtifact("workspace", "run", "artifact", write)
+    ).resolves.toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(18);
+    await writer.write(Uint8Array.of(0));
+    await vi.advanceTimersByTimeAsync(9);
+    await writer.write(Uint8Array.of(255));
+    await vi.advanceTimersByTimeAsync(9);
+    await writer.close();
+
+    await download;
+    expect(write.mock.calls).toEqual([[Uint8Array.of(0)], [Uint8Array.of(255)]]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels an artifact stream that stalls after making progress", async () => {
+    vi.useFakeTimers();
+    const stream = new TransformStream<Uint8Array>();
+    const writer = stream.writable.getWriter();
+    const client = createCloudClient({
+      host,
+      token: "credential",
+      timeoutMs: 10,
+      fetch: async () => new Response(stream.readable),
+    });
+    const write = vi.fn(async (_bytes: Uint8Array) => {});
+    const download = expect(
+      client.downloadArtifact("workspace", "run", "artifact", write)
+    ).rejects.toMatchObject({ code: "timeout" });
+    const cancelled = expect(writer.closed).rejects.toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(9);
+    await writer.write(Uint8Array.of(1));
+    await vi.advanceTimersByTimeAsync(9);
+    expect(stream.readable.locked).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    await download;
+    await cancelled;
+    expect(write.mock.calls).toEqual([[Uint8Array.of(1)]]);
+    expect(stream.readable.locked).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("rejects missing credentials and invalid timeouts before transport", async () => {
     const fetcher = vi.fn<typeof fetch>();
     await expect(createCloudClient({ host, fetch: fetcher }).session()).rejects.toBeInstanceOf(

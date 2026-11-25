@@ -1,5 +1,4 @@
 import { manageCliSignal } from "../../../cli/cli-signal.js";
-import { WORKBENCH_SPECS } from "../../workbench-command-specs.js";
 import {
   renderWorkbenchUsage,
   type ParsedSubcommand,
@@ -9,9 +8,10 @@ import { createCloudClient, isCloudTransportError, type CloudClient } from "../c
 import { resolveCloudHost } from "../config.js";
 import { resolveCloudCredential } from "../credentials.js";
 import { isFollowCursor } from "../follow-protocol.js";
-import { pollCloudRun, streamCloudRun, writeCloudLog, type ObservationContext } from "../follow.js";
+import { pollCloudRun, streamCloudRun, writeCloudLog } from "../follow.js";
 import { cloudOutput } from "../output.js";
-import { formatRunInspection } from "./inspect.js";
+import { downloadRunFile, type DownloadAction } from "./download.js";
+import { formatArtifacts, formatRunInspection } from "./inspect.js";
 import {
   prepareRunInput,
   CloudRunUsageError,
@@ -35,16 +35,18 @@ import {
   cloudErrorExit,
   cloudSleep,
   type CloudCommandDependencies,
+  type CloudContext,
 } from "../shared.js";
+import { CLOUD_SPEC } from "../spec.js";
 
-const CLOUD_SPEC = WORKBENCH_SPECS.cloud;
 const CLOUD_USAGE = renderWorkbenchUsage(CLOUD_SPEC);
 
 type ObservationMode = { kind: "stream"; cursor?: string } | { kind: "poll" };
 type PipelineSelector = { id: string } | { name: string };
 type CloudAction<Input = PreparedCloudRunInput> =
   | { kind: "list" }
-  | { kind: "inspect" | "cancel"; runId: string }
+  | { kind: "inspect" | "cancel" | "artifacts"; runId: string }
+  | DownloadAction
   | { kind: "logs"; runId: string; mode?: ObservationMode }
   | { kind: "follow"; runId: string; mode: ObservationMode }
   | {
@@ -71,7 +73,8 @@ function parseAction({
     return { kind: "reproduce", path: selector };
   }
 
-  const wanted = command === "list" || (command === "run" && values.id !== undefined) ? 1 : 2;
+  const noSelector = command === "list" || (command === "run" && values.id !== undefined);
+  const wanted = command === "download" ? 3 : noSelector ? 1 : 2;
   if (positionals.length !== wanted)
     throw new CloudRunUsageError("Pass exactly the required command arguments.");
   if (values.workspace !== undefined && !values.workspace.trim())
@@ -92,7 +95,16 @@ function parseAction({
   }
 
   if (!selector.trim()) throw new CloudRunUsageError("Pass a nonempty run ID.");
-  if (command === "inspect" || command === "cancel") return { kind: command, runId: selector };
+  if (command === "inspect" || command === "cancel" || command === "artifacts")
+    return { kind: command, runId: selector };
+  if (command === "download" || command === "manifest") {
+    const path = values.output;
+    if (!path?.trim() || path === "-") throw new CloudRunUsageError("Pass --output <file-path>.");
+    if (command === "manifest") return { kind: command, runId: selector, path };
+    const name = positionals[2];
+    if (!name.trim()) throw new CloudRunUsageError("Pass a nonempty artifact name.");
+    return { kind: command, runId: selector, path, name };
+  }
   if (command === "logs" && !values.follow) {
     if (values.poll || values.cursor !== undefined)
       throw new CloudRunUsageError("Pass --follow to observe an existing run with cloud logs.");
@@ -109,10 +121,6 @@ function parseAction({
     runId: selector,
     mode: values.poll ? { kind: "poll" } : { kind: "stream", cursor: values.cursor },
   };
-}
-
-interface CloudContext extends ObservationContext {
-  session?: CliSession;
 }
 
 async function resolveWorkspace(
@@ -307,6 +315,18 @@ async function executeAction(context: CloudContext, action: CloudAction): Promis
     }
     case "cancel":
       return cancelRun(context, action.runId);
+    case "artifacts": {
+      const { artifacts } = await client.getRun(workspace, action.runId);
+      const listing = json
+        ? output.json(artifacts)
+        : formatArtifacts(artifacts, output.text) || "No retained artifacts.";
+      io.stdout.write(`${listing}\n`);
+      return 0;
+    }
+    case "download":
+    case "manifest":
+      await downloadRunFile(context, action);
+      return 0;
     case "logs": {
       if (action.mode) return observeRun(context, action.runId, action.mode, "logs");
       const run = await client.getRun(workspace, action.runId);
@@ -422,10 +442,6 @@ export async function runCloudCommand(
     );
   } catch (error) {
     if (error instanceof CloudRunUsageError) return writeUsageError(io, error.message, CLOUD_USAGE);
-    if (signal.aborted && (request.action.kind === "inspect" || request.action.kind === "cancel")) {
-      io.stderr.write("Cloud request interrupted.\n");
-      return cloudErrorCode(error, signal);
-    }
     return cloudErrorExit(error, io, signal, output.text);
   } finally {
     managed.cleanup();

@@ -13,6 +13,8 @@ For optional structured Vitest failures, see [the diagnostic contract](structure
 For headless Cloud submission, see [Cloud CLI](./cli.md#tubeless-cloud).
 For retained run snapshots and explicit cancellation, see
 [Inspect or cancel a run](./cli.md#inspect-or-cancel-a-run).
+For artifact bytes and reproduction manifests, see
+[Download retained files](./cli.md#download-retained-files).
 For attaching to an admitted run or resuming after a disconnect, see
 [Follow and read results](./cli.md#follow-and-read-results).
 

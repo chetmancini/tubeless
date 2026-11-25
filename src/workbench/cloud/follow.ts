@@ -1,9 +1,8 @@
 import { writeCliChunk, type WorkbenchCliIo } from "../workbench-shared.js";
-import { isCloudTransportError, type CloudClient } from "./client.js";
+import { isCloudTransportError } from "./client.js";
 import type { FollowEvent, FollowGap, FollowLog } from "./follow-protocol.js";
-import type { cloudOutput } from "./output.js";
 import { CloudClientError, type CliRun, type CloudRunStatus } from "./protocol.js";
-import type { cloudSleep } from "./shared.js";
+import type { CloudContext } from "./shared.js";
 
 function terminalRun(status: CloudRunStatus): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
@@ -26,23 +25,13 @@ export function writeCloudLog(
   );
 }
 
-export interface ObservationContext {
-  client: CloudClient;
-  workspace: string;
-  io: WorkbenchCliIo;
-  signal: AbortSignal;
-  json: boolean;
-  output: ReturnType<typeof cloudOutput>;
-  sleep: typeof cloudSleep;
-}
-
 function assertRun(run: CliRun, pipelineId: string, status?: CloudRunStatus): void {
   if (run.pipelineId !== pipelineId || (status !== undefined && run.status !== status))
     throw new CloudClientError("Cloud returned a conflicting run projection.", "invalid_response");
 }
 
 export async function pollCloudRun(
-  context: ObservationContext,
+  context: CloudContext,
   runId: string,
   initial?: CliRun
 ): Promise<CliRun> {
@@ -84,7 +73,7 @@ function gapNotice(gap: FollowGap): string {
 }
 
 export async function streamCloudRun(
-  context: ObservationContext,
+  context: CloudContext,
   runId: string,
   resume: { cursor?: string },
   initial?: CliRun

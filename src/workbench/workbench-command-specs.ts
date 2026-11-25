@@ -1,3 +1,4 @@
+import { CLOUD_HOST_OPTION, CLOUD_SPEC } from "./cloud/spec.js";
 import { PIPELINE_MERMAID_DIRECTIONS } from "../core/pipeline-types.js";
 import { AGENT_REPL_HELP } from "./agent/commands.js";
 import { BUILTIN_AGENT_OPTIONS } from "./agent/options.js";
@@ -69,20 +70,11 @@ const STORE_OPTION = {
   completion: "file",
 } as const;
 
-const CLOUD_SERVICE_COMMANDS = ["list", "run", "inspect", "cancel", "follow", "logs"] as const;
-
 const PIPELINE_POSITIONAL = {
   min: 1,
   max: 1,
   error: "Pass exactly one pipeline or command file.",
   completion: "pipeline",
-} as const;
-
-const CLOUD_HOST_OPTION = {
-  type: "string",
-  description: "Cloud origin (default https://cloud.tubeless.io)",
-  valueName: "origin",
-  completion: "text",
 } as const;
 
 export const WORKBENCH_SPECS = {
@@ -373,114 +365,7 @@ Sign in to Tubeless Cloud with an expiring first-party session.
       json: { type: "boolean", description: "Machine-readable status", commands: ["status"] },
     },
   },
-  cloud: {
-    name: "cloud",
-    description: "Run and inspect Cloud pipelines or reproduce a check locally",
-    usage: `Usage: tubeless cloud <list|run|inspect|cancel|follow|logs|reproduce> [options]
-
-  list [--json]
-  run <pipeline-name-or-slug> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach|--poll] [--json]
-  run --id <cloud-pipeline-id> [--ref <branch|tag|sha>] [--input-file <path|->] [--detach|--poll] [--json]
-  inspect <run-id> [--json]
-  cancel <run-id> [--json]
-  follow <run-id> [--cursor <cursor>|--poll] [--json]
-  logs <run-id> [--follow [--cursor <cursor>|--poll]] [--json]
-  reproduce --execute <manifest.json>
-
-Cloud service commands accept --workspace <id> and --host <origin>.
-Run streams progress and output by default; --detach returns the admission.
-Inspect reads the retained run. Cancel requests cancellation and reports status.
-Ctrl-C stops observation and leaves the run active. Use --poll on older services.
-Automation uses TUBELESS_TOKEN and --workspace. Run --id with --detach needs run scope.
-Inspection and observation need read scope. Cancellation needs cancel and read.
-Use --ref or --source to select GitHub source. The default is the branch HEAD.
-Reuse --idempotency-key with the same pipeline/input/source after uncertain admission.
-Set up pipelines in the Cloud dashboard. Cloud runs use the admitted GitHub source.
-
-Reproduce runs a saved manifest locally without Cloud login. It emits JSON and
-requires Git, Node 24 and Bun 1.4.4 on PATH. Only execute revisions you trust.
-`,
-    subcommands: [...CLOUD_SERVICE_COMMANDS, "reproduce"],
-    subcommandPositionals: { reproduce: "file" },
-    options: {
-      host: { ...CLOUD_HOST_OPTION, commands: CLOUD_SERVICE_COMMANDS },
-      workspace: {
-        type: "string",
-        description: "Select a Cloud workspace",
-        valueName: "id",
-        completion: "text",
-        commands: CLOUD_SERVICE_COMMANDS,
-      },
-      json: {
-        type: "boolean",
-        description: "Emit machine-readable JSON",
-        commands: CLOUD_SERVICE_COMMANDS,
-      },
-      execute: {
-        type: "boolean",
-        description: "Authorize running the pinned repository source locally",
-        commands: ["reproduce"],
-      },
-      id: {
-        type: "string",
-        description: "Select a pipeline by its exact ID",
-        valueName: "cloud-pipeline-id",
-        completion: "text",
-        commands: ["run"],
-      },
-      "input-file": {
-        type: "string",
-        description: "Read pipeline input JSON from a file, or - for stdin",
-        valueName: "path|-",
-        completion: "file",
-        commands: ["run"],
-      },
-      detach: {
-        type: "boolean",
-        description: "Return after printing the admitted run ID",
-        commands: ["run"],
-      },
-      source: {
-        type: "string",
-        description:
-          "Advanced source selector as inline JSON, @file, or - for stdin; excludes --ref",
-        valueName: "json|@path|-",
-        completion: "text",
-        commands: ["run"],
-      },
-      ref: {
-        type: "string",
-        description: "GitHub branch, tag, full or short SHA; excludes --source",
-        valueName: "branch|tag|sha",
-        completion: "text",
-        commands: ["run"],
-      },
-      "idempotency-key": {
-        type: "string",
-        description: "Reuse an admission key with identical pipeline, input and source",
-        valueName: "key",
-        completion: "text",
-        commands: ["run"],
-      },
-      follow: {
-        type: "boolean",
-        description: "Watch the run until it finishes",
-        commands: ["logs"],
-      },
-      cursor: {
-        type: "string",
-        description: "Resume streaming from the last acknowledged cursor",
-        valueName: "cursor",
-        completion: "text",
-        commands: ["follow", "logs"],
-      },
-      poll: {
-        type: "boolean",
-        description: "Explicitly poll retained status and logs instead of streaming",
-        commands: ["run", "follow", "logs"],
-      },
-    },
-  },
+  cloud: CLOUD_SPEC,
   remote: {
     name: "remote",
     description: "Connect, create, and run pipelines on named remotes",

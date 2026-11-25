@@ -15,10 +15,10 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const manifestPath = new URL(
-  "../../fixtures/reproduction/node-check-failure-v1.json",
-  import.meta.url
-);
+// The Cloud fixture can supply the manifest saved by the packaged download command.
+const manifestPath =
+  process.argv[3] ??
+  new URL("../../fixtures/reproduction/node-check-failure-v1.json", import.meta.url);
 const fixture = new URL("./node-check/", import.meta.url);
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const { node: requiredNode, bun: requiredBun } = manifest.nodeCheck.plan.toolchain;
@@ -116,6 +116,7 @@ exec ${shellWord(bunPath)} "$@"`
   assert.equal(readFileSync(untracked, "utf8"), "untracked file\n");
 
   const { original, local, execution } = JSON.parse(output.stdout);
+  assert.deepEqual(original.run, manifest.run);
   assert.deepEqual(original.source, manifest.source);
   assert.equal(local.bun, requiredBun);
   assert.equal(execution.run.status, "failed");
