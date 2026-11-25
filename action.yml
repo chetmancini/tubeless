@@ -67,4 +67,5 @@ runs:
         INPUT_SUMMARY: ${{ inputs.summary }}
         INPUT_CLOUD_TOKEN: ${{ inputs.cloud-token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: bun "${{ github.action_path }}/action/run.ts"

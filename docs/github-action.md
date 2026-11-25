@@ -67,8 +67,9 @@ The comment and the job summary use the same body: the plan, a fenced Mermaid
 graph, and a footer linking to [Tubeless](https://tubeless.io) and
 [Schedule this on Tubeless Cloud](https://cloud.tubeless.io). A later run on
 the same pull request updates the comment whose marker matches that pipeline.
-Grant `pull-requests: write` when `comment` is true. The action sets the
-`plan` and `mermaid` outputs from the CLI stdout.
+Grant `pull-requests: write` when `comment` is true. The action passes that
+workflow's `github.token` to the comment request. The action sets the `plan`
+and `mermaid` outputs from the CLI stdout.
 
 ## Tubeless Cloud
 

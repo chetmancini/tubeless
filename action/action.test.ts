@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { executeAction, type ActionHost } from "./action.js";
 import {
@@ -129,5 +132,13 @@ describe("action execution", () => {
     await expect(executeAction({ ...planRequest, pipeline: "" }, harness.host)).rejects.toThrow(
       /pipeline is required/
     );
+  });
+
+  it("passes the calling workflow token into the comment step", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../action.yml"),
+      "utf8"
+    );
+    expect(source).toContain("GITHUB_TOKEN: ${{ github.token }}");
   });
 });
