@@ -1,6 +1,7 @@
 import { canonicalJsonValue } from "../../dist/utilities/canonical-json.js";
 import { hostedPhases } from "./measurements.ts";
 import type { Sample } from "./sample.ts";
+import { expectedOutcome } from "./workload.ts";
 
 type Counts = Record<string, number>;
 
@@ -26,8 +27,7 @@ function exclusion({ mode, operation, workload, observation, execution }: Sample
   if (operation !== "start") return operation;
   if (execution.identity === "mismatch") return "identity-mismatch";
   if (observation.state !== "observed") return observation.state;
-  const expected = workload.variant === "pass" ? "passed" : "assertion-failure";
-  if (execution.outcome !== expected) return "unexpected-outcome";
+  if (execution.outcome !== expectedOutcome(workload.variant)) return "unexpected-outcome";
   return null;
 }
 

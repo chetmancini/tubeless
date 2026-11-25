@@ -1,32 +1,34 @@
-import { mkdir, readFile, readdir, rename, rmdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rename, rmdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { runConcurrent } from "tubeless/batch";
+import { readCliJson } from "../../dist/workbench/workbench-json-input.js";
 import { readSample, type Sample } from "./sample.ts";
 
 const suffix = ".sample.json";
 
 export async function readSamples(directory: string, recursive: boolean): Promise<Sample[]> {
   const entries = await readdir(directory, { withFileTypes: true, recursive });
-  return Promise.all(
-    entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
-      .map(async (entry) => {
-        const file = join(entry.parentPath, entry.name);
-        if ((await stat(file)).size > 65536) throw new Error("Benchmark sample exceeds 64 KiB.");
-        return readSample(JSON.parse(await readFile(file, "utf8")) as unknown);
-      })
+  const signal = new AbortController().signal;
+  const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(suffix));
+  return runConcurrent(files, { concurrency: 8 }, async (entry) =>
+    readSample(await readCliJson(entry.name, { cwd: entry.parentPath, signal }, "Benchmark sample"))
   );
 }
 
-/** Acquire one writer for a logical trial. Each invocation gets its own durable checkpoint. */
-export async function lockTrial(directory: string) {
+/** Hold an exclusive writer lock for the entire trial invocation. */
+export async function withTrial<T>(directory: string, run: () => Promise<T>): Promise<T> {
   const lock = join(directory, ".active");
   await mkdir(lock, { mode: 0o700 });
-  return () => rmdir(lock);
+  try {
+    return await run();
+  } finally {
+    await rmdir(lock);
+  }
 }
 
 export async function checkpointSample(directory: string, sample: Sample) {
-  readSample(sample);
-  const text = JSON.stringify(sample, null, 2) + "\n";
+  const text = JSON.stringify(readSample(sample), null, 2) + "\n";
   if (
     sample.mode !== "local" &&
     process.env.TUBELESS_TOKEN &&
@@ -42,21 +44,19 @@ export async function checkpointSample(directory: string, sample: Sample) {
 export function recoveryIntent(samples: Sample[], operation: "resume" | "replay", now: number) {
   const first = samples.find((sample) => sample.operation === "start");
   if (
-    !first?.target?.principalId ||
-    first.mode !== "cloud" ||
+    first?.mode !== "cloud" ||
+    !first.target.principalId ||
     samples.filter((sample) => sample.operation === "start").length !== 1
   )
     throw new Error("Recovery requires an existing Cloud trial with a bound principal.");
   const { target, workload, attemptId } = first;
-  const keys = Object.keys(target) as (keyof typeof target)[];
   if (
     samples.some(
       (sample) =>
-        !sample.target ||
-        sample.attemptId !== attemptId ||
         sample.mode !== "cloud" ||
+        sample.attemptId !== attemptId ||
         sample.workload.variant !== workload.variant ||
-        keys.some((key) => sample.target?.[key] !== target[key])
+        !isDeepStrictEqual(sample.target, target)
     )
   )
     throw new Error("Inconsistent Cloud trial ledger.");

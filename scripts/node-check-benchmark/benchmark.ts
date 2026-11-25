@@ -3,14 +3,13 @@ import { mkdir } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import packageJson from "../../package.json" with { type: "json" };
 import { ObservationTimeout, runHosted, verifyCloudPrincipal } from "./cloud.ts";
-import { checkpointSample, lockTrial, readSamples, recoveryIntent } from "./ledger.ts";
+import { checkpointSample, withTrial, readSamples, recoveryIntent } from "./ledger.ts";
 import { runLocal } from "./local.ts";
-import { oneOf, positiveInteger } from "./measurements.ts";
-import { cloudOrigin, newSample, type Sample, type Target } from "./sample.ts";
+import { resolveCloudHost } from "../../dist/workbench/cloud/config.js";
+import { newSample, type Sample } from "./sample.ts";
 import { summarize } from "./summary.ts";
-import { variants, workload } from "./workload.ts";
+import { expectedOutcome, variants, workload } from "./workload.ts";
 
-const defaultHost = "https://cloud.tubeless.io";
 const usage = [
   "Usage: bun --no-env-file scripts/node-check-benchmark/benchmark.ts",
   "  local <new-trial-directory> <pass|assertion-failure> [--timeout-ms <ms>]",
@@ -32,7 +31,7 @@ async function observe(directory: string, sample: Sample) {
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
   try {
-    if (sample.target) {
+    if (sample.mode !== "local") {
       sample.target.principalId = await verifyCloudPrincipal(sample.target, signal);
       await runHosted(sample, signal, checkpoint);
     } else {
@@ -61,8 +60,7 @@ async function observe(directory: string, sample: Sample) {
     })
   );
   if (sample.observation.state !== "observed") return 2;
-  const expected = sample.workload.variant === "pass" ? "passed" : "assertion-failure";
-  return sample.execution.outcome === expected ? 0 : 2;
+  return sample.execution.outcome === expectedOutcome(sample.workload.variant) ? 0 : 2;
 }
 
 async function main() {
@@ -85,7 +83,7 @@ async function main() {
   }
   if (!directory || rest.length) throw new UsageError();
   const timeout = Number(values["timeout-ms"] ?? "1500000");
-  if (!positiveInteger(timeout) || timeout > 1500000) throw new UsageError();
+  if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 1500000) throw new UsageError();
   if (command === "summarize") {
     if (variant || Object.keys(values).length) throw new UsageError();
     console.log(JSON.stringify(summarize(await readSamples(directory, true)), null, 2));
@@ -95,47 +93,46 @@ async function main() {
   if (!driverBun) throw new UsageError();
   const tools = { driverBun, driverTubeless: packageJson.version };
   if (command === "local" || command === "cloud") {
-    if (!oneOf(variant, variants)) throw new UsageError();
+    const selected = variants.find((option) => option === variant);
+    if (!selected) throw new UsageError();
     const attemptId = randomUUID();
-    let target: Target | null = null;
+    const intent = { attemptId, workload: workload(selected), operation: "start" as const };
+    let sample: Sample;
     if (command === "cloud") {
       if (!values.workspace || !values.pipeline) throw new UsageError();
-      target = {
-        host: cloudOrigin(values.host ?? defaultHost),
-        workspace: values.workspace,
-        pipelineId: values.pipeline,
-        idempotencyKey: "node-check-bench:" + attemptId,
-        principalId: null,
-      };
-    } else if (values.host || values.workspace || values.pipeline) throw new UsageError();
-    const sample = newSample(
-      { attemptId, workload: workload(variant), mode: command, operation: "start", target },
-      tools,
-      timeout,
-      null
-    );
-    await mkdir(directory, { mode: 0o700 });
-    const unlock = await lockTrial(directory);
-    try {
-      return await observe(directory, sample);
-    } finally {
-      await unlock();
+      sample = newSample(
+        {
+          ...intent,
+          mode: "cloud",
+          target: {
+            host: resolveCloudHost(values.host),
+            workspace: values.workspace,
+            pipelineId: values.pipeline,
+            idempotencyKey: "node-check-bench:" + attemptId,
+            principalId: null,
+          },
+        },
+        tools,
+        timeout,
+        null
+      );
+    } else {
+      if (values.host || values.workspace || values.pipeline) throw new UsageError();
+      sample = newSample({ ...intent, mode: "local", target: null }, tools, timeout, null);
     }
+    await mkdir(directory, { mode: 0o700 });
+    return withTrial(directory, () => observe(directory, sample));
   }
   if (command !== "resume" && command !== "replay") throw new UsageError();
   if (variant || values.host || values.workspace || values.pipeline) throw new UsageError();
-  const unlock = await lockTrial(directory);
-  try {
+  return withTrial(directory, async () => {
     const { runId, ...intent } = recoveryIntent(
       await readSamples(directory, false),
       command,
       Date.now()
     );
-    const sample = newSample({ ...intent, operation: command }, tools, timeout, runId);
-    return await observe(directory, sample);
-  } finally {
-    await unlock();
-  }
+    return observe(directory, newSample({ ...intent, operation: command }, tools, timeout, runId));
+  });
 }
 
 try {

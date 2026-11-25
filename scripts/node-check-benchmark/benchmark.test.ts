@@ -105,7 +105,7 @@ it.each([
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Missing replay address.");
       const sample = cloudSample("http://127.0.0.1:" + address.port, variant, capture);
-      const target = sample.target!;
+      const target = sample.target;
       const signal = new AbortController().signal;
       target.principalId = await verifyCloudPrincipal(target, signal);
       await expect(
@@ -132,7 +132,17 @@ it.each([
             phases: { ...snapshot.hostedMeasurements?.phases, providerStartup: { durationMs: -1 } },
           },
         })
-      ).toThrow("Invalid Cloud benchmark sample");
+      ).toThrow("sample.hostedMeasurements");
+      const projection = capture.inspection.hostedMeasurements;
+      expect(() =>
+        readSample({
+          ...snapshot,
+          hostedMeasurements: {
+            ...projection,
+            identity: { ...projection.identity, sourceCommit: "f".repeat(40) },
+          },
+        })
+      ).toThrow("Cloud measurement identity conflicts with sample workload");
       expect(JSON.stringify(snapshot)).not.toContain(token);
       expect(recorded[1].execution.runId).toBe(capture.admission.id);
       expect(requests.map(({ path }) => path)).toEqual([
@@ -168,7 +178,7 @@ it("preserves uncertain attempts and reuses the exact intent until a run ID is k
   // Recovery allows only live-mode ledgers, with pinned workload identities.
   sample.mode = "cloud";
   sample.workload = workload("pass");
-  sample.target!.principalId = principalId;
+  sample.target.principalId = principalId;
   const signal = new AbortController().signal;
   const checkpoint = () => Promise.resolve();
   const missing = vi.fn(() => Promise.reject(new Error("submission acknowledgement lost")));
@@ -194,8 +204,8 @@ it("preserves uncertain attempts and reuses the exact intent until a run ID is k
   expect(accepted.mock.calls[0]).toEqual(missing.mock.calls[0]);
   expect(retry.execution.runId).toBe(capture.admission.id);
   expect(() => recoveryIntent([sample, retry], "replay", now)).toThrow("Use resume");
-  const next = recoveryIntent([sample, retry], "resume", now);
-  const resume = newSample({ ...next, operation: "resume" }, tools, 10_000, next.runId);
+  const { runId: retainedId, ...next } = recoveryIntent([sample, retry], "resume", now);
+  const resume = newSample({ ...next, operation: "resume" }, tools, 10_000, retainedId);
   const follow = vi.fn(() => Promise.reject(new Error("observation stopped")));
   await expect(runHosted(resume, signal, checkpoint, follow)).rejects.toThrow(
     "observation stopped"
@@ -217,13 +227,13 @@ it("validates measurements and reports repeatable counts, medians and timeout ex
   const failure = localSample("assertion-failure", 5);
   const recipeTimeout = localSample("assertion-failure", 8);
   recipeTimeout.execution.outcome = "timed-out";
-  expect(() => readSample({ ...fast, version: 2 })).toThrow("Invalid benchmark sample");
+  expect(() => readSample({ ...fast, version: 2 })).toThrow("sample.version");
   expect(() =>
     readSample({ ...fast, observation: { ...fast.observation, terminalMs: Number.NaN } })
-  ).toThrow("Invalid benchmark sample");
+  ).toThrow("sample.observation.terminalMs");
   expect(() =>
     readSample({ ...fast, workload: { ...fast.workload, commit: "a".repeat(40) } })
-  ).toThrow("Invalid benchmark sample");
+  ).toThrow("differs from the pinned workload");
   expect(() => summarize([fast, fast])).toThrow("Duplicate benchmark sample");
 
   const raw = [fast, slow, timedOut, failure, recipeTimeout].map(readSample);

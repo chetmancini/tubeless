@@ -1,15 +1,54 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { lstat, mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import type { ReproductionManifest } from "../utilities/reproduction-manifest.js";
+import { lstat, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { delimiter, isAbsolute, join } from "node:path";
+import {
+  digestNodeCheckPlan,
+  type ReproductionManifest,
+} from "../utilities/reproduction-manifest.js";
+import { readNodeCheckPlan } from "./node-check.js";
 import { captureCheckProcess, runCheckProcess } from "./process.js";
 
-/** Fetch only the pinned GitHub object. Caller Git configuration is available only during fetch. */
-export async function prepareReproductionSource(
-  { source, repository }: Pick<ReproductionManifest, "source" | "repository">,
-  { cwd, env, signal }: { cwd: string; env: NodeJS.ProcessEnv; signal: AbortSignal }
-): Promise<void> {
+type Location = { cwd: string; env: NodeJS.ProcessEnv; signal: AbortSignal };
+type PinnedSource = Pick<ReproductionManifest, "source"> & { repository: { fullName: string } };
+
+export async function withReproductionWorkspace<T>(
+  signal: AbortSignal,
+  use: (location: Location) => Promise<T>
+): Promise<T> {
+  if (process.platform === "win32") throw new Error("Reproduction requires a POSIX host.");
+  // Vitest reports physical paths, so setup and collection must agree on the root.
+  const root = await mkdtemp(join(await realpath(tmpdir()), "tubeless-reproduce-"));
+  try {
+    const cwd = join(root, "source");
+    const home = join(root, "home");
+    const temp = join(root, "tmp");
+    await Promise.all([mkdir(cwd), mkdir(home), mkdir(temp)]);
+    const env = {
+      PATH: (process.env.PATH ?? "")
+        .split(delimiter)
+        .filter((dir) => isAbsolute(dir))
+        .join(delimiter),
+      HOME: home,
+      TMPDIR: temp,
+      CI: "true",
+      CF_SEND_TELEMETRY: "false",
+      NO_COLOR: "1",
+      GIT_CEILING_DIRECTORIES: root,
+    };
+    return await use({ cwd, env, signal });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+/** Verify the pinned source and plan. The caller's Git configuration is available only during fetch. */
+export async function prepareReproductionPlan(
+  { source, repository }: PinnedSource,
+  { cwd, env, signal }: Location,
+  planDigest: string
+) {
   const local = {
     cwd,
     signal,
@@ -139,4 +178,11 @@ export async function prepareReproductionSource(
   for await (const chunk of createReadStream(lockfile, { signal })) hash.update(chunk);
   if (hash.digest("base64url") !== source.lockfile.digest)
     throw new Error("Local bun.lock does not match the recorded lockfile digest.");
+
+  const plan = await readNodeCheckPlan(cwd).catch(() => {
+    throw new Error("Pinned source has an unsupported Node check configuration.");
+  });
+  if ((await digestNodeCheckPlan(plan)) !== planDigest)
+    throw new Error("Resolved Node check plan does not match the recorded plan digest.");
+  return plan;
 }

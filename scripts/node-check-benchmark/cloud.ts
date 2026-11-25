@@ -5,11 +5,12 @@ import {
   parseCliRun,
   type CliRun,
 } from "../../dist/workbench/cloud/protocol.js";
-import { readBoundedBody } from "../../dist/utilities/read-body.js";
+import { createCloudClient, isCloudTransportError } from "../../dist/workbench/cloud/client.js";
+import { isJsonObject } from "../../dist/utilities/canonical-json.js";
 import { digestNodeCheckPlan } from "tubeless/reproduction-manifest";
-import { id, isHostedMeasurements, matches, object } from "./measurements.ts";
-import { checkOutcome } from "./outcome.ts";
-import type { Checkpoint, Sample, Target } from "./sample.ts";
+import { hostedMeasurements, identifier } from "./measurements.ts";
+import { checkOutcome } from "./workload.ts";
+import { matchesHostedIdentity, type Checkpoint, type CloudSample, type Target } from "./sample.ts";
 
 const bin = fileURLToPath(new URL("../../dist/workbench/workbench-bin.js", import.meta.url));
 
@@ -19,62 +20,51 @@ export async function verifyCloudPrincipal(target: Target, signal: AbortSignal):
   const token = process.env.TUBELESS_TOKEN;
   if (!token || !isCloudAutomationToken(token))
     throw new Error("An automation token with read and run access is required.");
-  const url = new URL(
-    "/api/v1/workspaces/" + encodeURIComponent(target.workspace) + "/automation",
-    target.host
-  );
-  const response = await fetch(url, {
-    headers: { authorization: "Bearer " + token, accept: "application/json" },
-    redirect: "error",
-    signal,
+  const client = createCloudClient({ host: target.host, token, signal });
+  const access = await client.automation(target.workspace).catch((error: unknown) => {
+    if (isCloudTransportError(error) && error.code === "timeout")
+      throw new ObservationTimeout("Cloud principal verification timed out.");
+    throw error;
   });
-  if (!response.ok || !response.body) {
-    await response.body?.cancel();
-    throw new Error("Cloud automation principal could not be verified.");
-  }
-  const access: unknown = JSON.parse(
-    new TextDecoder().decode(await readBoundedBody(response.body, 65536, signal))
-  );
-  if (
-    !object(access) ||
-    access.workspaceId !== target.workspace ||
-    !matches(access.principalId, id) ||
-    !Array.isArray(access.scopes) ||
-    !access.scopes.includes("read") ||
-    !access.scopes.includes("run")
-  )
+  if (!access.scopes.includes("read") || !access.scopes.includes("run"))
     throw new Error("Cloud automation principal lacks required access.");
   if (target.principalId !== null && access.principalId !== target.principalId)
     throw new Error("Cloud replay and recovery require the original automation principal.");
-  return access.principalId;
+  return identifier.decode(access.principalId, "Cloud principal ID");
 }
 
 type CliResponse = { exitCode: number; body: unknown };
 type Invoke = (args: string[], signal: AbortSignal) => Promise<CliResponse>;
 
+function followTimedOut(stderr: string): boolean {
+  for (const line of stderr.split("\n")) {
+    if (!line.startsWith("{")) continue;
+    let diagnostic: unknown;
+    try {
+      diagnostic = JSON.parse(line);
+    } catch {
+      // The CLI may write ordinary stderr alongside structured diagnostics.
+      continue;
+    }
+    if (
+      isJsonObject(diagnostic) &&
+      diagnostic.type === "cloud_follow_error" &&
+      isJsonObject(diagnostic.error) &&
+      diagnostic.error.code === "observation_timeout"
+    )
+      return true;
+  }
+  return false;
+}
+
 const invokeCloudCli: Invoke = (args, signal) =>
   new Promise((resolve, reject) => {
-    const {
-      PATH,
-      HOME,
-      TUBELESS_TOKEN,
-      XDG_CONFIG_HOME,
-      XDG_RUNTIME_DIR,
-      DBUS_SESSION_BUS_ADDRESS,
-    } = process.env;
     execFile(
       process.versions.bun ? process.execPath : "bun",
       ["--no-env-file", bin, "cloud", ...args],
       {
         signal,
-        env: {
-          PATH,
-          HOME,
-          TUBELESS_TOKEN,
-          XDG_CONFIG_HOME,
-          XDG_RUNTIME_DIR,
-          DBUS_SESSION_BUS_ADDRESS,
-        },
+        env: { PATH: process.env.PATH, TUBELESS_TOKEN: process.env.TUBELESS_TOKEN },
         maxBuffer: 8 * 1024 * 1024,
         killSignal: "SIGKILL",
       },
@@ -86,11 +76,9 @@ const invokeCloudCli: Invoke = (args, signal) =>
         try {
           resolve({ exitCode, body: JSON.parse(stdout) as unknown });
         } catch {
-          const failure =
-            stderr.includes('"type":"cloud_follow_error"') &&
-            stderr.includes('"code":"observation_timeout"')
-              ? new ObservationTimeout("Cloud CLI observation timed out.")
-              : new Error("Cloud CLI returned no usable JSON.");
+          const failure = followTimedOut(stderr)
+            ? new ObservationTimeout("Cloud CLI observation timed out.")
+            : new Error("Cloud CLI returned no usable JSON.");
           reject(failure);
         }
       }
@@ -103,24 +91,23 @@ function terminal(run: CliRun) {
   return run.status;
 }
 
-function classify(run: CliRun): Sample["execution"]["outcome"] {
+function classify(run: CliRun): CloudSample["execution"]["outcome"] {
   const status = terminal(run);
-  if (object(run) && run.interrupted === true && status === "failed") return "interrupted";
+  if (isJsonObject(run) && run.interrupted === true && status === "failed") return "interrupted";
   return checkOutcome(
     status,
     run.diagnostics?.reports.find(({ artifact }) => artifact === "test.check-report.json")?.result
   );
 }
 
-async function inspectIdentity(sample: Sample, run: CliRun): Promise<void> {
+async function inspectIdentity(sample: CloudSample, run: CliRun): Promise<void> {
   const source = run.sourceIdentity;
   const plan = run.nodeCheck;
   const expected = sample.workload;
-  const retainedImage = plan?.imageDigest ?? null;
   if (
     !source ||
-    !object(source.repository) ||
-    !object(source.lockfile) ||
+    !isJsonObject(source.repository) ||
+    !isJsonObject(source.lockfile) ||
     !plan ||
     source.repository.fullName !== expected.repository ||
     source.commit !== expected.commit ||
@@ -134,18 +121,10 @@ async function inspectIdentity(sample: Sample, run: CliRun): Promise<void> {
     throw new Error("Cloud inspection does not match the pinned workload.");
   }
 
-  const measured = (run as CliRun & { hostedMeasurements?: unknown }).hostedMeasurements;
-  if (measured !== undefined) {
-    if (!isHostedMeasurements(measured))
-      throw new Error("Cloud measurement projection is invalid.");
-    const identity = measured.identity;
-    if (
-      (identity.sourceCommit !== null && identity.sourceCommit !== expected.commit) ||
-      (identity.sourceTree !== null && identity.sourceTree !== expected.treeSha) ||
-      (identity.lockfileDigest !== null && identity.lockfileDigest !== expected.lockfileDigest) ||
-      (identity.planDigest !== null && identity.planDigest !== expected.planDigest) ||
-      (identity.imageDigest !== null && identity.imageDigest !== retainedImage)
-    ) {
+  const evidence = isJsonObject(run) ? run.hostedMeasurements : undefined;
+  if (evidence !== undefined) {
+    const measured = hostedMeasurements.decode(evidence, "hostedMeasurements");
+    if (!matchesHostedIdentity(measured, expected, plan.imageDigest)) {
       sample.execution.identity = "mismatch";
       throw new Error("Cloud measurement identity conflicts with retained inspection.");
     }
@@ -159,18 +138,18 @@ async function inspectIdentity(sample: Sample, run: CliRun): Promise<void> {
     if (outcome === "interrupted") sample.execution.outcome = "interrupted";
     sample.hostedMeasurements = measured;
   }
-  sample.execution.imageDigest = retainedImage;
+  sample.execution.imageDigest = plan.imageDigest;
   sample.execution.identity = "verified";
 }
 
 export async function runHosted(
-  sample: Sample,
+  sample: CloudSample,
   signal: AbortSignal,
   checkpoint: Checkpoint,
   invoke = invokeCloudCli
 ): Promise<void> {
   const target = sample.target;
-  if (!target?.principalId) throw new Error("Cloud benchmark principal is missing.");
+  if (!target.principalId) throw new Error("Cloud benchmark principal is missing.");
   if ((sample.operation === "resume") !== (sample.execution.runId !== null))
     throw new Error("Cloud observation recovery requires a retained run ID.");
   const options = ["--host", target.host, "--workspace", target.workspace, "--json"];
@@ -179,8 +158,8 @@ export async function runHosted(
     const response = await invoke([...args, ...options], signal);
     if (!exitCodes.includes(response.exitCode)) throw new Error("Cloud CLI request failed.");
     const run = parseCliRun(response.body);
+    identifier.decode(run.id, "Cloud run ID");
     if (
-      !matches(run.id, id) ||
       run.pipelineId !== target.pipelineId ||
       (sample.execution.runId && run.id !== sample.execution.runId)
     )
