@@ -187,6 +187,9 @@ manifest decoder for data-only inspection.
   `context.checkpoint`; never pass checkpoint paths or stores via domain options.
 - Preview with `command.plan()` or `tubeless plan`, not a simulated `--plan`.
   Generate graphs with `toMermaid()` or `tubeless graph`; do not hand-copy edges.
+- For a pull request check, use the [GitHub Action](./github-action.md). It
+  calls `tubeless plan` and `tubeless graph` and can post that plan and Mermaid
+  graph as one sticky comment. Do not reimplement those commands in the workflow.
 - Keep application flags after `--`: `tubeless run <pipeline-id|file> -- <args>`.
   Use `run --json` for the report and finalized value (stdout; logs go to stderr);
   values must be plain JSON, so use `null` rather than `undefined`. `--trace <path>`
