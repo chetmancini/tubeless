@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACTION_COMMENT_AUTHOR,
   CLOUD_DISPATCH_UNAVAILABLE,
   FOOTER_LINKS,
   cloudRunBlocked,
   commandEnvironment,
   graphArgs,
+  isActionStickyComment,
   parseFlag,
   parseMode,
   parsePullRequest,
@@ -16,6 +18,7 @@ import {
   runArgs,
   stickyMarker,
   type CommandResult,
+  type StickyComment,
 } from "./report.js";
 
 const ok = (stdout: string): CommandResult => ({ stdout, stderr: "", exitCode: 0 });
@@ -137,37 +140,36 @@ describe("action report", () => {
     expect(report).toContain("preview\nwarn");
   });
 
-  it("creates or updates the one comment that carries the marker", async () => {
+  it("updates only the action comment and leaves a quoted copy alone", async () => {
     const created: string[] = [];
     const updated: { id: number; body: string }[] = [];
-    const outcome = await publishStickyComment(
-      {
-        async list() {
-          return [
-            { id: 1, body: "unrelated" },
-            { id: 2, body: `${stickyMarker("import")}\nold` },
-          ];
-        },
-        async create(body) {
-          created.push(body);
-        },
-        async update(id, body) {
-          updated.push({ id, body });
-        },
+    const marker = stickyMarker("import");
+    const comments: StickyComment[] = [
+      { id: 1, body: "unrelated", author: "chet" },
+      { id: 3, body: `${marker}\nquoted`, author: "chet" },
+      { id: 2, body: `${marker}\nold`, author: ACTION_COMMENT_AUTHOR },
+    ];
+    const store = {
+      async findSticky(nextMarker: string) {
+        return comments.find((comment) => isActionStickyComment(comment, nextMarker));
       },
-      "next",
-      stickyMarker("import")
-    );
-    expect(outcome).toBe("updated");
+      async create(body: string) {
+        created.push(body);
+      },
+      async update(id: number, body: string) {
+        updated.push({ id, body });
+      },
+    };
+    await expect(publishStickyComment(store, "next", marker)).resolves.toBe("updated");
     expect(updated).toEqual([{ id: 2, body: "next" }]);
     expect(created).toEqual([]);
 
     const fresh = await publishStickyComment(
       {
-        async list() {
-          return [];
+        async findSticky() {
+          return undefined;
         },
-        async create(body) {
+        async create(body: string) {
           created.push(body);
         },
         async update() {
@@ -175,9 +177,10 @@ describe("action report", () => {
         },
       },
       "first",
-      stickyMarker("import")
+      marker
     );
     expect(fresh).toBe("created");
     expect(created).toEqual(["first"]);
+    expect(isActionStickyComment(comments[1], marker)).toBe(false);
   });
 });

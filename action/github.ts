@@ -1,4 +1,7 @@
-import type { CommentStore } from "./report.js";
+import { isActionStickyComment, type CommentStore, type StickyComment } from "./report.js";
+
+export const COMMENT_PAGE_SIZE = 100;
+export const COMMENT_PAGE_LIMIT = 50;
 
 export interface GitHubClientOptions {
   readonly fetch: typeof globalThis.fetch;
@@ -8,9 +11,10 @@ export interface GitHubClientOptions {
   readonly pullRequest: number;
 }
 
-interface GitHubComment {
-  readonly id: number;
-  readonly body: string;
+function readAuthor(entry: object): string {
+  if (!("user" in entry) || typeof entry.user !== "object" || entry.user === null) return "";
+  if (!("login" in entry.user) || typeof entry.user.login !== "string") return "";
+  return entry.user.login;
 }
 
 function redact(text: string, secret: string): string {
@@ -30,7 +34,7 @@ function repositoryParts(repository: string): { owner: string; repo: string } {
   return { owner: match[1], repo: match[2] };
 }
 
-function readComments(value: unknown): GitHubComment[] {
+function readComments(value: unknown): StickyComment[] {
   if (!Array.isArray(value)) throw new Error("GitHub comment list was not an array.");
   return value.map((entry) => {
     if (typeof entry !== "object" || entry === null || !("id" in entry))
@@ -39,7 +43,7 @@ function readComments(value: unknown): GitHubComment[] {
     if (typeof id !== "number" || !Number.isSafeInteger(id))
       throw new Error("GitHub comment list included an invalid entry.");
     const body = "body" in entry && typeof entry.body === "string" ? entry.body : "";
-    return { id, body };
+    return { id, body, author: readAuthor(entry) };
   });
 }
 
@@ -69,17 +73,19 @@ export function createGitHubCommentStore(options: GitHubClientOptions): CommentS
   };
 
   return {
-    async list() {
-      const comments: GitHubComment[] = [];
-      for (let page = 1; page <= 10; page += 1) {
+    async findSticky(marker) {
+      for (let page = 1; page <= COMMENT_PAGE_LIMIT; page += 1) {
         const value = await request(
-          `${prefix}/issues/${options.pullRequest}/comments?per_page=100&page=${page}`
+          `${prefix}/issues/${options.pullRequest}/comments?per_page=${COMMENT_PAGE_SIZE}&page=${page}`
         );
         const batch = readComments(value);
-        comments.push(...batch);
-        if (batch.length < 100) break;
+        const match = batch.find((comment) => isActionStickyComment(comment, marker));
+        if (match) return match;
+        if (batch.length < COMMENT_PAGE_SIZE) return undefined;
       }
-      return comments;
+      throw new Error(
+        `Stopped after ${COMMENT_PAGE_LIMIT * COMMENT_PAGE_SIZE} pull request comments without finding the Tubeless comment. Refusing to post a duplicate.`
+      );
     },
     async create(body) {
       await request(`${prefix}/issues/${options.pullRequest}/comments`, {

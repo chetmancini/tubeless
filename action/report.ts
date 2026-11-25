@@ -18,10 +18,23 @@ export interface ActionRequest {
   readonly pullRequest: number | undefined;
 }
 
+export interface StickyComment {
+  readonly id: number;
+  readonly body: string;
+  readonly author: string;
+}
+
+/** Login GitHub assigns to comments created with the workflow's `github.token`. */
+export const ACTION_COMMENT_AUTHOR = "github-actions[bot]";
+
 export interface CommentStore {
-  list(): Promise<readonly { id: number; body: string }[]>;
+  findSticky(marker: string): Promise<StickyComment | undefined>;
   create(body: string): Promise<void>;
   update(id: number, body: string): Promise<void>;
+}
+
+export function isActionStickyComment(comment: StickyComment, marker: string): boolean {
+  return comment.author === ACTION_COMMENT_AUTHOR && comment.body.includes(marker);
 }
 
 export const FOOTER_LINKS =
@@ -184,7 +197,7 @@ export async function publishStickyComment(
   body: string,
   marker: string
 ): Promise<"created" | "updated"> {
-  const existing = (await store.list()).find((comment) => comment.body.includes(marker));
+  const existing = await store.findSticky(marker);
   if (existing) {
     await store.update(existing.id, body);
     return "updated";

@@ -65,8 +65,9 @@ checks out the library, builds it, and calls the action with `./` on
 
 The comment and the job summary use the same body: the plan, a fenced Mermaid
 graph, and a footer linking to [Tubeless](https://tubeless.io) and
-[Schedule this on Tubeless Cloud](https://cloud.tubeless.io). A later run on
-the same pull request updates the comment whose marker matches that pipeline.
+[Schedule this on Tubeless Cloud](https://cloud.tubeless.io). A later run on the same pull request updates the comment that
+`github-actions[bot]` posted for that pipeline. A person's comment that quotes
+the report is left unchanged.
 Grant `pull-requests: write` when `comment` is true. The action passes that
 workflow's `github.token` to the comment request. The action sets the `plan`
 and `mermaid` outputs from the CLI stdout.
