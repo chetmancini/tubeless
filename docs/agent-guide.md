@@ -226,7 +226,8 @@ manifest decoder for data-only inspection.
 
 - `defineAgent({ id, model })` (`tubeless/agent`) with `openaiModel()`,
   `anthropicModel()`, or `aiSdkModel()` from `tubeless/agent/ai-sdk` is the
-  model-backed agent; `defineAgentLoop` is for custom
+  model-backed agent. The AI SDK adapter requires the optional `ai` peer (v7 or later).
+  `defineAgentLoop` is for custom
   `decide` callbacks. For a typed in-pipeline agent give `defineAgent` an
   `inputSchema`, a `task` mapper, and a `resultSchema`, then compose it with
   `fromPipeline` ([extract recipe](../examples/agent-extract.ts)). Typed agents use

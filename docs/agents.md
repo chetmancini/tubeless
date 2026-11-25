@@ -133,18 +133,18 @@ from `@ai-sdk/groq`, any other AI SDK `LanguageModel`, or an AI Gateway id such 
 
 Tool calls and structured final answers use the same decision shape as the native
 adapters: tool arguments are `{ input }`, and the finish tool is `{ result }`.
-`$ref` schemas fail at definition. The adapter keeps a plain JSON transcript of
-text, tool calls, and tool results, and sends tool-call provider metadata (such
-as thought signatures) back on the next request. It does not compact history,
-cache prompts, replay reasoning content, or stream assistant text. `reasoningEffort`
-is the AI SDK 7 `reasoning` option and is omitted unless you set it. `timeoutMs` defaults
-to 60000 and fails the run when reached. `maxRetries` (default 2) is the AI SDK
-retry count for one decision request. A text-only response gets one reminder, then
-fails. History that cannot fit in
-1 MiB fails the decision; large tool results are marked `truncated: true`.
+`$ref` schemas fail at definition. The adapter replays the AI SDK's response messages
+in order, including text, reasoning and provider metadata such as thought signatures.
+Tubeless dispatches client-side calls and adds their results to the conversation.
+The adapter makes one non-streaming SDK step per request and retains the full history.
+`reasoningEffort` uses the SDK's portable `reasoning` option, available since `ai@7.0.0`,
+and accepts levels through `xhigh`. `timeoutMs` defaults to 60000 and fails the run
+when reached. `maxRetries` defaults to 2 SDK retries per decision request. A text-only
+response gets one reminder before the decision fails. History exceeding 1 MiB fails
+the decision. Large tool results are marked `truncated: true`.
 
 ```sh
-npm install ai @ai-sdk/openai
+npm install "ai@>=7" @ai-sdk/openai
 ```
 
 Recipe: [examples/agent-model-ai-sdk.ts](../examples/agent-model-ai-sdk.ts).
