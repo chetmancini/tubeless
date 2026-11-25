@@ -24,7 +24,7 @@ Package: `tubeless`
 | `tubeless/agent/openai`          | `./dist/agent/openai.d.ts`                     | `93c062bbb477e31880942c0b2cfa947c0457f0ffdd7010b3077e81a36d2026b0` |                2 |
 | `tubeless/agent/mcp`             | `./dist/agent/mcp.d.ts`                        | `fe8c6db54ca73f7a933ce66fa5fcda733b4044e23aefa1b060da8bcc86c6aad4` |                7 |
 | `tubeless/agent/anthropic`       | `./dist/agent/anthropic.d.ts`                  | `261bde00fe6bd3d5d65d3dff52a1d7bc35d4ec33e5379ad1ca38a7404f15c5c1` |                2 |
-| `tubeless/agent/ai-sdk`          | `./dist/agent/ai-sdk.d.ts`                     | `af6c7fb13bb337c519c741675e0fd683dc08a05fca15d2104b51c4fd08fd6cd7` |                3 |
+| `tubeless/agent/ai-sdk`          | `./dist/agent/ai-sdk.d.ts`                     | `c265dd2525e8cb0c334413f51c56bcd337a895891758742b616ddb1b231116e1` |                3 |
 | `tubeless/cloudflare`            | `./dist/cloudflare/cloudflare.d.ts`            | `31e0e2826ef790031a494a8727cc87fd48f4627662fff597a01dd1cd1679e6ae` |               22 |
 | `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `175e32d0925ff8da30552a67cc0175fc9e5e8038639959f28be00ff52b144c40` |                4 |
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
@@ -349,8 +349,8 @@ Package: `tubeless`
 | Symbol                                                                                            | Description                                                                                 |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | [`AiSdkLanguageModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/ai-sdk.ts#L25) | A Vercel AI SDK language model: a gateway model id, or any v2, v3, or v4 model object.      |
-| [`aiSdkModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/ai-sdk.ts#L87)         | Run any Vercel AI SDK language model, including its tool calls and structured final answer. |
-| [`AiSdkModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/ai-sdk.ts#L34)  | Settings for `aiSdkModel`.                                                                  |
+| [`aiSdkModel`](https://github.com/chetmancini/tubeless/blob/main/src/agent/ai-sdk.ts#L88)         | Run any Vercel AI SDK language model, including its tool calls and structured final answer. |
+| [`AiSdkModelOptions`](https://github.com/chetmancini/tubeless/blob/main/src/agent/ai-sdk.ts#L35)  | Settings for `aiSdkModel`.                                                                  |
 
 ### `tubeless/cloudflare`
 

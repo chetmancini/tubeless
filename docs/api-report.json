@@ -332,7 +332,7 @@
     {
       "declaration": "./dist/agent/ai-sdk.d.ts",
       "exports": ["AiSdkLanguageModel", "aiSdkModel", "AiSdkModelOptions"],
-      "sha256": "af6c7fb13bb337c519c741675e0fd683dc08a05fca15d2104b51c4fd08fd6cd7",
+      "sha256": "c265dd2525e8cb0c334413f51c56bcd337a895891758742b616ddb1b231116e1",
       "specifier": "tubeless/agent/ai-sdk"
     },
     {

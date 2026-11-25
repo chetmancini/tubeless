@@ -28,7 +28,7 @@ Command-by-command usage is in [the CLI](./cli.md).
 
 Library imports (`tubeless` and every subpath) are ESM-only compiled JavaScript
 and require Node.js 22.18 or later. The core has no runtime dependencies.
-`tubeless/agent/ai-sdk` imports the optional `ai` peer; install `ai` only when
+`tubeless/agent/ai-sdk` imports the optional `ai` peer (v7 or later); install `ai` only when
 you import that entry.
 
 Type declarations are verified with TypeScript 5.4 or later, under `NodeNext`

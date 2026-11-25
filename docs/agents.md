@@ -111,7 +111,7 @@ Executable recipes: [OpenAI](../examples/agent-model.ts),
 ### Vercel AI SDK
 
 `aiSdkModel()` from `tubeless/agent/ai-sdk` runs any Vercel AI SDK language model
-(`ai` package, v5 or later). The core package stays dependency-free; install `ai`
+(`ai` package, v7 or later). The core package stays dependency-free; install `ai`
 only when you import this entry. Provider packages such as `@ai-sdk/openai` stay
 in your application.
 
@@ -134,11 +134,13 @@ from `@ai-sdk/groq`, any other AI SDK `LanguageModel`, or an AI Gateway id such 
 Tool calls and structured final answers use the same decision shape as the native
 adapters: tool arguments are `{ input }`, and the finish tool is `{ result }`.
 `$ref` schemas fail at definition. The adapter keeps a plain JSON transcript of
-text, tool calls, and tool results. It does not compact history, cache prompts,
-replay provider reasoning metadata, or stream assistant text. `timeoutMs` defaults
+text, tool calls, and tool results, and sends tool-call provider metadata (such
+as thought signatures) back on the next request. It does not compact history,
+cache prompts, replay reasoning content, or stream assistant text. `reasoningEffort`
+is the AI SDK 7 `reasoning` option and is omitted unless you set it. `timeoutMs` defaults
 to 60000 and fails the run when reached. `maxRetries` (default 2) is the AI SDK
 retry count for one decision request. A text-only response gets one reminder, then
-fails. `reasoningEffort` is omitted unless you set it. History that cannot fit in
+fails. History that cannot fit in
 1 MiB fails the decision; large tool results are marked `truncated: true`.
 
 ```sh

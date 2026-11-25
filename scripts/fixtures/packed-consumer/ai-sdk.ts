@@ -6,6 +6,7 @@ const model: AiSdkLanguageModel = {
   specificationVersion: "v3",
   provider: "mock",
   modelId: "mock-model",
+  doGenerate: () => undefined,
 };
 const configured: AgentModel = aiSdkModel({
   model,

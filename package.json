@@ -87,7 +87,7 @@
     "eval:agent": "bun run build && node scripts/eval-agent.mjs"
   },
   "peerDependencies": {
-    "ai": ">=5"
+    "ai": ">=7"
   },
   "peerDependenciesMeta": {
     "ai": {

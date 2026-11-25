@@ -3,7 +3,7 @@ import { MockLanguageModelV3 } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { createAgentSession, defineAgent, defineTool, type AgentModel } from "./agent.js";
 import { textSchema } from "./agent.test-support.js";
-import { aiSdkModel, type AiSdkModelOptions } from "./ai-sdk.js";
+import { aiSdkModel, type AiSdkLanguageModel, type AiSdkModelOptions } from "./ai-sdk.js";
 
 type GenerateResult = Awaited<ReturnType<MockLanguageModelV3["doGenerate"]>>;
 
@@ -67,6 +67,7 @@ describe("AI SDK model", () => {
       }).runOrThrow({ task: "Finish" })
     ).toEqual({ answer: "Done." });
     expect(model.doGenerateCalls).toHaveLength(1);
+    expect(model.doGenerateCalls[0]).toMatchObject({ reasoning: "low" });
     expect(JSON.stringify(transcript)).toContain("Finish");
   });
 
@@ -93,6 +94,37 @@ describe("AI SDK model", () => {
     ).toEqual({ answer: "RED" });
     expect(model.doGenerateCalls).toHaveLength(2);
     expect(JSON.stringify(model.doGenerateCalls[1]?.prompt)).toContain("RED");
+  });
+
+  it("sends tool-call provider metadata back as provider options", async () => {
+    const model = mockModel([
+      generated([
+        {
+          ...toolCall("lookup", { input: "red" }, "lookup_1"),
+          providerMetadata: { google: { thoughtSignature: "sig" } },
+        },
+      ]),
+      finish("RED"),
+    ]);
+    expect(
+      await defineAgent({
+        id: "provider-metadata",
+        projectContext: false,
+        defaultTools: [],
+        tools: {
+          lookup: defineTool({
+            description: "Look up a value.",
+            inputSchema: textSchema,
+            outputSchema: textSchema,
+            run: (input) => input.toUpperCase(),
+          }),
+        },
+        model: aiSdkModel({ model, maxRetries: 0 }),
+      }).runOrThrow({ task: "Look up red" })
+    ).toEqual({ answer: "RED" });
+    const replayed = JSON.stringify(model.doGenerateCalls[1]?.prompt);
+    expect(replayed).toContain('"providerOptions"');
+    expect(replayed).toContain('"thoughtSignature":"sig"');
   });
 
   it("rejects a finish call mixed with another tool call", async () => {
@@ -199,7 +231,13 @@ describe("AI SDK model", () => {
     {},
     { model: "" },
     { model: "   " },
-    { model: { specificationVersion: "v3", provider: "mock", modelId: "mock-model" } },
+    {
+      model: {
+        specificationVersion: "v3",
+        provider: "mock",
+        modelId: "mock-model",
+      } as AiSdkLanguageModel,
+    },
     { model: mockModel(finish()), timeoutMs: 0 },
     { model: mockModel(finish()), maxRetries: -1 },
     { model: mockModel(finish()), maxRetries: 1.5 },

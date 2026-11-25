@@ -1,4 +1,4 @@
-import { generateText, jsonSchema, stepCountIs, tool } from "ai";
+import { generateText, jsonSchema, stepCountIs, tool, type LanguageModel } from "ai";
 import type { AgentDecisionContext } from "./agent-types.js";
 import type { AgentModel, AgentModelDescriptors, AgentModelRequest } from "./model-types.js";
 import { DEFAULT_MAX_RETRIES, MAX_REQUEST_BYTES, validProviderLimits } from "./provider-limits.js";
@@ -28,13 +28,14 @@ export type AiSdkLanguageModel =
       readonly specificationVersion: "v2" | "v3" | "v4";
       readonly provider: string;
       readonly modelId: string;
+      doGenerate(options: unknown): unknown;
     };
 
 /** Settings for {@link aiSdkModel}. Install the optional `ai` package before importing this entry. */
 export interface AiSdkModelOptions {
   /** An AI SDK language model, or a gateway id such as `openai/gpt-5.4-mini`. Strings make a network request. */
   readonly model: AiSdkLanguageModel;
-  /** Omitted by default. Set it for models that support reasoning; null also omits it. */
+  /** AI SDK 7 `reasoning` value. Omitted by default; null also omits it. */
   readonly reasoningEffort?: ReasoningEffort | null;
   /** Maximum output tokens for one decision request. Defaults to 8192. */
   readonly maxOutputTokens?: number;
@@ -118,9 +119,9 @@ export function aiSdkModel(options: AiSdkModelOptions): AgentModel {
         const currentMessages = messages;
         const result = await report(requestIndex, () =>
           generateText({
-            model: selected,
+            model: selected as LanguageModel,
             system: prepared.system,
-            messages: currentMessages,
+            messages: currentMessages as never,
             tools: prepared.tools,
             toolChoice: "auto",
             stopWhen: stepCountIs(1),
@@ -129,7 +130,7 @@ export function aiSdkModel(options: AiSdkModelOptions): AgentModel {
             abortSignal: signal,
             telemetry: { isEnabled: false },
             ...(reasoningEffort === null ? {} : { reasoning: reasoningEffort }),
-          } as never)
+          })
         );
         throwIfAborted(signal, "AI SDK decision");
         const generation = generated(result);
@@ -315,11 +316,12 @@ function listedCall(value: unknown): ListedCall {
     !Object.hasOwn(value, "input")
   )
     throw new Error("Invalid AI SDK tool call");
+  const metadata = value.providerMetadata ?? value.providerOptions;
   return {
     toolCallId: value.toolCallId,
     toolName: value.toolName,
     input: value.input,
-    ...(value.providerOptions === undefined ? {} : { providerOptions: value.providerOptions }),
+    ...(metadata === undefined ? {} : { providerOptions: metadata }),
   };
 }
 
