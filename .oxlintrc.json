@@ -168,8 +168,8 @@
       "error",
       {
         "allow": {
-          "examples": 58,
-          "src/agent": 75,
+          "examples": 59,
+          "src/agent": 76,
           "src/core": 45,
           "src/hosting": 24,
           "src/utilities": 25,
@@ -343,7 +343,7 @@
       "error",
       {
         "allow": {
-          "examples/agent-*": 20,
+          "examples/agent-*": 21,
           "examples/step-*": 4,
           "examples/yaml-*": 3,
           "src/agent/checkpoint-*": 7,

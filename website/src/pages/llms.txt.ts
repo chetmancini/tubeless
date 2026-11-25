@@ -6,7 +6,7 @@ import { GITHUB_BLOB, absUrl } from "../lib/paths";
 export const GET: APIRoute = () => {
   const body = `# tubeless
 
-> Typed, agentic pipelines for TypeScript. Run locally, schedule on Tubeless Cloud. No runtime dependencies.
+> Typed, agentic pipelines for TypeScript. Run locally, schedule on Tubeless Cloud. The core has no runtime dependencies.
 
 Version: ${PACKAGE.version}
 Full documentation: ${absUrl("llms-full.txt")}

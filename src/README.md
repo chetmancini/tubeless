@@ -76,9 +76,10 @@ intentional.
   tracing internals. No exporters, storage, UI, command parsing or presentation.
 - **Core**: only `core/lifecycle.ts` imports the internal trace emitter. Execution
   errors (`pipeline-execution-error.ts`) import neither the executor nor run state.
-- **Generic agent entrypoint**: no provider, `openai`, `anthropic` or `mcp` modules.
-  Provider and MCP adapters are separate optional entrypoints that produce ordinary
-  tools and models.
+- **Generic agent entrypoint**: no provider, `openai`, `anthropic`, `ai-sdk`, or `mcp`
+  modules. Provider and MCP adapters are separate optional entrypoints that produce
+  ordinary tools and models. `ai-sdk.ts` is the only agent module that imports the
+  optional `ai` package.
 - **CLI entrypoint**: only `cli`, `core`, `node`, `reporter`, `tracing`, `utilities`,
   including lazy imports. It never reaches workbench, storage or Studio.
 - **Project entrypoint**: only `project`, `core`, `tracing`, `utilities`. Commands
@@ -176,9 +177,10 @@ Only boundaries that are not obvious from names are listed.
 - `transcript.ts` owns opt-in content capture and redaction. Sinks are
   application-owned with no storage or trace dependency; entering a child agent
   resets capture unless it opts in.
-- Providers (`openai.ts`, `anthropic.ts`) share `provider-*.ts` helpers for bounded
-  HTTP, SSE, schema and byte budgets. `agent-errors.ts` stays independent of state
-  hashing so provider imports need no Node modules.
+- Providers (`openai.ts`, `anthropic.ts`, `ai-sdk.ts`) share `provider-*.ts` helpers
+  for bounded HTTP, SSE, schema and byte budgets. `ai-sdk.ts` delegates the request
+  to the optional `ai` package. `agent-errors.ts` stays independent of state hashing
+  so provider imports need no Node modules.
 - `mcp.ts` adapts MCP servers into ordinary `defineTool` capabilities; the agent
   runtime has no MCP concepts. Transports consume pure wire contracts from
   `mcp-protocol.ts`.

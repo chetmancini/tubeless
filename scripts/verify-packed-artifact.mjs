@@ -244,12 +244,22 @@ try {
     join(consumerRoot, "package.json"),
     JSON.stringify({ name: "tubeless-packed-smoke", private: true, type: "module" })
   );
+  const optionalPeers = Object.entries(packageJson.peerDependenciesMeta ?? {})
+    .filter(([name, meta]) => meta?.optional === true && packageJson.devDependencies?.[name])
+    .map(([name]) => `${name}@${packageJson.devDependencies[name]}`);
   run(
     npm,
-    ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-package-lock", tarball],
+    [
+      "install",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+      "--no-package-lock",
+      tarball,
+      ...optionalPeers,
+    ],
     consumerRoot
   );
-
   const installedPackage = join(consumerRoot, "node_modules", packageJson.name);
   for (const relativePath of [
     "README.md",
@@ -268,6 +278,7 @@ try {
     "examples/agent-workspace.ts",
     "examples/agent-model.ts",
     "examples/agent-model-anthropic.ts",
+    "examples/agent-model-ai-sdk.ts",
     "examples/agent-delegation.ts",
     "examples/agent-pipeline.ts",
     "examples/agent-openai.ts",

@@ -23,7 +23,7 @@ Each step's output is the next step's typed input. `plan()` lists the steps that
 
 ## Quick start
 
-Node.js 22.18 or later. The library is ESM-only, has no runtime dependencies, and runs the TypeScript below directly. Linux and macOS are supported; Windows is untested. The project needs `"type": "module"`. The `tubeless` command needs Bun 1.3.14 or later on `PATH`, including when npm or npx starts it. This snippet does not. Tubeless is pre-1.0, so the public API may change between releases.
+Node.js 22.18 or later. The library is ESM-only, has no required runtime dependencies, and runs the TypeScript below directly. Linux and macOS are supported; Windows is untested. The project needs `"type": "module"`. The `tubeless` command needs Bun 1.3.14 or later on `PATH`, including when npm or npx starts it. This snippet does not. Tubeless is pre-1.0, so the public API may change between releases.
 
 ```sh
 mkdir import-rows && cd import-rows

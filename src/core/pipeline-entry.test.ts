@@ -126,10 +126,16 @@ describe("module runtime boundaries", () => {
     const visited = new Set<string>();
     for (const file of reachableFiles(["agent/agent.js"])) {
       visited.add(file);
-      expect(relative(dist, file)).not.toMatch(/openai|anthropic|provider-|mcp/);
+      expect(relative(dist, file)).not.toMatch(/openai|anthropic|provider-|mcp|ai-sdk/);
     }
     expect(visited.has(resolve(dist, "agent/model-agent.js"))).toBe(true);
     expect(visited.has(resolve(dist, "agent/compile-agent.js"))).toBe(true);
+  });
+
+  it("imports the optional AI SDK only from the AI SDK adapter", () => {
+    expect(externalSpecifiers(resolve(dist, "agent/ai-sdk.js"))).toEqual(["ai"]);
+    for (const file of reachableFiles(["agent/agent.js"]))
+      expect(externalSpecifiers(file), relative(dist, file)).not.toContain("ai");
   });
 
   it("keeps ticker workers independent of reporter orchestration and worker creation", () => {
