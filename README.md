@@ -117,4 +117,4 @@ They serve [http://127.0.0.1:4317](http://127.0.0.1:4317). A browser launch need
 
 ## Documentation
 
-[Website](https://tubeless.io/) · [Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) · [Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) · [Comparison](./docs/comparison.md) · [Recipes](./docs/recipes.md) · [API](./docs/api-reference.md) · [Issues](https://github.com/chetmancini/tubeless/issues) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [MIT](./LICENSE)
+[Website](https://tubeless.io/) · [Getting started](./docs/getting-started.md) · [CLI](./docs/cli.md) · [Studio](./docs/studio.md) · [Concepts](./docs/concepts.md) · [Comparison](./docs/comparison.md) · [Recipes](./docs/recipes.md) · [AI SDK adapter (optional ai peer, v7 or later)](./docs/agents.md#vercel-ai-sdk) · [API](./docs/api-reference.md) · [Issues](https://github.com/chetmancini/tubeless/issues) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md) · [MIT](./LICENSE)

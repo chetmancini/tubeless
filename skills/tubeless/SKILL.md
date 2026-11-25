@@ -119,8 +119,9 @@ Declarative documents:
 Agents:
 
 - `defineAgent({ id, model })` from `tubeless/agent` with `openaiModel()`,
-  `anthropicModel()`, or `aiSdkModel()` from `tubeless/agent/ai-sdk`; typed
-  in-pipeline agents add `inputSchema`, `task`, and
+  `anthropicModel()`, or `aiSdkModel()` from `tubeless/agent/ai-sdk`. Install the
+  optional `ai` peer (v7 or later) for the AI SDK adapter. Typed in-pipeline agents
+  add `inputSchema`, `task`, and
   `resultSchema` and compose through `fromPipeline` (`examples/agent-extract.ts`).
   `defineAgentLoop` is for custom `decide` callbacks. Restrict tools with
   `defaultTools`, validate every tool boundary, keep credentials and provider calls
