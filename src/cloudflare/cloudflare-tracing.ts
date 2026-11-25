@@ -29,3 +29,12 @@ export function boundCloudflareTraceExporter(
     flush: () => (exporter.flush ? invoke("flush", () => exporter.flush?.()) : undefined),
   };
 }
+
+export function retryableCloudflareRpc(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "retryable" in error &&
+    error.retryable === true &&
+    !("overloaded" in error && error.overloaded === true)
+  );
+}

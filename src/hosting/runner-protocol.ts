@@ -1,4 +1,5 @@
 import { decodeJournalValue, encodeJournalValue } from "./journal-value.js";
+import { sha256Hex } from "../utilities/sha256.js";
 import { encodePlainJson } from "../utilities/plain-json.js";
 
 import { isAuthoredPipelineId, RUN_MODEL_VERSION } from "../core/pipeline-ids.js";
@@ -33,6 +34,8 @@ import type { RunJob } from "./run-contract.js";
 export const RUNNER_PATH = "/api/runner/v1";
 export const RUNNER_VALUE_BYTES = 65_536;
 export const RUNNER_REPLY_BYTES = RUNNER_VALUE_BYTES + 2_048;
+// A Bun root claim may carry both the launch inputs and its pinned Worker child catalog.
+export const RUNNER_CLAIM_BYTES = RUNNER_REPLY_BYTES + RUNNER_VALUE_BYTES;
 export const MAX_RUNNER_MANIFEST_PIPELINES = 200;
 export const RUNNER_LEASE_MS = 15_000;
 export const RUNNER_HEARTBEAT_MS = 2_000;
@@ -59,9 +62,15 @@ export interface RunnerStageInput {
 
 export type RunnerJob = RunnerJobIdentity &
   (
-    | { readonly kind: "root"; readonly run: RunJob }
+    | {
+        readonly kind: "root";
+        readonly run: RunJob;
+        readonly workerChildren?: Readonly<Record<string, string>>;
+      }
     | { readonly kind: "stage"; readonly stage: RunnerStageInput; readonly deadlineAtMs: number }
   );
+
+export type RunnerStageJob = Extract<RunnerJob, { kind: "stage" }>;
 
 export type RunnerClaim = {
   readonly job: RunnerJob;
@@ -115,6 +124,7 @@ export function decodeRunnerClaim(
   if (value.recoveryAttemptId !== undefined && !isLaunchIdentifier(value.recoveryAttemptId))
     throw new Error("The Worker returned an invalid recovery attempt.");
   if (value.job.kind === "root") {
+    if (value.job.workerChildren !== undefined) parseRunnerManifest(value.job.workerChildren);
     const run = value.job.run;
     if (
       !isJsonObject(run) ||
@@ -213,6 +223,71 @@ export function decodeRunnerReport(value: unknown): PipelineRun<unknown> {
   } catch {
     throw new TypeError("Invalid remote stage result.");
   }
+}
+
+const stageInput = wireObject(
+  {
+    parentRunId: traceId,
+    stepId: authoredId,
+    correlationId: text,
+    itemKey: text,
+  },
+  { strict: false }
+);
+
+/** The Studio coordinator supplies the parent lease's authoritative deadline. */
+export type RunnerStageRequest = Omit<RunnerStageJob, "deadlineAtMs">;
+
+/** Trace parents and budgets can change when a parent rejoins the same dispatch. */
+export function stageDispatchBinding(job: RunnerStageRequest): Promise<string> {
+  const {
+    launchId,
+    deploymentId,
+    pipelineId,
+    definitionId,
+    stage: { parentRunId: _parent, ...stage },
+  } = job;
+  return sha256Hex(
+    new TextEncoder().encode(
+      JSON.stringify([launchId, deploymentId, pipelineId, definitionId, stage])
+    )
+  );
+}
+
+export function decodeWorkerStageRequest(value: unknown): RunnerStageRequest {
+  if (
+    !isJsonObject(value) ||
+    value.kind !== "stage" ||
+    !isLaunchIdentifier(value.id) ||
+    !isLaunchIdentifier(value.launchId) ||
+    !isLaunchIdentifier(value.deploymentId) ||
+    !isAuthoredPipelineId(value.pipelineId) ||
+    !isLaunchIdentifier(value.definitionId) ||
+    !isJsonObject(value.stage) ||
+    !isJsonObject(value.stage.input) ||
+    !isJsonObject(value.stage.controls)
+  )
+    throw new TypeError("Invalid Worker stage request.");
+  return {
+    kind: "stage",
+    id: value.id,
+    launchId: value.launchId,
+    deploymentId: value.deploymentId,
+    pipelineId: value.pipelineId,
+    definitionId: value.definitionId,
+    stage: {
+      ...stageInput.decode(value.stage, "Worker stage"),
+      input: value.stage.input,
+      controls: runnerChildControls(value.stage.controls),
+    },
+  };
+}
+
+export function decodeStageResult(value: unknown): RunnerStageResult {
+  if (!isJsonObject(value)) throw new TypeError("Invalid remote stage result.");
+  if (typeof value.error === "string")
+    return { error: value.error, ...(value.interrupted === true ? { interrupted: true } : {}) };
+  return { report: decodeRunnerReport(value.report) };
 }
 
 export function runnerChildControls(controls: PipelineRunControls): PipelineChildRunControls {

@@ -377,16 +377,13 @@ export class SqliteHostedLaunchStore
             runId,
             launch.launchId
           );
-      } else if (
-        runId !== undefined &&
-        event.name === "pipeline.completed" &&
-        event.runId === runId
-      ) {
+      } else if (event.name === "pipeline.completed" && event.runId === runId) {
         state = "finished";
         if (launch.ownership === "trusted") {
           const uncertain =
             event.error?.sourceCode === JOURNAL_OUTCOME_UNKNOWN &&
-            launch.recoveryGeneration !== undefined;
+            (launch.recoveryGeneration !== undefined ||
+              this.executions.status(launch.launchId)?.target === "local");
           this.executions.settle(
             launch.launchId,
             uncertain ? "outcome_unknown" : event.payload.status,

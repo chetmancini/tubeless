@@ -272,9 +272,11 @@ manifest decoder for data-only inspection.
 - For a local Bun target, list versioned pipeline IDs in `createCloudflareApp`'s
   `localRunner.pipelines`, start `tubeless remote runner` with the same deployment
   revision and its own Access service token, and submit through the existing
-  launch entry points. A Worker pipeline can hand off a listed `fromPipeline`
-  child. Keep Node-only handlers in the separate runner project. See
-  [runner placement](./deploy-cloudflare.md#place-work-on-a-local-bun-runner).
+  launch entry points. A Worker root can hand off a listed `fromPipeline` child
+  to Bun. A Bun root can hand off a child listed in `localRunner.workerChildren`
+  to Cloudflare. Keep the versioned definitions matched and supply filesystem
+  handlers from the Bun project and Worker binding handlers from the Worker.
+  See [runner placement](./deploy-cloudflare.md#place-work-on-a-local-bun-runner).
 - Enable `recoverInterruptedRuns` for versioned Worker and Bun roots that need
   to restore acknowledged steps after a restart. Run the Bun CLI from the
   original project directory and the same release. Unconfirmed effects stop

@@ -216,8 +216,8 @@ Only boundaries that are not obvious from names are listed.
 - For opt-in recovery, `execution-journal-sqlite.ts` owns intent and result records.
   Worker roots store them in their run object and fence history in Studio by
   generation. Bun roots store them in Studio, where the runner queue checks the
-  active lease in the journal transaction. The queue also reconciles journaled
-  stage IDs with independently leased Bun child attempts.
+  active lease in the journal transaction. The queue reconciles journaled stage
+  IDs with independently owned child attempts.
 - The collector and attempt ledger live in `hosting/collector/` and
   `hosting/attempt/`. Claim uncertainty never
   authorizes execution, and delivery failure never declares termination.
@@ -225,12 +225,15 @@ Only boundaries that are not obvious from names are listed.
   `cloudflare-run-contract.ts` holds the deadline and host-failure vocabulary
   without loading execution. `cloudflare-execution-api.ts` serves the authenticated
   execution contract separately from the Studio browser protocol.
-  `cloudflare-runner-queue.ts` owns Bun dispatch and settlement. Its claim handler
-  manages leases and journal operations in the Studio object.
-  `runner-protocol.ts` in hosting defines the shared handoff.
-  Collector and Bun ingestion use `attempt/ledger-sqlite.ts` for run binding,
-  sequence checks and batch receipts. Bun commits a child's terminal event and its
-  result together. The parent receives that result after reading stage progress.
+  `cloudflare/runner/queue.ts` owns stage dispatch and settlement. Its claim
+  handler manages Bun leases and journal operations in the Studio object.
+  Studio delivers Worker stages from the same queue to a run object named for
+  the stage. `cloudflare/stage/run.ts` fences replay using a durable start
+  receipt and settles interrupted attempts. The Worker stage uses the identity
+  of its private run object, while Bun claims use the runner's lease credential.
+  Hosting owns the shared stage protocol, execution, and trace delivery.
+  The transports use `attempt/ledger-sqlite.ts` for run binding, sequence checks
+  and batch receipts. A child's terminal event and result commit together.
   Explicit child composition calls an internal host capability when configured.
 
 ### Workbench

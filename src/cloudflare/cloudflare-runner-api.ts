@@ -1,9 +1,10 @@
-import type { CloudflareRunnerQueue } from "./cloudflare-runner-queue.js";
+import type { CloudflareRunnerQueue } from "./runner/queue.js";
 import { CollectorInputError, COLLECTOR_BATCH_BYTES } from "../hosting/collector/protocol.js";
 import { HostedAttemptConflict } from "../hosting/attempt/store.js";
 import { HostedJournalConflict } from "../hosting/execution-journal-sqlite.js";
 import {
   decodeRunnerJournalOperation,
+  decodeWorkerStageRequest,
   RUNNER_JOURNAL_BYTES,
   RUNNER_JOURNAL_VERSION,
   RUNNER_PATH,
@@ -26,7 +27,8 @@ export async function serveRunnerRequest(
   queue: CloudflareRunnerQueue,
   projectId: string,
   deploymentId: string,
-  definitions: ReadonlyMap<string, string>
+  definitions: ReadonlyMap<string, string>,
+  workerChildren?: ReadonlyMap<string, string>
 ): Promise<Response> {
   const path = new URL(request.url).pathname.slice(RUNNER_PATH.length);
   if (request.method !== "POST")
@@ -59,7 +61,7 @@ export async function serveRunnerRequest(
     if (path === "/events") {
       const token = request.headers.get("x-tubeless-lease");
       if (!isLaunchIdentifier(token)) throw new TypeError("Invalid runner lease.");
-      response = await queue.append(token, deploymentId, bytes);
+      response = await queue.append({ token, deploymentId }, bytes);
     } else {
       const payload: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
       if (!isJsonObject(payload)) throw new TypeError("Invalid runner message.");
@@ -71,7 +73,8 @@ export async function serveRunnerRequest(
         response = await queue.claims.claim(
           deploymentId,
           compatible,
-          payload.journalVersion === RUNNER_JOURNAL_VERSION
+          payload.journalVersion === RUNNER_JOURNAL_VERSION,
+          payload.workerStages === true
         );
       } else {
         if (!isLaunchIdentifier(payload.id) || !isLaunchIdentifier(payload.token))
@@ -85,7 +88,20 @@ export async function serveRunnerRequest(
             deploymentId,
             decodeRunnerJournalOperation(payload.id, payload)
           );
-        else if (path === "/finish" && Object.hasOwn(payload, "result"))
+        else if (path === "/stage-enqueue")
+          response = await queue.workerStages.request(
+            { id: payload.id, token: payload.token, deploymentId },
+            workerChildren,
+            { kind: "enqueue", job: decodeWorkerStageRequest(payload.job) }
+          );
+        else if (path === "/stage-read" || path === "/stage-cancel") {
+          if (!isLaunchIdentifier(payload.stageId)) throw new TypeError("Invalid stage ID.");
+          response = await queue.workerStages.request(
+            { id: payload.id, token: payload.token, deploymentId },
+            workerChildren,
+            { kind: path === "/stage-read" ? "read" : "cancel", stageId: payload.stageId }
+          );
+        } else if (path === "/finish" && Object.hasOwn(payload, "result"))
           response = await queue.finish(payload.id, payload.token, deploymentId, payload.result);
         else
           return errorResponse(
