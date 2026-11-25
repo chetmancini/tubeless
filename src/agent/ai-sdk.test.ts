@@ -1,5 +1,5 @@
 import type { LanguageModel } from "ai";
-import { MockLanguageModelV3 } from "ai/test";
+import { MockLanguageModelV3, MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { createAgentSession, defineAgent, defineTool, type AgentModel } from "./agent.js";
 import { textSchema } from "./agent.test-support.js";
@@ -16,7 +16,7 @@ const toolCall = (
   toolName: string,
   input: unknown,
   toolCallId = toolName
-): GenerateResult["content"][number] => ({
+): Extract<GenerateResult["content"][number], { type: "tool-call" }> => ({
   type: "tool-call",
   toolCallId,
   toolName,
@@ -51,7 +51,8 @@ const agent = (model: AgentModel, id: string) =>
 describe("AI SDK model", () => {
   it("accepts an AI SDK language model and returns its structured answer", async () => {
     const model = mockModel(finish());
-    const typed: LanguageModel = model;
+    const configure = (model: LanguageModel) =>
+      aiSdkModel({ model, maxRetries: 0, reasoningEffort: "low" });
     const transcript: unknown[] = [];
     expect(
       await defineAgent({
@@ -63,7 +64,7 @@ describe("AI SDK model", () => {
             transcript.push(record);
           },
         },
-        model: aiSdkModel({ model: typed, maxRetries: 0, reasoningEffort: "low" }),
+        model: configure(model),
       }).runOrThrow({ task: "Finish" })
     ).toEqual({ answer: "Done." });
     expect(model.doGenerateCalls).toHaveLength(1);
@@ -96,12 +97,22 @@ describe("AI SDK model", () => {
     expect(JSON.stringify(model.doGenerateCalls[1]?.prompt)).toContain("RED");
   });
 
-  it("sends tool-call provider metadata back as provider options", async () => {
+  it("replays ordered SDK response parts with their provider options", async () => {
     const model = mockModel([
       generated([
         {
+          type: "reasoning",
+          text: "Look up the value.",
+          providerMetadata: { anthropic: { signature: "reasoning-signature" } },
+        },
+        {
           ...toolCall("lookup", { input: "red" }, "lookup_1"),
-          providerMetadata: { google: { thoughtSignature: "sig" } },
+          providerMetadata: { google: { thoughtSignature: "call-signature" } },
+        },
+        {
+          type: "text",
+          text: "Checking.",
+          providerMetadata: { google: { thoughtSignature: "text-signature" } },
         },
       ]),
       finish("RED"),
@@ -122,9 +133,58 @@ describe("AI SDK model", () => {
         model: aiSdkModel({ model, maxRetries: 0 }),
       }).runOrThrow({ task: "Look up red" })
     ).toEqual({ answer: "RED" });
-    const replayed = JSON.stringify(model.doGenerateCalls[1]?.prompt);
-    expect(replayed).toContain('"providerOptions"');
-    expect(replayed).toContain('"thoughtSignature":"sig"');
+    expect(
+      model.doGenerateCalls[1]?.prompt.find((message) => message.role === "assistant")
+    ).toMatchObject({
+      content: [
+        {
+          type: "reasoning",
+          text: "Look up the value.",
+          providerOptions: { anthropic: { signature: "reasoning-signature" } },
+        },
+        {
+          type: "tool-call",
+          toolCallId: "lookup_1",
+          providerOptions: { google: { thoughtSignature: "call-signature" } },
+        },
+        {
+          type: "text",
+          text: "Checking.",
+          providerOptions: { google: { thoughtSignature: "text-signature" } },
+        },
+      ],
+    });
+  });
+
+  it("replays provider-executed calls without dispatching them as Tubeless tools", async () => {
+    const model = mockModel([
+      generated([
+        {
+          ...toolCall("_finish", { result: { answer: "Provider result." } }, "provider-call"),
+          providerExecuted: true,
+        },
+        {
+          type: "tool-result",
+          toolCallId: "provider-call",
+          toolName: "_finish",
+          result: "Handled by the provider.",
+        },
+      ]),
+      finish(),
+    ]);
+    expect(
+      await agent(aiSdkModel({ model, maxRetries: 0 }), "provider-tool").runOrThrow({
+        task: "Finish",
+      })
+    ).toEqual({ answer: "Done." });
+    expect(
+      model.doGenerateCalls[1]?.prompt.find((message) => message.role === "assistant")
+    ).toMatchObject({
+      content: [
+        { type: "tool-call", toolCallId: "provider-call", providerExecuted: true },
+        { type: "tool-result", toolCallId: "provider-call" },
+      ],
+    });
   });
 
   it("rejects a finish call mixed with another tool call", async () => {
@@ -243,6 +303,8 @@ describe("AI SDK model", () => {
     { model: mockModel(finish()), maxRetries: 1.5 },
     { model: mockModel(finish()), maxOutputTokens: 0 },
     { model: mockModel(finish()), reasoningEffort: "huge" as "low" },
+    { model: mockModel(finish()), reasoningEffort: "low medium" as "low" },
+    { model: mockModel(finish()), reasoningEffort: "max" as "low" },
   ])("rejects invalid configuration locally: %j", (options) => {
     expect(() => aiSdkModel(options as AiSdkModelOptions)).toThrow(
       "Invalid AI SDK model configuration"
@@ -343,6 +405,17 @@ describe("AI SDK model", () => {
     expect(model.doGenerateCalls).toHaveLength(1);
   });
 
+  it("enforces the deadline even when a provider ignores the abort signal", async () => {
+    const model = mockModel(() => new Promise(() => {}));
+    const result = await agent(
+      aiSdkModel({ model, timeoutMs: 50, maxRetries: 0 }),
+      "ignored-abort"
+    ).run({ task: "Work" });
+    expect(result.status).toBe("failed");
+    expect(JSON.stringify(result.errors)).toContain("timed out after 50 ms");
+    expect(model.doGenerateCalls[0]?.abortSignal?.aborted).toBe(true);
+  });
+
   it("rejects an invalid stored conversation before calling the model", async () => {
     const model = mockModel(finish());
     const transport = aiSdkModel({ model, maxRetries: 0 });
@@ -373,6 +446,52 @@ describe("AI SDK model", () => {
     expect(limitResult.status).toBe("failed");
     expect(JSON.stringify(limitResult.errors)).toContain("maxOutputTokens");
     expect(limited.doGenerateCalls).toHaveLength(1);
+  });
+
+  it("accepts a finish call when the SDK maps the provider reason to other", async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: {
+        content: [toolCall("_finish", { result: { answer: "Done." } })],
+        finishReason: { unified: "other", raw: "eos" },
+        usage,
+        warnings: [],
+      },
+    });
+    const result = await agent(aiSdkModel({ model, maxRetries: 0 }), "other-finish").run({
+      task: "Finish",
+    });
+    expect(result.status).toBe("completed");
+    expect(model.doGenerateCalls).toHaveLength(1);
+  });
+
+  it.each(["error", "interrupted"] as const)(
+    "rejects a finish call when the SDK reports %s",
+    async (reason) => {
+      const model = new MockLanguageModelV4({
+        doGenerate: {
+          content: [toolCall("_finish", { result: { answer: "Done." } })],
+          finishReason: { unified: reason, raw: reason },
+          usage,
+          warnings: [],
+        },
+      });
+      const result = await agent(aiSdkModel({ model, maxRetries: 0 }), "unusable-finish").run({
+        task: "Finish",
+      });
+      expect(result.status).toBe("failed");
+      expect(result.errors[0]?.message).toContain(reason);
+      expect(model.doGenerateCalls).toHaveLength(1);
+    }
+  );
+
+  it("rejects an SDK-invalid tool call", async () => {
+    const model = mockModel(generated([toolCall("unknown", { input: "red" })]));
+    const result = await agent(aiSdkModel({ model, maxRetries: 0 }), "invalid-tool").run({
+      task: "Finish",
+    });
+    expect(result.status).toBe("failed");
+    expect(result.errors[0]?.message).toContain("Invalid AI SDK tool call: unknown");
+    expect(model.doGenerateCalls).toHaveLength(1);
   });
 
   it("rejects tool arguments that are not the single input or result field", async () => {

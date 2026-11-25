@@ -96,7 +96,7 @@ export function strictParameter(
 ) {
   assertParameterSchema(schema, label, rules);
   return {
-    type: "object",
+    type: "object" as const,
     properties: { [name]: schema },
     required: [name],
     additionalProperties: false,

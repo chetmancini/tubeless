@@ -1,4 +1,15 @@
-import { generateText, jsonSchema, stepCountIs, tool, type LanguageModel } from "ai";
+import {
+  generateText,
+  isStepCount,
+  jsonSchema,
+  modelMessageSchema,
+  tool,
+  type AssistantModelMessage,
+  type LanguageModel,
+  type LanguageModelUsage,
+  type ToolCallPart,
+  type ToolModelMessage,
+} from "ai";
 import type { AgentDecisionContext } from "./agent-types.js";
 import type { AgentModel, AgentModelDescriptors, AgentModelRequest } from "./model-types.js";
 import { DEFAULT_MAX_RETRIES, MAX_REQUEST_BYTES, validProviderLimits } from "./provider-limits.js";
@@ -7,14 +18,21 @@ import { record, strictParameter, type StrictSchemaRules } from "./provider-sche
 import { boundedToolOutputs } from "./provider-tool-outputs.js";
 import { utf8ByteLength } from "./provider-utf8.js";
 import { agentTranscript } from "./transcript.js";
-import { throwIfAborted } from "../utilities/abort.js";
+import { awaitWithAbort, throwIfAborted } from "../utilities/abort.js";
 import { AGENT_MODEL_ATTRIBUTES, AGENT_TRACE_ATTRIBUTES } from "../tracing/agent-telemetry.js";
 import type { PipelineTraceAttributes } from "../tracing/tracing-contracts.js";
 
 const TOOL_RULE =
   "Respond only by calling tools. Call _finish alone with the final answer. Never mix _finish with tool calls.";
-type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-const REASONING_EFFORTS = " none minimal low medium high xhigh max ";
+type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+const REASONING_EFFORTS = new Set<string>([
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] satisfies ReasoningEffort[]);
 const SCHEMA_RULES: StrictSchemaRules = {
   provider: "AI SDK",
   closedObjects: false,
@@ -28,7 +46,7 @@ export type AiSdkLanguageModel =
       readonly specificationVersion: "v2" | "v3" | "v4";
       readonly provider: string;
       readonly modelId: string;
-      doGenerate(options: unknown): unknown;
+      doGenerate(options: unknown): PromiseLike<{ readonly content: readonly unknown[] }>;
     };
 
 /** Settings for {@link aiSdkModel}. Install the optional `ai` package before importing this entry. */
@@ -45,44 +63,11 @@ export interface AiSdkModelOptions {
   readonly maxRetries?: number;
 }
 
-interface TextPart {
-  readonly type: "text";
-  readonly text: string;
-}
-
-interface ToolCallPart {
-  readonly type: "tool-call";
-  readonly toolCallId: string;
-  readonly toolName: string;
-  readonly input: unknown;
-  readonly providerOptions?: Record<string, unknown>;
-}
-
-interface ToolResultPart {
-  readonly type: "tool-result";
-  readonly toolCallId: string;
-  readonly toolName: string;
-  readonly output: { readonly type: "text" | "error-text"; readonly value: string };
-  readonly providerOptions?: Record<string, unknown>;
-}
-
 type StoredMessage =
   | { readonly role: "user"; readonly content: string }
-  | { readonly role: "assistant"; readonly content: readonly (TextPart | ToolCallPart)[] }
-  | { readonly role: "tool"; readonly content: readonly ToolResultPart[] };
-
-interface ListedCall {
-  readonly toolCallId: string;
-  readonly toolName: string;
-  readonly input: unknown;
-  readonly providerOptions?: unknown;
-}
-
-interface DecisionGeneration {
-  readonly text: string;
-  readonly finishReason: string;
-  readonly toolCalls: readonly ListedCall[];
-}
+  | AssistantModelMessage
+  | ToolModelMessage;
+type ToolCalls = Awaited<ReturnType<typeof generateText>>["toolCalls"];
 
 /** Run any Vercel AI SDK language model, including its tool calls and structured final answer. */
 export function aiSdkModel(options: AiSdkModelOptions): AgentModel {
@@ -118,28 +103,33 @@ export function aiSdkModel(options: AiSdkModelOptions): AgentModel {
         requestIndex += 1;
         const currentMessages = messages;
         const result = await report(requestIndex, () =>
-          generateText({
-            model: selected as LanguageModel,
-            system: prepared.system,
-            messages: currentMessages as never,
-            tools: prepared.tools,
-            toolChoice: "auto",
-            stopWhen: stepCountIs(1),
-            maxOutputTokens,
-            maxRetries,
-            abortSignal: signal,
-            telemetry: { isEnabled: false },
-            ...(reasoningEffort === null ? {} : { reasoning: reasoningEffort }),
-          })
+          awaitWithAbort(
+            generateText({
+              // The public declaration deliberately uses a peer-free structural model type.
+              model: selected as LanguageModel,
+              instructions: prepared.system,
+              messages: currentMessages,
+              tools: prepared.tools,
+              toolChoice: "auto",
+              stopWhen: isStepCount(1),
+              maxOutputTokens,
+              maxRetries,
+              abortSignal: signal,
+              telemetry: { isEnabled: false },
+              reasoning: reasoningEffort ?? undefined,
+            }),
+            signal,
+            "AI SDK decision"
+          )
         );
         throwIfAborted(signal, "AI SDK decision");
-        const generation = generated(result);
-        recordAssistantText(generation.text, context);
-        assertUsableFinish(generation.finishReason);
-        const assistant = assistantMessage(generation.text, generation.toolCalls);
-        if (assistant.content.length === 0) throw new Error("AI SDK model returned empty content");
-        messages = [...messages, assistant];
-        const decision = decisionFrom(generation.toolCalls);
+        recordAssistantText(result.text, context);
+        assertUsableFinish(result.finishReason);
+        // The SDK preserves part order and translates providerMetadata to providerOptions.
+        const response = result.response.messages;
+        if (response.length === 0) throw new Error("AI SDK model returned empty content");
+        messages = [...messages, ...response];
+        const decision = decisionFrom(result.toolCalls);
         if (decision?.kind === "finish") messages = closeFinished(messages);
         if (decision) return { decision, conversation: messages };
         if (attempt > 0) throw new Error("AI SDK model returned no tool calls");
@@ -166,7 +156,7 @@ function validLanguageModel(model: unknown): model is AiSdkLanguageModel {
 }
 
 function validReasoning(value: unknown): boolean {
-  return value === null || (typeof value === "string" && REASONING_EFFORTS.includes(` ${value} `));
+  return value === null || (typeof value === "string" && REASONING_EFFORTS.has(value));
 }
 
 function validTokenLimit(value: number): boolean {
@@ -214,7 +204,7 @@ function aiSdkTools(descriptors: AgentModelDescriptors) {
     tools: Object.fromEntries(
       specs.map((spec) => [
         spec.name,
-        tool({ description: spec.description, inputSchema: jsonSchema(spec.parameters as never) }),
+        tool({ description: spec.description, inputSchema: jsonSchema(spec.parameters) }),
       ])
     ),
   };
@@ -236,7 +226,7 @@ function history(request: AgentModelRequest, turn: number, overhead: number): St
   return shrunk;
 }
 
-function toolResults(outcomes: AgentModelRequest["outcomes"], budget: number): StoredMessage {
+function toolResults(outcomes: AgentModelRequest["outcomes"], budget: number): ToolModelMessage {
   return {
     role: "tool",
     content: boundedToolOutputs("AI SDK", outcomes, budget, (outcome, output) => ({
@@ -254,14 +244,17 @@ function decisionReporter(
   identity: { provider: string; name: string },
   context: Pick<AgentDecisionContext<object>, "reportAttempt" | "turn">
 ) {
-  return async (index: number, send: () => Promise<unknown>) => {
+  return async <T extends { readonly usage: LanguageModelUsage }>(
+    index: number,
+    send: () => Promise<T>
+  ): Promise<T> => {
     const started = performance.now();
     let attributes: PipelineTraceAttributes = {};
     let received = false;
     try {
       const result = await send();
       received = true;
-      attributes = usageAttributes(result);
+      attributes = usageAttributes(result.usage);
       return result;
     } finally {
       context.reportAttempt(1, {
@@ -278,11 +271,8 @@ function decisionReporter(
   };
 }
 
-function usageAttributes(result: unknown): PipelineTraceAttributes {
-  if (!record(result) || !record(result.usage)) return {};
-  const usage = result.usage;
-  const input = record(usage.inputTokenDetails) ? usage.inputTokenDetails : {};
-  const output = record(usage.outputTokenDetails) ? usage.outputTokenDetails : {};
+function usageAttributes(usage: LanguageModelUsage): PipelineTraceAttributes {
+  const { inputTokenDetails: input, outputTokenDetails: output } = usage;
   const attributes: Record<string, number> = {};
   assignCount(attributes, AGENT_MODEL_ATTRIBUTES.inputTokens, usage.inputTokens);
   assignCount(attributes, AGENT_MODEL_ATTRIBUTES.outputTokens, usage.outputTokens);
@@ -297,65 +287,31 @@ function assignCount(target: Record<string, number>, key: string, value: unknown
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) target[key] = value;
 }
 
-function generated(result: unknown): DecisionGeneration {
-  if (!record(result) || typeof result.text !== "string" || typeof result.finishReason !== "string")
-    throw new Error("AI SDK returned an invalid decision");
-  if (!Array.isArray(result.toolCalls)) throw new Error("AI SDK returned an invalid decision");
-  return {
-    text: result.text,
-    finishReason: result.finishReason,
-    toolCalls: result.toolCalls.map(listedCall),
-  };
-}
-
-function listedCall(value: unknown): ListedCall {
-  if (
-    !record(value) ||
-    typeof value.toolCallId !== "string" ||
-    typeof value.toolName !== "string" ||
-    !Object.hasOwn(value, "input")
-  )
-    throw new Error("Invalid AI SDK tool call");
-  const metadata = value.providerMetadata ?? value.providerOptions;
-  return {
-    toolCallId: value.toolCallId,
-    toolName: value.toolName,
-    input: value.input,
-    ...(metadata === undefined ? {} : { providerOptions: metadata }),
-  };
-}
-
 function assertUsableFinish(reason: string): void {
+  // Providers map unrecognized raw reasons (e.g. OpenAI-compatible "eos") to "other".
+  if (reason === "stop" || reason === "tool-calls" || reason === "other") return;
   if (reason === "length")
     throw new Error("AI SDK response reached maxOutputTokens; raise maxOutputTokens");
   if (reason === "content-filter")
     throw new Error("AI SDK model stopped because of a content filter");
   if (reason === "error") throw new Error("AI SDK model stopped because of an error");
+  if (reason === "interrupted") throw new Error("AI SDK model response was interrupted");
+  throw new Error(`AI SDK model stopped with finish reason ${reason}`);
 }
 
-function assistantMessage(text: string, calls: readonly ListedCall[]): StoredMessage {
-  const content: (TextPart | ToolCallPart)[] = [];
-  if (text) content.push({ type: "text", text });
-  for (const call of calls) {
-    const providerOptions = jsonRecord(call.providerOptions);
-    content.push({
-      type: "tool-call",
-      toolCallId: call.toolCallId,
-      toolName: call.toolName,
-      input: call.input,
-      ...(providerOptions ? { providerOptions } : {}),
+function decisionFrom(calls: ToolCalls) {
+  const parsed = calls
+    .filter((call) => !call.providerExecuted)
+    .map((call) => {
+      if (call.invalid)
+        throw new Error(`Invalid AI SDK tool call: ${call.toolName}`, { cause: call.error });
+      return {
+        id: call.toolCallId,
+        tool: call.toolName,
+        input: unwrap(call.input, call.toolName === "_finish" ? "result" : "input"),
+      };
     });
-  }
-  return { role: "assistant", content };
-}
-
-function decisionFrom(calls: readonly ListedCall[]) {
-  if (calls.length === 0) return undefined;
-  const parsed = calls.map((call) => ({
-    id: call.toolCallId,
-    tool: call.toolName,
-    input: unwrap(call.input, call.toolName === "_finish" ? "result" : "input"),
-  }));
+  if (parsed.length === 0) return undefined;
   if (parsed.some((call) => call.tool === "_finish")) {
     if (parsed.length !== 1) throw new Error("AI SDK model must finish without other calls");
     return { kind: "finish" as const, result: parsed[0].input };
@@ -364,18 +320,9 @@ function decisionFrom(calls: readonly ListedCall[]) {
 }
 
 function unwrap(value: unknown, key: string): unknown {
-  const parsed = typeof value === "string" ? parseJson(value) : value;
-  if (!record(parsed) || Object.keys(parsed).length !== 1 || !Object.hasOwn(parsed, key))
+  if (!record(value) || Object.keys(value).length !== 1 || !Object.hasOwn(value, key))
     throw new Error(`AI SDK tool arguments require exactly one ${key} field`);
-  return parsed[key];
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    throw new Error("AI SDK tool arguments must be JSON");
-  }
+  return value[key];
 }
 
 function recordAssistantText(text: string, context: AgentDecisionContext<object>): void {
@@ -384,8 +331,10 @@ function recordAssistantText(text: string, context: AgentDecisionContext<object>
 
 function closeFinished(messages: readonly StoredMessage[]): StoredMessage[] {
   const last = messages.at(-1);
-  if (last?.role !== "assistant") return [...messages];
-  const calls = last.content.filter((part): part is ToolCallPart => part.type === "tool-call");
+  if (last?.role !== "assistant" || typeof last.content === "string") return [...messages];
+  const calls = last.content.filter(
+    (part): part is ToolCallPart => part.type === "tool-call" && !part.providerExecuted
+  );
   if (calls.length === 0) return [...messages];
   if (calls.some((call) => call.toolName !== "_finish"))
     throw new Error("AI SDK conversation has unfinished tool calls");
@@ -411,89 +360,16 @@ function appendUser(messages: readonly StoredMessage[], text: string): StoredMes
 }
 
 function cloneConversation(conversation: unknown): StoredMessage[] {
-  if (
-    !Array.isArray(conversation) ||
-    conversation.length === 0 ||
-    !conversation.every(isStoredMessage)
-  )
+  if (!Array.isArray(conversation) || conversation.length === 0)
     throw new Error("Invalid AI SDK conversation state");
-  return conversation.map(cloneMessage);
-}
-
-function cloneMessage(message: StoredMessage): StoredMessage {
-  if (message.role === "user") return { role: "user", content: message.content };
-  if (message.role === "assistant")
-    return { role: "assistant", content: message.content.map(cloneAssistantPart) };
-  return { role: "tool", content: message.content.map(cloneToolResult) };
-}
-
-function cloneAssistantPart(part: TextPart | ToolCallPart): TextPart | ToolCallPart {
-  if (part.type === "text") return { type: "text", text: part.text };
-  return {
-    type: "tool-call",
-    toolCallId: part.toolCallId,
-    toolName: part.toolName,
-    input: part.input,
-    ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
-  };
-}
-
-function cloneToolResult(part: ToolResultPart): ToolResultPart {
-  return {
-    type: "tool-result",
-    toolCallId: part.toolCallId,
-    toolName: part.toolName,
-    output: { type: part.output.type, value: part.output.value },
-    ...(part.providerOptions ? { providerOptions: part.providerOptions } : {}),
-  };
-}
-
-function isStoredMessage(value: unknown): value is StoredMessage {
-  if (!record(value)) return false;
-  if (value.role === "user") return typeof value.content === "string";
-  if (value.role === "assistant")
-    return Array.isArray(value.content) && value.content.every(isAssistantPart);
-  return (
-    value.role === "tool" &&
-    Array.isArray(value.content) &&
-    value.content.length > 0 &&
-    value.content.every(isToolResultPart)
-  );
-}
-
-function isAssistantPart(value: unknown): value is TextPart | ToolCallPart {
-  if (!record(value) || !validOptions(value)) return false;
-  if (value.type === "text") return typeof value.text === "string";
-  return (
-    value.type === "tool-call" &&
-    typeof value.toolCallId === "string" &&
-    value.toolCallId.trim().length > 0 &&
-    typeof value.toolName === "string" &&
-    value.toolName.trim().length > 0 &&
-    Object.hasOwn(value, "input")
-  );
-}
-
-function isToolResultPart(value: unknown): value is ToolResultPart {
-  if (!record(value) || value.type !== "tool-result" || !validOptions(value)) return false;
-  if (typeof value.toolCallId !== "string" || typeof value.toolName !== "string") return false;
-  return (
-    record(value.output) &&
-    (value.output.type === "text" || value.output.type === "error-text") &&
-    typeof value.output.value === "string"
-  );
-}
-
-function validOptions(value: Record<string, unknown>): boolean {
-  return value.providerOptions === undefined || record(value.providerOptions);
-}
-
-function jsonRecord(value: unknown): Record<string, unknown> | undefined {
-  if (value === undefined) return undefined;
-  try {
-    const cloned: unknown = JSON.parse(JSON.stringify(value));
-    return record(cloned) ? cloned : undefined;
-  } catch {
-    return undefined;
-  }
+  return conversation.map((value: unknown) => {
+    const parsed = modelMessageSchema.safeParse(value);
+    if (parsed.success) {
+      const message = parsed.data;
+      if (message.role === "user" && typeof message.content === "string")
+        return { role: "user", content: message.content };
+      if (message.role === "assistant" || message.role === "tool") return message;
+    }
+    throw new Error("Invalid AI SDK conversation state");
+  });
 }
