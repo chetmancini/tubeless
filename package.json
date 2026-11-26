@@ -1,12 +1,11 @@
 {
-  "name": "portable-node-check-fixture",
+  "name": "c7-vitepress-docs",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.4",
-  "scripts": {
-    "types": "node --check app.js"
-  },
+  "scripts": { "docs:build": "vitepress build docs" },
   "devDependencies": {
+    "vitepress": "1.6.4",
     "vitest": "5.1.0"
   }
 }

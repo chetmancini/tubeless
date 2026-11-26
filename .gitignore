@@ -1,0 +1,4 @@
+node_modules/
+.tubeless-reports/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
