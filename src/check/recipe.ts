@@ -22,11 +22,10 @@ type ReportContext = Pick<PipelineStepContext<object>, "cwd" | "runId" | "attemp
 
 type FileCheckRunner = { stepId: string } & (
   | {
-      mode: "files";
-      inventoryOnly: boolean;
+      mode: "inventory" | "files";
       run: (
         command: VitestCommand,
-        context: Parameters<CommandRunner>[1]
+        context: PipelineStepContext<object>
       ) => Promise<{ process: CheckProcessOutcome; evidenceError?: string }>;
     }
   | {
@@ -58,6 +57,20 @@ export async function collectVitestReport(
   });
 }
 
+export function requireCheckSuccess(
+  label: string,
+  outcome: CheckProcessOutcome,
+  evidenceError?: string
+): void {
+  if (outcome.status !== "exited" || outcome.exitCode !== 0) {
+    const message = `${label}: ${outcome.status} (${outcome.exitCode ?? outcome.signal ?? "unknown"}).`;
+    throw Object.assign(new Error(evidenceError ? `${message} ${evidenceError}` : message), {
+      code: "NATIVE_PROCESS_FAILED",
+    });
+  }
+  if (evidenceError) throw new Error(evidenceError);
+}
+
 /** Schedule an already verified plan, with process admission owned by the caller. */
 export async function executeNodeCheckPlan(
   plan: NodeCheckPlan,
@@ -74,7 +87,7 @@ export async function executeNodeCheckPlan(
     const files =
       command.kind === "vitest" && fileCheck?.stepId === command.id ? fileCheck : undefined;
     const report: NodeCheckExecution["reports"][number] | undefined =
-      command.kind === "vitest" && (!files || (files.mode === "files" && !files.inventoryOnly))
+      command.kind === "vitest" && (!files || files.mode === "files")
         ? { stepId: command.id, path: command.report.path, result: { state: "missing" } }
         : undefined;
     if (report) reports.push(report);
@@ -105,14 +118,7 @@ export async function executeNodeCheckPlan(
             report.result = await collectVitestReport(command, ctx, outcome, Boolean(observation));
           }
           ctx.signal?.throwIfAborted();
-          if (outcome.status !== "exited" || outcome.exitCode !== 0)
-            throw Object.assign(
-              new Error(
-                `Native command ${command.id}: ${outcome.status} (${outcome.exitCode ?? outcome.signal ?? "unknown"}).${observation?.evidenceError ? ` ${observation.evidenceError}` : ""}`
-              ),
-              { code: "NATIVE_PROCESS_FAILED" }
-            );
-          if (observation?.evidenceError) throw new Error(observation.evidenceError);
+          requireCheckSuccess(`Native command ${command.id}`, outcome, observation?.evidenceError);
           const collected = report?.result;
           if (
             !observation &&
@@ -130,10 +136,7 @@ export async function executeNodeCheckPlan(
       })
     );
   }
-  const target =
-    fileCheck?.mode === "files" && fileCheck.inventoryOnly
-      ? steps.get(fileCheck.stepId)
-      : undefined;
+  const target = fileCheck?.mode === "inventory" ? steps.get(fileCheck.stepId) : undefined;
   const pipeline = definePipeline({
     id: PIPELINE_ID,
     steps: [...steps.values()],

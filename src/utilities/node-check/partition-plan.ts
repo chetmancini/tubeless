@@ -1,4 +1,4 @@
-import { digestCanonicalJson } from "../canonical-json.js";
+import { digestCanonicalJson, isJsonObject } from "../canonical-json.js";
 import { exactFields, isDigest } from "./data.js";
 import {
   decodeNodeCheckFileInventory,
@@ -224,12 +224,16 @@ function estimateFiles(
         : "unusable-observation";
     return { path, estimatedMs: 0, estimate: { kind: "fallback", reason } };
   });
-  const fallback = estimates.reduce(
-    (max, file) => Math.max(max, file.estimatedMs),
-    fallbackMinimumMs
-  );
+  const fallback = fallbackWeight(estimates);
   for (const file of estimates) if (file.estimate.kind === "fallback") file.estimatedMs = fallback;
   return estimates;
+}
+
+function fallbackWeight(estimates: readonly FileEstimate[]): number {
+  return estimates.reduce(
+    (max, file) => (file.estimate.kind === "timing" ? Math.max(max, file.estimatedMs) : max),
+    fallbackMinimumMs
+  );
 }
 
 function assign(estimates: FileEstimate[], count: number): NodeCheckPartitionPlan["partitions"] {
@@ -287,12 +291,7 @@ function decodeEstimate(value: unknown, timingContextDigest: string | null): Fil
   );
   if (!isNodeCheckFilePath(path) || !duration(estimatedMs) || !Number.isInteger(estimatedMs))
     throw new TypeError("Invalid partition file estimate.");
-  if (
-    estimate &&
-    typeof estimate === "object" &&
-    "kind" in estimate &&
-    estimate.kind === "timing"
-  ) {
+  if (isJsonObject(estimate) && estimate.kind === "timing") {
     const { metric, sampleId } = exactFields(
       estimate,
       ["kind", "metric", "sampleId"],
@@ -338,12 +337,8 @@ export async function decodeNodeCheckPartitionPlan(
     ],
     "partition plan"
   );
-  if (
-    raw.version !== 1 ||
-    !Array.isArray(raw.partitions) ||
-    raw.partitions.length > NODE_CHECK_PARTITION_LIMITS.partitions
-  )
-    throw new TypeError("Unsupported partition plan version or count.");
+  if (raw.version !== 1 || !Array.isArray(raw.partitions))
+    throw new TypeError("Unsupported partition plan version or members.");
   const bound = await bind(raw.inventory, raw.request, raw.timingContext);
   if (
     raw.inventoryDigest !== bound.inventoryDigest ||
@@ -362,6 +357,7 @@ export async function decodeNodeCheckPartitionPlan(
       !Number.isInteger(id) ||
       id < 1 ||
       id > count ||
+      typeof estimatedMs !== "number" ||
       !Array.isArray(entry.files) ||
       !entry.files.length ||
       estimates.length + entry.files.length > files.length
@@ -376,24 +372,11 @@ export async function decodeNodeCheckPartitionPlan(
   const union = normalizeNodeCheckFiles(estimates.map(({ path }) => path));
   if (union.length !== files.length || union.some((file, index) => file !== files[index]))
     throw new TypeError("Partition membership must cover the requested cohort exactly once.");
-  const fallback = estimates.reduce(
-    (max, file) => (file.estimate.kind === "timing" ? Math.max(max, file.estimatedMs) : max),
-    fallbackMinimumMs
-  );
+  const fallback = fallbackWeight(estimates);
   if (estimates.some((file) => file.estimate.kind === "fallback" && file.estimatedMs !== fallback))
     throw new TypeError("Invalid partition fallback estimate.");
   const partitions = assign(estimates, count);
-  if (
-    partitions.some(
-      (partition, index) =>
-        partition.id !== received[index].id ||
-        partition.estimatedMs !== received[index].estimatedMs ||
-        partition.files.length !== received[index].files.length ||
-        partition.files.some(
-          (file, fileIndex) => file.path !== received[index].files[fileIndex].path
-        )
-    )
-  )
+  if (JSON.stringify(partitions) !== JSON.stringify(received))
     throw new TypeError("Partition assignment differs from the canonical plan.");
   return enforcePlanSize({ ...bound, partitions });
 }

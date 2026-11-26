@@ -21,7 +21,7 @@ export interface NodeCheckPartitionEvidence {
 export function partitionFileRequest(
   plan: NodeCheckPartitionPlan,
   partition: NodeCheckPartitionPlan["partitions"][number]
-): NodeCheckFileRequest {
+): Extract<NodeCheckFileRequest, { mode: "selected" }> {
   return {
     version: 1,
     mode: "selected",
@@ -67,24 +67,15 @@ export async function verifyNodeCheckPartitionCoverage(
         typeof native.outputComplete !== "boolean"
       )
         return false;
-      const partition = plan.partitions[id - 1];
+      const request = partitionFileRequest(plan, plan.partitions[id - 1]);
       const observed = decodeFileExecution(execution);
       if (
         !observed ||
-        !matchesCompletedFiles(
-          observed,
-          partition.files.map(({ path }) => path)
-        ) ||
+        !matchesCompletedFiles(observed, request.files) ||
         !acceptedFileExecution(observed)
       )
         return false;
-      if (
-        requestDigest !==
-        (await digestNodeCheckFileRequest(
-          plan.inventory.planDigest,
-          partitionFileRequest(plan, partition)
-        ))
-      )
+      if (requestDigest !== (await digestNodeCheckFileRequest(plan.inventory.planDigest, request)))
         return false;
     }
     return true;

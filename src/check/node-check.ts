@@ -8,7 +8,7 @@ import {
 } from "../utilities/node-check-plan.js";
 import type { CheckProcessOutcome, CheckReportResult } from "../utilities/check-report.js";
 import { readCheckToolVersion, runCheckProcess } from "./process.js";
-import { collectVitestReport, executeNodeCheckPlan } from "./recipe.js";
+import { collectVitestReport, executeNodeCheckPlan, requireCheckSuccess } from "./recipe.js";
 import { prepareCheckReport } from "../node/check-files.js";
 import { digestCanonicalJson } from "../utilities/canonical-json.js";
 import {
@@ -17,7 +17,6 @@ import {
 } from "../utilities/node-check/partition-plan.js";
 import {
   partitionFileRequest,
-  verifyNodeCheckPartitionCoverage,
   type NodeCheckPartitionEvidence,
 } from "../utilities/node-check/partition-coverage.js";
 import {
@@ -123,8 +122,7 @@ export async function runNodeCheckFiles(
   };
   const execution = await executeNodeCheckPlan(plan, context, localRunner(plan), options.dryRun, {
     stepId: request.stepId,
-    mode: "files",
-    inventoryOnly: request.mode === "inventory",
+    mode: request.mode === "inventory" ? "inventory" : "files",
     async run(command, step) {
       const observation = await runVitestFiles(command, request, plan, planDigest, step);
       fileCheck.inventory = observation.inventory;
@@ -230,18 +228,12 @@ export async function runNodeCheckPartitions(
           result: await collectVitestReport(command, step, observed.process, true),
         });
         step.signal?.throwIfAborted();
-        if (observed.process.status !== "exited" || observed.process.exitCode !== 0)
-          throw Object.assign(
-            new Error(
-              `Vitest partition ${partition.id}: ${observed.process.status} (${observed.process.exitCode ?? observed.process.signal ?? "unknown"}).${observed.evidenceError ? ` ${observed.evidenceError}` : ""}`
-            ),
-            { code: "NATIVE_PROCESS_FAILED" }
-          );
-        if (observed.evidenceError) throw new Error(observed.evidenceError);
+        requireCheckSuccess(
+          `Vitest partition ${partition.id}`,
+          observed.process,
+          observed.evidenceError
+        );
       }
-      if (!(await verifyNodeCheckPartitionCoverage(partitions, partitionCheck.evidence)))
-        throw new Error("Expected complete and disjoint Vitest partition evidence.");
-      step.signal?.throwIfAborted();
       if (performance.now() > deadline)
         throw new Error(`Vitest partition step ${command.id} exhausted its deadline.`);
       partitionCheck.coverageComplete = true;

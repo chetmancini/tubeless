@@ -28,9 +28,9 @@ Package: `tubeless`
 | `tubeless/cloudflare/cache`      | `./dist/cloudflare/cloudflare-cache.d.ts`      | `175e32d0925ff8da30552a67cc0175fc9e5e8038639959f28be00ff52b144c40` |                4 |
 | `tubeless/cloudflare/transcript` | `./dist/cloudflare/cloudflare-transcript.d.ts` | `16d1ce9f7867b6aa9285c2611f924133fbc5cfd1038180591280ff4f602cdfc5` |                2 |
 | `tubeless/check-report`          | `./dist/utilities/check-report.d.ts`           | `419f3aa46711da489d280616e62b73512dfc1a5f699f4108abdd5b6f437b7788` |               14 |
-| `tubeless/check-plan`            | `./dist/utilities/node-check-plan.d.ts`        | `16841f181456082da23d74b12303f5f8a24d7e8e31a35b1d4e7bd537c7dfaa3a` |               24 |
-| `tubeless/reproduction-manifest` | `./dist/utilities/reproduction-manifest.d.ts`  | `75b4c2a08df474a9bad18f42597012db70991af507662c46b5261beee239b610` |                5 |
-| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `0144c0d650bb4210d006d0368854a78f0f76fef27c7201c14e2a3013c3c684b9` |                7 |
+| `tubeless/check-plan`            | `./dist/utilities/node-check-plan.d.ts`        | `7fa8d4cea844fd3e693b72c15deeeafca979076267302355cc163a01eeec50ac` |               24 |
+| `tubeless/reproduction-manifest` | `./dist/utilities/reproduction-manifest.d.ts`  | `d1960b3c98fdf0125faad3757360de98f36ace2fc4403ce887709bc672fca427` |                5 |
+| `tubeless/node/check`            | `./dist/check/node-check.d.ts`                 | `2a4298968663208650460793c535ebb862aca81c16bc663b691e12c80607d22a` |                7 |
 
 ## Symbols
 
@@ -411,11 +411,11 @@ Package: `tubeless`
 | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | [`decodeNodeCheckFileInventory`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/files.ts#L113)                  | Validate a complete v1 inventory, preserving source provenance and canonicalizing file order.        |
 | [`decodeNodeCheckFileRequest`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/files.ts#L75)                     | Validate and canonicalize a v1 request without reading or executing source.                          |
-| [`decodeNodeCheckPartitionPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L324)         | Verify a v1 partition envelope, bindings, exact cohort coverage and canonical assignment.            |
+| [`decodeNodeCheckPartitionPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L323)         | Verify a v1 partition envelope, bindings, exact cohort coverage and canonical assignment.            |
 | [`decodeNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L281)                            | Decode the bounded command contract directly; arbitrary argv and execution kinds are rejected.       |
 | [`digestNodeCheckFileInventory`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/files.ts#L106)                  | Identify a complete inventory and its recorded context.                                              |
 | [`digestNodeCheckFileRequest`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/files.ts#L98)                     | Bind the canonical request to a v1 plan digest using the same JSON and SHA-256 encoding as the plan. |
-| [`digestNodeCheckPartitionPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L402)         | SHA-256/base64url of the validated canonical partition envelope.                                     |
+| [`digestNodeCheckPartitionPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L385)         | SHA-256/base64url of the validated canonical partition envelope.                                     |
 | [`digestNodeCheckPartitionTimingContext`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L98) | Hash a verified timing context together with the complete canonical inventory identity.              |
 | [`isNodeCheckReportPath`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L99)                           | Report files are confined to one dedicated directory; no absolute or traversing paths.               |
 | [`NODE_CHECK_FILE_LIMITS`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/files.ts#L32)                         | Maximum number of file identities, UTF-8 bytes per path, and UTF-8 bytes per JSON list.              |
@@ -430,7 +430,7 @@ Package: `tubeless`
 | [`NodeCheckPartitionTimingContext`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L18)       | Producer-verified digests of source, effective configuration and execution environment.              |
 | [`NodeCheckPartitionTimingObservation`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L25)   | One historical file measurement with explicit eligibility, metric and provenance.                    |
 | [`NodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L26)                                   | All commands, dependency edges and script bodies are part of admission identity.                     |
-| [`planNodeCheckPartitions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L266)              | Plan a deterministic versioned assignment without accessing the filesystem or executing tests.       |
+| [`planNodeCheckPartitions`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-plan.ts#L270)              | Plan a deterministic versioned assignment without accessing the filesystem or executing tests.       |
 | [`resolveNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check-plan.ts#L190)                           | Resolve data only.                                                                                   |
 | [`verifyNodeCheckPartitionCoverage`](https://github.com/chetmancini/tubeless/blob/main/src/utilities/node-check/partition-coverage.ts#L34)  | Verify complete, disjoint, native-success evidence for a validated plan's entire cohort.             |
 
@@ -448,10 +448,10 @@ Package: `tubeless`
 
 | Symbol                                                                                                          | Description                                                                                            |
 | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [`NodeCheckExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L56)           | Original pipeline result, independent native outcomes and collected test-report envelopes.             |
-| [`NodeCheckFileExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L37)       | A file-aware result.                                                                                   |
-| [`NodeCheckPartitionExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L147) | One graph run with independent partition evidence and diagnostic reports for the selected Vitest step. |
-| [`readNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L64)            | Load only JSON and a committed Bun text lock.                                                          |
-| [`runNodeCheck`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L93)                 | Execute an admitted plan with the ordinary Tubeless scheduler.                                         |
-| [`runNodeCheckFiles`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L103)           | Explicitly authorize local discovery or file-aware execution for one admitted Vitest step.             |
-| [`runNodeCheckPartitions`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L163)      | Execute a validated file partition plan locally, one partition process at a time in one check graph.   |
+| [`NodeCheckExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L55)           | Original pipeline result, independent native outcomes and collected test-report envelopes.             |
+| [`NodeCheckFileExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L36)       | A file-aware result.                                                                                   |
+| [`NodeCheckPartitionExecution`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L145) | One graph run with independent partition evidence and diagnostic reports for the selected Vitest step. |
+| [`readNodeCheckPlan`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L63)            | Load only JSON and a committed Bun text lock.                                                          |
+| [`runNodeCheck`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L92)                 | Execute an admitted plan with the ordinary Tubeless scheduler.                                         |
+| [`runNodeCheckFiles`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L102)           | Explicitly authorize local discovery or file-aware execution for one admitted Vitest step.             |
+| [`runNodeCheckPartitions`](https://github.com/chetmancini/tubeless/blob/main/src/check/node-check.ts#L161)      | Execute a validated file partition plan locally, one partition process at a time in one check graph.   |
