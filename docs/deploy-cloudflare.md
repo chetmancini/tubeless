@@ -54,17 +54,17 @@ nothing. Pass `-p <project-file>` when the project is not `./tubeless.project.ts
 Then run the steps it prints:
 
 ```sh
-bun add tubeless && bun add -d --exact cf@1.0.0-rc.4 vite@8.3.8 @cloudflare/vite-plugin@2.0.0-rc.3   # npm install -D -E … / pnpm add -D -E …
+bun add tubeless && bun add -d --exact cf@1.0.0-rc.6 vite@8.3.8 @cloudflare/vite-plugin@2.0.0-rc.3   # npm install -D -E … / pnpm add -D -E …
 grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\n.cloudflare/\n' >> .gitignore   # cf build output and generated types
 npx cf auth login
 npx cf dev            # Studio on http://localhost:8787 (Access is skipped only on localhost)
 npx cf deploy         # creates the Worker, Durable Objects and R2 bucket
 ```
 
-- Deploying needs Node 22.12 or later. `cf` is the Cloudflare configuration CLI and
-  is in beta.
-- Install the pinned versions with `--exact` (`-E` for npm and pnpm): they were
-  verified together, and a `^` range can resolve to an untested beta.
+- Deploying with the pinned Cloudflare CLI requires Node.js 22.23+, 24.22+, or 26.12+
+  within those major versions.
+- Use `--exact` (`-E` for npm and pnpm) to install the versions the repo verifies
+  together.
 - `cf` builds through Vite, hence `vite`, `@cloudflare/vite-plugin` and the generated
   `vite.config.ts`. If you already have a Vite config, rename it, run `init`, then
   replace the generated file with yours and add `cloudflare()` to its `plugins`.

@@ -256,7 +256,7 @@ it.each(["first deployment", "resume with a changed Access audience"] as const)(
     let deploys = 0;
     let policy: unknown;
     const execute: RemoteProcess = vi.fn(async ({ command, args }) => {
-      if (command === "node") return "v24.0.0";
+      if (command === "node") return "v24.22.0";
       if (command === "cloudflared") return "token.payload.signature";
       if (args.includes("organization"))
         return JSON.stringify({ auth_domain: "team.cloudflareaccess.com" });

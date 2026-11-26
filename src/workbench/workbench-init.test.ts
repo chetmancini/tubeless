@@ -12,7 +12,12 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { runInit } from "./workbench-init.js";
-import { CLOUDFLARE_DEV_DEPENDENCIES, cloudflareScaffold } from "./workbench-init-cloudflare.js";
+import {
+  CLOUDFLARE_DEV_DEPENDENCIES,
+  CLOUDFLARE_NODE_REQUIREMENT,
+  cloudflareScaffold,
+  supportsCloudflareNode,
+} from "./workbench-init-cloudflare.js";
 import { projectScaffold } from "./workbench-init-project.js";
 import { execFileAsync } from "./workbench.test-support.js";
 
@@ -78,7 +83,10 @@ describe("tubeless init", () => {
     expect(steps).toContain(
       "grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\\n.cloudflare/\\n' >> .gitignore"
     );
-    expect(steps).toContain("Node 22.12 or later");
+    expect(steps).toContain(CLOUDFLARE_NODE_REQUIREMENT);
+    expect(readFileSync("docs/deploy-cloudflare.md", "utf8")).toContain(
+      CLOUDFLARE_NODE_REQUIREMENT
+    );
     expect(steps).toContain("npx cf deploy");
   });
 
@@ -200,6 +208,20 @@ describe("tubeless init", () => {
     };
     for (const [name, version] of Object.entries(CLOUDFLARE_DEV_DEPENDENCIES))
       expect({ name, version }).toEqual({ name, version: devDependencies[name] });
+  });
+
+  it("checks the Node versions supported by the pinned cf release", () => {
+    const { engines } = JSON.parse(readFileSync("node_modules/cf/package.json", "utf8")) as {
+      engines: { node: string };
+    };
+    for (const range of engines.node.split(" || ")) {
+      expect(range).toMatch(/^\^\d+\.\d+\.0$/);
+      const [major, minor] = range.slice(1).split(".").map(Number);
+      expect(supportsCloudflareNode(`v${major}.${minor}.0`)).toBe(true);
+      expect(supportsCloudflareNode(`${major}.${minor - 1}.99`)).toBe(false);
+      expect(supportsCloudflareNode(`${major + 1}.${minor}.0`)).toBe(false);
+    }
+    expect(supportsCloudflareNode("")).toBe(false);
   });
 
   it("tests the Cloudflare target on the Miniflare the pinned cf uses", () => {
