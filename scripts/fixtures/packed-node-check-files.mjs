@@ -70,6 +70,44 @@ try {
   await assert.rejects(readFile(ran), { code: "ENOENT" });
   assert.equal(await readFile(configLoaded, "utf8"), "loaded\n");
 
+  // This exchange comes from Cloud's native API integration, using an older
+  // checkout of the suite. Discover the current inventory independently.
+  const timingResponse = JSON.parse(
+    await readFile(
+      process.env.TUBELESS_C8A_TIMING_RESPONSE ??
+        new URL("./node-check-timing-history-v1.json", import.meta.url),
+      "utf8"
+    )
+  );
+  assert.equal(timingResponse.version, 1);
+  assert.equal(timingResponse.stepId, discovered.fileCheck.inventory.stepId);
+  assert.deepEqual(timingResponse.measurement, {
+    kind: "sum-of-final-test-durations",
+    provenance: "vitest-check-report-v1",
+    unit: "ms",
+  });
+  assert.equal(timingResponse.selectionScope, "unknown");
+  assert.equal(timingResponse.samples.length, 1);
+  const [history] = timingResponse.samples;
+  assert.equal(history.coverage.complete, true);
+  assert.equal(history.estimateEligible, true);
+  assert.equal(history.context.configurationDigest, null);
+  const byPath = new Map(history.files.map(({ path, durationMs }) => [path, durationMs]));
+  assert.deepEqual([...byPath.keys()], expectedSelected);
+  assert.ok(
+    [...byPath.values()].every((durationMs) => typeof durationMs === "number" && durationMs >= 0)
+  );
+  assert.deepEqual(
+    discovered.fileCheck.inventory.files.filter((path) => !byPath.has(path)),
+    ["spec/nested/spec/check.case.js"]
+  );
+  // This working tree has no admitted source or hosted configuration evidence.
+  assert.notEqual(discovered.fileCheck.inventory.source.commit, history.source.commit);
+  assert.notEqual(
+    discovered.fileCheck.inventory.configuration.digest,
+    history.context.configurationDigest
+  );
+
   const listed = join(workspace, "vitest-list.json");
   execFileSync(
     process.execPath,
