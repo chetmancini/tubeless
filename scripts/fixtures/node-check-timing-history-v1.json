@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "pipelineId": "dogfood-0",
+  "stepId": "test",
+  "scope": { "kind": "policy-branch", "repositoryId": "101", "branch": "benchmark/node-check-v1" },
+  "measurement": {
+    "kind": "sum-of-final-test-durations",
+    "provenance": "vitest-check-report-v1",
+    "unit": "ms"
+  },
+  "selectionScope": "unknown",
+  "queryCommit": "ddf11a75a87c4d18af8675dcf889204f0cd15faa",
+  "retentionDays": 30,
+  "samples": [
+    {
+      "runId": "a3f697d3-7d96-4d32-88ea-f3b33b495ce9",
+      "attemptId": "70362cc1-d921-4ebf-b867-a47be3433eb7",
+      "createdAt": 1795669770696,
+      "outcome": "completed",
+      "source": {
+        "commit": "ddf11a75a87c4d18af8675dcf889204f0cd15faa",
+        "treeSha": "a5fad0c320f808b3991870301c91e24134b5bcf2",
+        "lockfileDigest": "o6aigou_MMjFfEGoQYWUPbCeo0pHl3K73p-sP5qJkvo"
+      },
+      "context": {
+        "recipeId": "portable-node",
+        "recipeVersion": "1",
+        "policyRevision": "runner-test-v1",
+        "planDigest": "sPrELDQ3XiH-aOApNno0cgz96krMppsK4_iavG71y70",
+        "configurationDigest": null,
+        "imageDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "toolchain": { "node": "24.22.1", "bun": "1.4.4", "runtime": "0.3.8" },
+        "resources": { "vcpu": 2, "memoryMib": 4096, "diskMb": 10000 },
+        "vitest": "5.1.0"
+      },
+      "process": { "status": "exited", "exitCode": 0, "outputComplete": true },
+      "coverage": {
+        "state": "available",
+        "complete": true,
+        "truncated": false,
+        "omittedTests": 0,
+        "invalidPathTests": 0,
+        "omittedFiles": 0
+      },
+      "files": [
+        {
+          "path": "spec/archive.case.js",
+          "outcome": "passed",
+          "identity": "report-path",
+          "durationMs": 1.5043330000000168
+        },
+        {
+          "path": "spec/check.case.js",
+          "outcome": "passed",
+          "identity": "report-path",
+          "durationMs": 1.0552499999999938
+        }
+      ],
+      "estimateEligible": true,
+      "sourceMatch": "same-commit",
+      "recipeMatch": true
+    }
+  ],
+  "nextCursor": null
+}
