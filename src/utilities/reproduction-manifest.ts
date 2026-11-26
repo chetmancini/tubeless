@@ -1,4 +1,4 @@
-import { canonicalJsonValue, isJsonObject } from "./canonical-json.js";
+import { digestCanonicalJson, isJsonObject } from "./canonical-json.js";
 import { decodeNodeCheckPlan, type NodeCheckPlan } from "./node-check-plan.js";
 
 /** Maximum UTF-8 size of the complete reproduction manifest. */
@@ -51,12 +51,7 @@ function recordedVersion(value: unknown, label: string): string | null {
 
 /** SHA-256/base64url of UTF-8 JSON with recursively sorted object keys and original array order. */
 export async function digestNodeCheckPlan(plan: NodeCheckPlan): Promise<string> {
-  const bytes = new TextEncoder().encode(JSON.stringify(canonicalJsonValue(plan)));
-  const result = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-  return btoa(String.fromCharCode(...result))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .slice(0, -1);
+  return digestCanonicalJson(plan);
 }
 
 /** Validate a JSON value, normalize its plan and verify the retained digest. Performs no I/O. */

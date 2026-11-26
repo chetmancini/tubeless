@@ -7,6 +7,7 @@ import { moduleReferences } from "../../scripts/module-references.js";
 const dist = fileURLToPath(new URL("../../dist/", import.meta.url));
 
 const computedImportOwners = new Set([
+  "check/vitest-files-runner.js", // Explicit subprocess loader for the repository-local Vitest.
   "node/worker-thread-runtime.js",
   "run-store/run-store-sqlite.js",
   "workbench/pipeline-module.js",

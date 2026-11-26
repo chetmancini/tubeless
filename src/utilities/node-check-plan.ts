@@ -303,3 +303,13 @@ export function decodeNodeCheckPlan(value: unknown): NodeCheckPlan | undefined {
     return undefined;
   }
 }
+
+export {
+  NODE_CHECK_FILE_LIMITS,
+  decodeNodeCheckFileRequest,
+  digestNodeCheckFileRequest,
+  digestNodeCheckFileInventory,
+  type NodeCheckFileRequest,
+  type NodeCheckFileInventory,
+  type NodeCheckFileCompletion,
+} from "./node-check/files.js";

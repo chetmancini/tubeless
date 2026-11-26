@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { lstat, open, realpath, mkdir, unlink } from "node:fs/promises";
-import { relative, resolve, isAbsolute } from "node:path";
+import { relative, resolve, isAbsolute, dirname } from "node:path";
 import { CHECK_REPORT_LIMITS, type CheckReportResult } from "../utilities/check-report.js";
 import { isNodeCheckReportPath } from "../utilities/node-check-plan.js";
 
@@ -32,27 +32,35 @@ export async function readCheckReportFile(
   path: string
 ): Promise<{ content: string } | { result: CheckReportResult }> {
   if (!isNodeCheckReportPath(path)) return { result: { state: "malformed" } };
+  return readBoundedCheckFile(root, path, CHECK_REPORT_LIMITS.inputBytes);
+}
+
+/** Read a trusted relative label beneath a real directory with a hard byte bound. */
+export async function readBoundedCheckFile(
+  root: string,
+  path: string,
+  maxBytes: number
+): Promise<{ content: string } | { result: CheckReportResult }> {
   let handle;
   try {
     const base = await realpath(root),
       file = resolve(base, path);
-    if (!(await lstat(resolve(base, ".tubeless-reports"))).isDirectory())
-      return { result: { state: "malformed" } };
+    if (!(await lstat(dirname(file))).isDirectory()) return { result: { state: "malformed" } };
     handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const stat = await handle.stat();
     const actual = await realpath(
       process.platform === "linux" ? `/proc/self/fd/${handle.fd}` : file
     );
     if (!stat.isFile() || !contained(base, actual)) return { result: { state: "malformed" } };
-    if (stat.size > CHECK_REPORT_LIMITS.inputBytes) return { result: { state: "oversized" } };
-    const bytes = Buffer.alloc(CHECK_REPORT_LIMITS.inputBytes + 1);
+    if (stat.size > maxBytes) return { result: { state: "oversized" } };
+    const bytes = Buffer.alloc(maxBytes + 1);
     let size = 0;
     while (size < bytes.length) {
       const read = await handle.read(bytes, size, bytes.length - size, size);
       if (!read.bytesRead) break;
       size += read.bytesRead;
     }
-    if (size > CHECK_REPORT_LIMITS.inputBytes) return { result: { state: "oversized" } };
+    if (size > maxBytes) return { result: { state: "oversized" } };
     return { content: bytes.subarray(0, size).toString("utf8") };
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;

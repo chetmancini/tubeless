@@ -45,6 +45,21 @@ describe("Node check reproduction manifest", () => {
     ).rejects.toThrow("exceeds 64 KiB");
   });
 
+  it("rejects file selection attached to a v1 reproduction plan", async () => {
+    const input = manifest();
+    Object.assign(input.nodeCheck, {
+      fileRequest: { version: 1, stepId: "test", mode: "selected", files: ["app.test.js"] },
+    });
+    await expect(decodeReproductionManifest(input)).rejects.toThrow("manifest nodeCheck");
+    Reflect.deleteProperty(input.nodeCheck, "fileRequest");
+    Object.assign(input.nodeCheck.plan, {
+      fileRequest: { version: 1, stepId: "test", mode: "selected", files: ["app.test.js"] },
+    });
+    await expect(decodeReproductionManifest(input)).rejects.toThrow(
+      "Unsupported reproduction manifest Node check plan"
+    );
+  });
+
   it.each([
     [
       "plan digest mismatch",

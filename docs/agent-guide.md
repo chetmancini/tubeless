@@ -22,6 +22,8 @@ authoring.
    example changes.
 
 For an explicit Node/Bun repository gate on a POSIX host, use [the optional Node check recipe](node-check-recipe.md). It reads data without Cloud credentials and exposes its full plan before running. Windows execution is unsupported.
+On a trusted checkout, use `runNodeCheckFiles` for [Vitest file inventory and exact selection](node-check-recipe.md#discover-and-select-vitest-files).
+Read `fileCheck.outcome` for the scope of success, and use `fileCheck.inventory` for the complete configured file set.
 For an eligible Cloud check, use `tubeless cloud reproduce --execute <manifest.json>`
 to [rerun the recorded revision](./reproduction-manifest.md). Use the public
 manifest decoder for data-only inspection.
