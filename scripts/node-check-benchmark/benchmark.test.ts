@@ -1,10 +1,15 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, it, vi } from "vitest";
 import captures from "../fixtures/node-check-benchmark/c7-miniflare.json" with { type: "json" };
 import { runHosted, verifyCloudPrincipal } from "./cloud.ts";
-import { recoveryIntent } from "./ledger.ts";
+import { readSamples, recoveryIntent } from "./ledger.ts";
 import { newSample, readSample, type Sample } from "./sample.ts";
 import { summarize } from "./summary.ts";
 import { parseCliRun } from "../../dist/workbench/cloud/protocol.js";
@@ -172,6 +177,125 @@ it.each([
     }
   }
 );
+
+it("retains a safe terminal inspection failure and resumes the original run in replay", async () => {
+  const capture = captures[0];
+  const pinned = workload("pass");
+  const inspection = {
+    ...capture.inspection,
+    commit: pinned.commit,
+    sourceIdentity: {
+      ...capture.inspection.sourceIdentity,
+      commit: pinned.commit,
+      treeSha: pinned.treeSha,
+      repository: { ...capture.inspection.sourceIdentity.repository, fullName: pinned.repository },
+      selector: { kind: "main", commit: pinned.commit },
+    },
+    hostedMeasurements: {
+      ...capture.inspection.hostedMeasurements,
+      identity: {
+        ...capture.inspection.hostedMeasurements.identity,
+        sourceCommit: pinned.commit,
+        sourceTree: pinned.treeSha,
+      },
+    },
+  };
+  const base = "/api/v1/workspaces/" + workspace;
+  let reads = 0;
+  const admissionKeys: (string | string[] | undefined)[] = [];
+  const privateDetail = "fixture detail that must stay private " + token;
+  const server = createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    if (req.headers.authorization !== "Bearer " + token) {
+      res.writeHead(401).end("{}");
+    } else if (req.url === base + "/automation") {
+      res.end(JSON.stringify({ workspaceId: workspace, principalId, scopes: ["read", "run"] }));
+    } else if (req.method === "POST" && req.url === base + "/runs") {
+      admissionKeys.push(req.headers["idempotency-key"]);
+      res.writeHead(202).end(JSON.stringify({ ...capture.admission, commit: pinned.commit }));
+    } else if (req.url === base + "/runs/" + inspection.id) {
+      if (++reads === 2) {
+        res
+          .writeHead(503)
+          .end(JSON.stringify({ error: { code: "unavailable", message: privateDetail } }));
+      } else res.end(JSON.stringify(inspection));
+    } else res.writeHead(404).end("{}");
+  });
+  const root = await mkdtemp(join(tmpdir(), "node-check-inspection-"));
+  const trial = join(root, "trial");
+  const invoke = (...args: string[]) =>
+    new Promise<{ code: number | string | null | undefined; stdout: string; stderr: string }>(
+      (resolve) =>
+        execFile(
+          "bun",
+          [
+            "--no-env-file",
+            fileURLToPath(new URL("./benchmark.ts", import.meta.url)),
+            ...args,
+            "--timeout-ms",
+            "10000",
+          ],
+          { env: { PATH: process.env.PATH, TUBELESS_TOKEN: token }, timeout: 12000 },
+          (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr })
+        )
+    );
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Missing replay address.");
+    const failed = await invoke(
+      "cloud",
+      trial,
+      "pass",
+      "--workspace",
+      workspace,
+      "--pipeline",
+      inspection.pipelineId,
+      "--host",
+      "http://127.0.0.1:" + address.port
+    );
+    expect(failed.code).toBe(2);
+    const [original] = await readSamples(trial, false);
+    expect(original).toMatchObject({
+      execution: { runId: inspection.id, outcome: "passed" },
+      observation: { state: "error", stage: "inspect" },
+    });
+    const receiptName = original.invocationId + ".inspection-error.json";
+    const receipt = await readFile(join(trial, receiptName), "utf8");
+    expect(JSON.parse(receipt)).toEqual({
+      version: 1,
+      invocationId: original.invocationId,
+      category: "cli-exit",
+      exitCode: 6,
+    });
+    expect(receipt + failed.stdout + failed.stderr).not.toContain(token);
+    expect(receipt + failed.stdout + failed.stderr).not.toContain("fixture detail");
+
+    const resumed = await invoke("resume", trial);
+    expect(resumed.code).toBe(0);
+    const records = await readSamples(trial, false);
+    const recovery = records.find(({ operation }) => operation === "resume");
+    expect(recovery).toMatchObject({
+      attemptId: original.attemptId,
+      target: original.target,
+      execution: { runId: inspection.id, identity: "verified", outcome: "passed" },
+      observation: { state: "observed", terminalMs: null },
+    });
+    expect(admissionKeys).toEqual([original.target?.idempotencyKey]);
+    expect(records.find(({ operation }) => operation === "start")).toEqual(original);
+    expect(
+      (await readdir(trial)).filter((file) => file.endsWith(".inspection-error.json"))
+    ).toEqual([receiptName]);
+    expect(summarize(records)).toMatchObject({ trials: 1, invocations: 2 });
+    expect(summarize(records).groups.every(({ eligible }) => eligible === 0)).toBe(true);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 it("preserves uncertain attempts and reuses the exact intent until a run ID is known", async () => {
   const capture = captures[0];
