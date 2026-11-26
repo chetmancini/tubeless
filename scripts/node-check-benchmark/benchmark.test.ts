@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, it, vi } from "vitest";
 import captures from "../fixtures/node-check-benchmark/c7-miniflare.json" with { type: "json" };
 import { runHosted, verifyCloudPrincipal } from "./cloud.ts";
@@ -223,19 +224,20 @@ it("retains a safe terminal inspection failure and resumes the original run in r
   const root = await mkdtemp(join(tmpdir(), "node-check-inspection-"));
   const trial = join(root, "trial");
   const invoke = (...args: string[]) =>
-    new Promise<{ code: number | string | undefined; stdout: string; stderr: string }>((resolve) =>
-      execFile(
-        "bun",
-        [
-          "--no-env-file",
-          "scripts/node-check-benchmark/benchmark.ts",
-          ...args,
-          "--timeout-ms",
-          "10000",
-        ],
-        { env: { PATH: process.env.PATH, TUBELESS_TOKEN: token }, timeout: 12000 },
-        (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr })
-      )
+    new Promise<{ code: number | string | null | undefined; stdout: string; stderr: string }>(
+      (resolve) =>
+        execFile(
+          "bun",
+          [
+            "--no-env-file",
+            fileURLToPath(new URL("./benchmark.ts", import.meta.url)),
+            ...args,
+            "--timeout-ms",
+            "10000",
+          ],
+          { env: { PATH: process.env.PATH, TUBELESS_TOKEN: token }, timeout: 12000 },
+          (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr })
+        )
     );
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -293,7 +295,7 @@ it("retains a safe terminal inspection failure and resumes the original run in r
     );
     await rm(root, { recursive: true, force: true });
   }
-}, 15000);
+});
 
 it("preserves uncertain attempts and reuses the exact intent until a run ID is known", async () => {
   const capture = captures[0];
