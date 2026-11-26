@@ -91,10 +91,14 @@ function terminal(run: CliRun) {
   return run.status;
 }
 
-function classify(run: CliRun): CloudSample["execution"]["outcome"] {
+function classify(
+  workload: CloudSample["workload"],
+  run: CliRun
+): CloudSample["execution"]["outcome"] {
   const status = terminal(run);
   if (isJsonObject(run) && run.interrupted === true && status === "failed") return "interrupted";
   return checkOutcome(
+    workload,
     status,
     run.diagnostics?.reports.find(({ artifact }) => artifact === "test.check-report.json")?.result
   );
@@ -197,7 +201,7 @@ export async function runHosted(
   await checkpoint();
   const observed = await call(["follow", runId, "--poll"], [0, 6, 7]);
   const observedAt = performance.now();
-  sample.execution.outcome = classify(observed);
+  sample.execution.outcome = classify(sample.workload, observed);
   if (sample.operation === "start") sample.observation.terminalMs = observedAt - start;
   sample.observation.stage = "inspect";
   await checkpoint();
@@ -210,6 +214,6 @@ export async function runHosted(
     sample.execution.identity = "mismatch";
     throw new Error("Cloud inspection conflicts with the observed run.");
   }
-  sample.execution.outcome = classify(inspected);
+  sample.execution.outcome = classify(sample.workload, inspected);
   await inspectIdentity(sample, inspected);
 }

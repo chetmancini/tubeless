@@ -1,4 +1,7 @@
-import type { CheckReportResult } from "../../dist/utilities/check-report.js";
+import {
+  checkReportCompleteness,
+  type CheckReportResult,
+} from "../../dist/utilities/check-report.js";
 
 export const variants = ["pass", "assertion-failure"] as const;
 export type Variant = (typeof variants)[number];
@@ -13,32 +16,85 @@ const revisions = {
   },
 };
 
+export const controlId = "portable-node-check-v1";
+const repository = "chetmancini/tubeless";
+
 export function workload(variant: Variant) {
   return {
-    id: "portable-node-check-v1" as const,
+    id: controlId as typeof controlId,
     variant,
-    repository: "chetmancini/tubeless",
+    repository,
     ...revisions[variant],
     lockfileDigest: "o6aigou_MMjFfEGoQYWUPbCeo0pHl3K73p-sP5qJkvo",
     planDigest: "sPrELDQ3XiH-aOApNno0cgz96krMppsK4_iavG71y70",
   };
 }
 
-export type Workload = ReturnType<typeof workload>;
+const representativeWorkloads = [
+  {
+    id: "vitepress-docs-v1",
+    commit: "40d9273a74c36cc69c848827641c08992fb74bee",
+    treeSha: "bb31ab12efb7971bc3f074f7be2c5cffbb2854cd",
+    lockfileDigest: "l5pRMLCS7CMSdYAolyEwaeUaRDXMv8isFaHVI2h-49M",
+    planDigest: "g50eExgXIvjF69dkB3T8zdQmPD3O1lXf_5l0QXPlHMA",
+    test: { file: "docs-build.test.js", title: "renders the upstream VitePress guide" },
+  },
+  {
+    id: "esbuild-source-map-v1",
+    commit: "ed5c9fee3590a4452c5f0e570c2520af4965b4ed",
+    treeSha: "33b7a2ee66d9ecccc00b7073b4359e7ed7e7bc77",
+    lockfileDigest: "kW8NqiSb2vsgadMEZkGbUoLyqPXHwUXMVwtYrgpoYfw",
+    planDigest: "8fpNpcEvoXCXJBREmTRMHmKuewEm_vbBQS9chxf83sI",
+    test: { file: "source-map.test.mjs", title: "passes upstream esbuild source-map verification" },
+  },
+] as const;
+
+export const workloadIds = [controlId, ...representativeWorkloads.map(({ id }) => id)] as const;
+type WorkloadId = (typeof workloadIds)[number];
+export type Workload = Omit<ReturnType<typeof workload>, "id"> & { id: WorkloadId };
+
+export function selectWorkload(id: string, variant: string): Workload | undefined {
+  const selected = variants.find((option) => option === variant);
+  if (!selected) return;
+  if (id === controlId) return workload(selected);
+  if (selected !== "pass") return;
+  const representative = representativeWorkloads.find((definition) => definition.id === id);
+  if (!representative) return;
+  const { test: _test, ...identity } = representative;
+  return { ...identity, repository, variant: selected };
+}
 
 export function expectedOutcome(variant: Variant) {
   return variant === "pass" ? "passed" : "assertion-failure";
 }
 
 export function checkOutcome(
+  identity: Workload,
   status: "completed" | "failed" | "cancelled",
   result: CheckReportResult | undefined
 ) {
-  if (status === "completed") return "passed";
+  const representative = representativeWorkloads.find(({ id }) => id === identity.id);
+  if (status === "completed" && !representative) return "passed";
   if (status === "cancelled") return "cancelled";
   if (result?.state !== "available") return "failed";
   const { report } = result;
   if (report.process?.status === "timed-out") return "timed-out";
+  if (representative) {
+    const [test] = report.tests;
+    return status === "completed" &&
+      checkReportCompleteness(report) === "complete" &&
+      report.process.exitCode === 0 &&
+      report.context.stepId === "test" &&
+      report.failures.length === 0 &&
+      report.tests.length === 1 &&
+      test?.file === representative.test.file &&
+      test.title === representative.test.title &&
+      !test.ambiguous &&
+      test.outcome === "passed" &&
+      test.failures.length === 0
+      ? "passed"
+      : "failed";
+  }
   if (
     report.completeness === "complete" &&
     report.process?.exitCode === 1 &&

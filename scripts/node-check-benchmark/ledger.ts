@@ -55,7 +55,7 @@ export function recoveryIntent(samples: Sample[], operation: "resume" | "replay"
       (sample) =>
         sample.mode !== "cloud" ||
         sample.attemptId !== attemptId ||
-        sample.workload.variant !== workload.variant ||
+        !isDeepStrictEqual(sample.workload, workload) ||
         !isDeepStrictEqual(sample.target, target)
     )
   )
