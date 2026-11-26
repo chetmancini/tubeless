@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import {
   createSteps,
   definePipeline,
@@ -16,6 +17,15 @@ type CommandRunner = (
   context: Pick<PipelineStepContext<object>, "cwd" | "signal" | "log">
 ) => Promise<CheckProcessOutcome>;
 
+type FileCheckRunner = {
+  stepId: string;
+  inventoryOnly: boolean;
+  run: (
+    command: Extract<NodeCheckCommand, { kind: "vitest" }>,
+    context: Parameters<CommandRunner>[1]
+  ) => Promise<{ process: CheckProcessOutcome; evidenceError?: string }>;
+};
+
 const PIPELINE_ID = "node-check";
 
 /** Schedule an already verified plan, with process admission owned by the caller. */
@@ -23,17 +33,20 @@ export async function executeNodeCheckPlan(
   plan: NodeCheckPlan,
   context: Partial<PipelineContext> & { cwd: string },
   run: CommandRunner,
-  dryRun?: boolean
+  dryRun?: boolean,
+  fileCheck?: FileCheckRunner
 ): Promise<NodeCheckExecution> {
   const { step } = createSteps();
   const steps = new Map<string, Step<string, CheckProcessOutcome, object>>();
   const commands: NodeCheckExecution["commands"] = [];
   const reports: NodeCheckExecution["reports"] = [];
   for (const command of plan.commands) {
+    const files =
+      command.kind === "vitest" && fileCheck?.stepId === command.id ? fileCheck : undefined;
     const report:
       | { toolVersion: string; entry: NodeCheckExecution["reports"][number] }
       | undefined =
-      command.kind === "vitest"
+      command.kind === "vitest" && !files?.inventoryOnly
         ? {
             toolVersion: command.report.version,
             entry: {
@@ -57,7 +70,9 @@ export async function executeNodeCheckPlan(
         dryRun: "skip",
         run: async (_inputs, ctx) => {
           if (report) await prepareCheckReport(ctx.cwd, report.entry.path);
-          const outcome = await run(command, ctx);
+          const observation =
+            files && command.kind === "vitest" ? await files.run(command, ctx) : undefined;
+          const outcome = observation?.process ?? (await run(command, ctx));
           commands.push({ id: command.id, process: outcome });
           if (report) {
             const file = await readCheckReportFile(ctx.cwd, report.entry.path);
@@ -65,7 +80,7 @@ export async function executeNodeCheckPlan(
               "result" in file
                 ? file.result
                 : vitestCheckReport(file.content, {
-                    root: ctx.cwd,
+                    root: observation ? await realpath(ctx.cwd) : ctx.cwd,
                     toolVersion: report.toolVersion,
                     context: {
                       pipelineId: PIPELINE_ID,
@@ -80,12 +95,14 @@ export async function executeNodeCheckPlan(
           if (outcome.status !== "exited" || outcome.exitCode !== 0)
             throw Object.assign(
               new Error(
-                `Native command ${command.id}: ${outcome.status} (${outcome.exitCode ?? outcome.signal ?? "unknown"}).`
+                `Native command ${command.id}: ${outcome.status} (${outcome.exitCode ?? outcome.signal ?? "unknown"}).${observation?.evidenceError ? ` ${observation.evidenceError}` : ""}`
               ),
               { code: "NATIVE_PROCESS_FAILED" }
             );
+          if (observation?.evidenceError) throw new Error(observation.evidenceError);
           const collected = report?.entry.result;
           if (
+            !observation &&
             collected &&
             (collected.state !== "available" ||
               collected.report.completeness !== "complete" ||
@@ -100,10 +117,15 @@ export async function executeNodeCheckPlan(
       })
     );
   }
-  const pipeline = definePipeline({ id: PIPELINE_ID, steps: [...steps.values()] });
+  const target = fileCheck?.inventoryOnly ? steps.get(fileCheck.stepId) : undefined;
+  const pipeline = definePipeline({
+    id: PIPELINE_ID,
+    steps: [...steps.values()],
+    ...(target ? { targets: [target] } : {}),
+  });
   const execution = await pipeline.run(
     {},
-    { maxConcurrency: plan.maxConcurrency, dryRun },
+    { maxConcurrency: plan.maxConcurrency, dryRun, ...(target ? { targets: [target.id] } : {}) },
     context
   );
   return { version: 1, run: execution, commands, reports };

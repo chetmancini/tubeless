@@ -8,7 +8,6 @@ import {
   DEFAULT_PIPELINE_PROJECT_FILE,
   loadPipelineProjectFile,
 } from "./workbench-project-loader.js";
-import { versionAtLeast } from "./workbench-runtime.js";
 import {
   errorMessage,
   TUBELESS_WORKBENCH_EXIT_CODE,
@@ -26,8 +25,11 @@ interface ScaffoldTarget {
   readonly description: string;
   /** Existing paths that block scaffolding although init would not write them, with a fix hint. */
   readonly conflictsWith?: readonly { readonly path: string; readonly hint: string }[];
-  /** Node version the target's tooling needs; init warns (does not fail) below it. */
-  readonly minimumNode?: { readonly version: string; readonly reason: string };
+  /** Init warns when the target's tooling requires a different Node version. */
+  readonly nodeRequirement?: {
+    readonly supports: (version: string) => boolean;
+    readonly label: string;
+  };
   readonly nextSteps: readonly string[];
 }
 
@@ -137,9 +139,10 @@ async function writeScaffold(
     return TUBELESS_WORKBENCH_EXIT_CODE.usage;
   }
   const node = process.versions.bun === undefined ? process.versions.node : undefined;
-  if (target.minimumNode && node && !versionAtLeast(node, target.minimumNode.version)) {
+  const requirement = target.nodeRequirement;
+  if (requirement && node && !requirement.supports(node)) {
     io.stderr.write(
-      `Warning: Node ${node} is older than ${target.minimumNode.version}; ${target.minimumNode.reason}.\n`
+      `Warning: ${target.id} tooling requires ${requirement.label}. Found Node.js ${node}.\n`
     );
   }
   const created: string[] = [];

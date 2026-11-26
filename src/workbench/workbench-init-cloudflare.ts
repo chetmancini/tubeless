@@ -46,13 +46,26 @@ function projectImport(projectExport: string, specifier: string): string {
  * `@cloudflare/vite-plugin`, so all three are required and pinned together.
  */
 export const CLOUDFLARE_DEV_DEPENDENCIES = {
-  cf: "1.0.0-rc.4",
+  cf: "1.0.0-rc.6",
   vite: "8.3.8",
   "@cloudflare/vite-plugin": "2.0.0-rc.3",
 } as const;
 
 export const CLOUDFLARE_REMOTE_SETTINGS = "cloudflare/remote.json";
-export const CLOUDFLARE_MINIMUM_NODE = "22.12.0";
+export const CLOUDFLARE_NODE_REQUIREMENT = "Node.js 22.23+, 24.22+, or 26.12+";
+
+const cloudflareNodeMinimumMinor: Readonly<Record<string, number | undefined>> = {
+  22: 23,
+  24: 22,
+  26: 12,
+};
+
+export function supportsCloudflareNode(version: string): boolean {
+  const match = /^v?(\d+)\.(\d+)\.\d+$/.exec(version);
+  if (!match) return false;
+  const minimum = cloudflareNodeMinimumMinor[match[1]];
+  return minimum !== undefined && Number(match[2]) >= minimum;
+}
 
 export interface CloudflareRemoteSettings {
   name: string;
@@ -161,14 +174,14 @@ export default defineConfig(() => {
       path,
       hint: "Vite loads only one config file: rename it, run init again, then add cloudflare() from @cloudflare/vite-plugin to your config (see the Cloudflare guide).",
     })),
-    minimumNode: {
-      version: CLOUDFLARE_MINIMUM_NODE,
-      reason: "cf needs Node 22 or later and Vite 8 needs Node 22.12 or later",
+    nodeRequirement: {
+      supports: supportsCloudflareNode,
+      label: CLOUDFLARE_NODE_REQUIREMENT,
     },
     nextSteps: remote
       ? []
       : [
-          "node --version   # cf and Vite 8 need Node 22.12 or later",
+          `node --version   # cf requires ${CLOUDFLARE_NODE_REQUIREMENT}`,
           `bun add tubeless && bun add -d --exact ${devDependencyInstall}   # npm install -D -E … / pnpm add -D -E …`,
           "grep -qxF '.cloudflare/' .gitignore 2>/dev/null || printf '\\n.cloudflare/\\n' >> .gitignore   # cf build output and generated types",
           "npx cf auth login",

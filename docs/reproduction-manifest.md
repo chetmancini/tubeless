@@ -46,7 +46,12 @@ Normalized reports contain repository-produced diagnostic text.
 V1 covers the [portable Node check recipe](./node-check-recipe.md) for secretless
 single-package checks using the default public npm registry. Cloud environment
 settings, caches, private registries and other recipe types are outside this
-contract.
+contract. V1 represents the original full invocation. The local
+[Vitest file request](./node-check-recipe.md#discover-and-select-vitest-files)
+has a separate version and digest. V1 rejects extra fields, including file
+requests. A future manifest for file-aware runs must use a new version and bind
+the request, context and source identity before execution. Cloud must withhold
+v1 export for those runs.
 
 ## Cloud producer handoff
 

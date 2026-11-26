@@ -120,4 +120,150 @@ manifest API and reproduction command.
 
 Cloud rollout still requires its outbound-network, abuse and enrollment gates.
 Additional package managers and languages, private registries, caches, service
-containers, test selection and sharding remain outside the recipe.
+containers and sharding remain outside the recipe.
+
+## Discover and select Vitest files
+
+Use `runNodeCheckFiles(plan, context, request)` from `tubeless/node/check` on a
+trusted checkout. This call runs the frozen install and the configured
+prerequisites before loading Vitest configuration in the same kind of bounded
+subprocess used for the check. `readNodeCheckPlan`, request decoding, dry runs,
+manifest parsing, and downloads remain passive.
+
+Save this as `scripts/check-files.ts` in a recipe repository with a Vitest step
+named `test` and an installed Tubeless package:
+
+```ts
+import { decodeNodeCheckFileRequest } from "tubeless/check-plan";
+import { readNodeCheckPlan, runNodeCheckFiles } from "tubeless/node/check";
+
+const cwd = process.cwd();
+const [mode, ...files] = process.argv.slice(2);
+const request = decodeNodeCheckFileRequest({
+  version: 1,
+  stepId: "test",
+  mode,
+  ...(mode === "selected" || files.length ? { files } : {}),
+});
+const result = await runNodeCheckFiles(
+  await readNodeCheckPlan(cwd),
+  {
+    cwd,
+    log: { log: console.error, warn: console.error, error: console.error },
+  },
+  request
+);
+console.log(JSON.stringify(result, null, 2));
+process.exitCode =
+  result.fileCheck.outcome === "inventory-complete" ||
+  result.fileCheck.outcome === "subset-passed" ||
+  result.fileCheck.outcome === "full-passed"
+    ? 0
+    : 1;
+```
+
+```sh
+node scripts/check-files.ts inventory
+node scripts/check-files.ts selected spec/check.case.js spec/archive.case.js
+node scripts/check-files.ts full
+```
+
+| Request mode | What runs                                                                                                          | Successful `fileCheck.outcome`                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `inventory`  | The named Vitest step discovers files after its required prerequisites. The named step stops before running tests. | `inventory-complete`                                                                |
+| `selected`   | The full check graph, with exact file selection at the named Vitest step.                                          | `subset-passed`, even when the requested set happens to cover every discovered file |
+| `full`       | The full check graph, with full file evidence at the named Vitest step.                                            | `full-passed`                                                                       |
+
+Installation, type checks, and other configured prerequisites keep their
+existing dependency ordering. The named Vitest check runs configured global
+setup and setup files when it runs tests. A different Vitest step follows the
+original recipe if it runs as a prerequisite or another check. The original
+`runNodeCheck` entry point keeps its v1 execution and diagnostic rules.
+
+### File and evidence contract
+
+Discovery uses Vitest 5.1.0's configured specification selection, the same
+selection used by `vitest list --filesOnly`. It respects the resolved Vitest or
+Vite configuration, including `include`, `exclude`, and the configured test
+directory. Selection uses the discovered specification objects keyed by exact
+path. The Vitest CLI's positional filters use substring matching.
+[Vitest CLI discovery](https://vitest.dev/guide/cli.html#vitest-list) ·
+[Vitest specification API](https://vitest.dev/api/advanced/vitest#getrelevanttestspecifications)
+
+- File identities are repository-relative POSIX paths sorted by UTF-16 code unit.
+  Paths must match exactly. Absolute paths, empty and dot segments, traversal,
+  backslashes, colons, control characters, and ill-formed Unicode are invalid.
+  Duplicate identities, including case or Unicode-normalization collisions, fail
+  the request or discovery. Discovered files must be regular files beneath the
+  real source root, with no symlink at the file or in its path.
+- The limit is 4,096 files, 1,024 UTF-8 bytes per path, and 512 KiB for the
+  serialized file list. Exceeding a limit fails explicitly. Discovery either
+  returns the complete list or leaves `fileCheck.inventory` null.
+- An inventory can be empty. A selected request requires at least one file.
+  Invalid requests fail before execution. Unknown files fail after discovery,
+  before any test runs at the named step. A file-aware full run with no files
+  fails even when Vitest enables `passWithNoTests`.
+- Browser and Vitest typecheck projects, shard/changed/related/last-failed
+  filters, experimental pre-parsing, report merging, standalone, cache-clearing
+  and tag-listing modes are unsupported in the file-aware contract. The contract
+  uses Vitest's default file sequencer and built-in Node pools. Custom file
+  sequencers, file shuffling, runners and pools are unsupported. Distinct
+  configured projects can use it when every test file has a unique path.
+
+`fileCheck.inventory` is version 1. It records the complete ordered file list,
+step ID, base plan digest, observed `bun.lock` digest, exact Node, Bun and Vitest
+versions, OS and architecture, and the primary config path and digest when
+present. The config digest covers the primary file. Imported config, plugin
+behavior, and environment inputs can affect resolution. Local commit and Git
+tree identity are null because a working tree can contain edits and untracked
+files. The inventory describes one invocation in one checkout.
+
+`fileCheck.request` records the normalized v1 request and
+`fileCheck.requestDigest` hashes canonical JSON of `{ planDigest, request }`.
+`fileCheck.inventoryDigest` hashes the complete inventory with the same canonical
+JSON and SHA-256/base64url encoding as the v1 plan. Those digest helpers and
+`decodeNodeCheckFileRequest` are data-only exports from `tubeless/check-plan`.
+The base plan and its digest retain their existing format. Each file-aware
+invocation rediscovers the files before running the request.
+
+`fileCheck.execution` records Vitest module completions independently of the
+diagnostic JSON. A successful file-aware check requires a zero native exit, a
+completed Vitest run, exact coverage of the requested file set, and at least one
+passing test case. An explicitly skipped file can appear as `skipped`. Missing
+or invalid evidence, a different observed file set, and failed prerequisites
+prevent a pass. A dry run reports `not-run`. The bounded diagnostic projection
+can omit tests while the inventory and file evidence remain complete.
+[Vitest reporter lifecycle](https://vitest.dev/api/advanced/reporters#ontestmoduleend)
+
+### Cloud C8a and O8b/C8b handoff
+
+Use `fileCheck.inventory` and `inventoryDigest` to establish the file cohort.
+Join `fileCheck.execution.files` by exact `path`, scoped to that inventory and
+`stepId`. For timing samples, retain `state` and nullable `durationMs` from
+Vitest's `TestModule.diagnostic().duration`. This is test and hook time in
+milliseconds. It excludes install, global setup, module collection, and worker
+startup. Use complete successful runs for baseline samples. Preserve null
+timings as unknown and keep the native process outcome and scope label with
+each sample. Keep any Cloud image, resource class, repository, commit and tree
+identity from the same admitted and verified run. A local inventory digest by
+itself cannot establish source provenance or timing comparability. Validate
+version, limits, and digests before ingestion. Ingest idempotently using run
+ID, step ID, and file path, and apply the existing tenant, pipeline, read
+authorization, and retention boundaries.
+[Vitest module diagnostics](https://vitest.dev/api/advanced/test-module#diagnostic)
+
+The Cloud CLI and hosted admission currently accept legacy plan v1 only.
+Before accepting file-aware requests, Cloud needs a runner capability that
+explicitly supports file-request v1 and a strict admission envelope. Reject
+unknown capabilities, versions, and fields before dispatch. Bind the exact
+canonical request and its digest to the approved base plan, verified source,
+image, and run identity. Retain native status and independently require exact
+completion evidence. Gate the UI and CLI on the capability. A file-aware run
+is ineligible for reproduction manifest v1.
+
+O8b can consume a complete validated inventory and compatible file timings
+once its partitioning contract is ready. C8b needs the bound inventory
+identity at dispatch and must fail closed if rediscovery shows drift. An
+aggregate full pass requires successful execution and complete, disjoint
+coverage of the same inventory plus the required check prerequisites. A
+single `subset-passed` result carries only its requested scope.

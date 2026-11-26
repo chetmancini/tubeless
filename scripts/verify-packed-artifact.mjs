@@ -467,14 +467,19 @@ try {
   assertPackedLauncher(installedPackage, tubelessBin, consumerRoot);
   assertPackedExecutable(tubelessBin, installedPackage, consumerRoot);
   assertPackedInit(tubelessBin, consumerRoot);
-  if (process.platform !== "win32" && nodeMajor === 24)
-    process.stdout.write(
-      run(
-        process.execPath,
-        [join(packageRoot, "scripts/fixtures/packed-reproduction.mjs"), tubelessBin],
-        consumerRoot
-      )
-    );
+  if (process.platform !== "win32" && nodeMajor === 24) {
+    const fixtures = ["packed-reproduction.mjs"];
+    if (run("bun", ["--version"], consumerRoot).trim() === "1.4.4")
+      fixtures.push("packed-node-check-files.mjs");
+    for (const fixture of fixtures)
+      process.stdout.write(
+        run(
+          process.execPath,
+          [join(packageRoot, "scripts/fixtures", fixture), tubelessBin],
+          consumerRoot
+        )
+      );
+  }
   run(
     process.execPath,
     [join(packageRoot, "scripts/fixtures/packed-cloud-check.mjs"), tubelessBin],

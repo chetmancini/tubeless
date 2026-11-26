@@ -9,5 +9,5 @@ export default defineProject("tubeless-examples", [ValidatedPipeline], {
   description: "Import rows with schema-derived CLI flags and Studio forms.",
 });
 
-// Native repository checks use the separate optional Node recipe in node-check.ts;
-// keep process execution out of Worker-compatible project discovery.
+// Use the optional Node recipe in node-check.ts to run repository checks or
+// discover and select Vitest files explicitly. Project discovery stays passive.

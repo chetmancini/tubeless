@@ -4,7 +4,8 @@ import { isJsonObject } from "../../utilities/canonical-json.js";
 import {
   CLOUDFLARE_DEV_DEPENDENCIES,
   CLOUDFLARE_REMOTE_SETTINGS,
-  CLOUDFLARE_MINIMUM_NODE,
+  CLOUDFLARE_NODE_REQUIREMENT,
+  supportsCloudflareNode,
   createCloudflareScaffold,
   defaultCloudflareWorkerName,
   type CloudflareRemoteSettings,
@@ -20,7 +21,6 @@ import {
 } from "./cloudflare.js";
 import { remoteNames } from "./profiles.js";
 import { remoteProcess } from "./process.js";
-import { versionAtLeast } from "../workbench-runtime.js";
 
 async function readSettings(file: string): Promise<CloudflareRemoteSettings | undefined> {
   const contents = await readFile(file, "utf8").catch((error: unknown) => {
@@ -161,8 +161,8 @@ export async function createCloudflareRemote(
 
   const run = remoteProcess(options);
   const node = (await run("node", ["--version"]).catch(() => "")).trim();
-  if (!/^v\d+\.\d+\.\d+/.test(node) || !versionAtLeast(node, CLOUDFLARE_MINIMUM_NODE))
-    throw new Error(`Cloudflare deployment needs Node.js ${CLOUDFLARE_MINIMUM_NODE} or newer.`);
+  if (!supportsCloudflareNode(node))
+    throw new Error(`Cloudflare deployment requires ${CLOUDFLARE_NODE_REQUIREMENT}.`);
   try {
     await run("cloudflared", ["--version"]);
   } catch {

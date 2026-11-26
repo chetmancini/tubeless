@@ -394,14 +394,21 @@
     {
       "declaration": "./dist/utilities/node-check-plan.d.ts",
       "exports": [
+        "decodeNodeCheckFileRequest",
         "decodeNodeCheckPlan",
+        "digestNodeCheckFileInventory",
+        "digestNodeCheckFileRequest",
         "isNodeCheckReportPath",
+        "NODE_CHECK_FILE_LIMITS",
         "NodeCheckCommand",
         "NodeCheckConfig",
+        "NodeCheckFileCompletion",
+        "NodeCheckFileInventory",
+        "NodeCheckFileRequest",
         "NodeCheckPlan",
         "resolveNodeCheckPlan"
       ],
-      "sha256": "23fef204664df9348fcfab6d1d87dd782f58d75cd9b61a868793d246ba80fb10",
+      "sha256": "f3694ae17cf590249ea13610fc01bd6ef646b8fade387f80bbda6241f9046d3f",
       "specifier": "tubeless/check-plan"
     },
     {
@@ -413,13 +420,19 @@
         "REPRODUCTION_MANIFEST_MAX_BYTES",
         "ReproductionManifest"
       ],
-      "sha256": "2825c1d3fcbaa6c456f6cb20d078990b10170d2f14520c64cbfeaecb5743b30f",
+      "sha256": "c978cd3bff16e7a79b01b449759e93915c1e16ebadf62d01e00f1f9045314a4a",
       "specifier": "tubeless/reproduction-manifest"
     },
     {
       "declaration": "./dist/check/node-check.d.ts",
-      "exports": ["NodeCheckExecution", "readNodeCheckPlan", "runNodeCheck"],
-      "sha256": "ea29e2bbed95041065efa80c2b245a495b3c22ba0f654d296bb9244efcf928f8",
+      "exports": [
+        "NodeCheckExecution",
+        "NodeCheckFileExecution",
+        "readNodeCheckPlan",
+        "runNodeCheck",
+        "runNodeCheckFiles"
+      ],
+      "sha256": "d0e9cab6c061d104bbbabe9b2c5a2845b8d21bba7fcf5534e6eb621159d13ed6",
       "specifier": "tubeless/node/check"
     }
   ],
