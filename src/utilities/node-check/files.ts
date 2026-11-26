@@ -1,8 +1,10 @@
 import { digestCanonicalJson, isJsonObject } from "../canonical-json.js";
+import { exactFields, isDigest } from "./data.js";
 
 /** Exact file selectors for one configured Vitest step. */
 export type NodeCheckFileRequest = { version: 1; stepId: string } & (
-  | { mode: "inventory" | "full"; files?: never }
+  | { mode: "inventory"; files?: never }
+  | { mode: "full"; files?: never }
   | { mode: "selected"; files: readonly string[] }
 );
 
@@ -33,6 +35,11 @@ export const NODE_CHECK_FILE_LIMITS = Object.freeze({
   listBytes: 512 * 1024,
 } as const);
 const utf8 = new TextEncoder();
+const stepIdPattern = /^[a-z][a-z0-9-]{0,47}$/;
+const gitSha = (value: unknown): value is string | null =>
+  value === null || (typeof value === "string" && /^[a-f0-9]{40}$/.test(value));
+const systemId = (value: unknown): value is string =>
+  typeof value === "string" && /^[a-z0-9_]{1,24}$/.test(value);
 
 export function isNodeCheckFilePath(value: unknown): value is string {
   return (
@@ -70,7 +77,7 @@ export function decodeNodeCheckFileRequest(value: unknown): NodeCheckFileRequest
     !isJsonObject(value) ||
     value.version !== 1 ||
     typeof value.stepId !== "string" ||
-    !/^[a-z][a-z0-9-]{0,47}$/.test(value.stepId) ||
+    !stepIdPattern.test(value.stepId) ||
     Object.keys(value).some((key) => !["version", "stepId", "mode", "files"].includes(key))
   )
     throw new TypeError("Invalid or unsupported Node check file request.");
@@ -80,8 +87,10 @@ export function decodeNodeCheckFileRequest(value: unknown): NodeCheckFileRequest
     if (!files.length) throw new TypeError("Select at least one Vitest file.");
     return { version: 1, stepId, mode, files };
   }
-  if ((mode === "inventory" || mode === "full") && !Object.hasOwn(value, "files"))
-    return { version: 1, stepId, mode };
+  if (!Object.hasOwn(value, "files")) {
+    if (mode === "full") return { version: 1, stepId, mode };
+    if (mode === "inventory") return { version: 1, stepId, mode };
+  }
   throw new TypeError("Invalid Node check file request mode or file list.");
 }
 
@@ -98,4 +107,73 @@ export async function digestNodeCheckFileInventory(
   inventory: NodeCheckFileInventory
 ): Promise<string> {
   return digestCanonicalJson(inventory);
+}
+
+/** Validate a complete v1 inventory, preserving source provenance and canonicalizing file order. */
+export function decodeNodeCheckFileInventory(value: unknown): NodeCheckFileInventory {
+  const { version, complete, files, stepId, planDigest, source, toolchain, configuration } =
+    exactFields(
+      value,
+      [
+        "version",
+        "complete",
+        "files",
+        "stepId",
+        "planDigest",
+        "source",
+        "toolchain",
+        "configuration",
+      ],
+      "Vitest file inventory"
+    );
+  if (
+    version !== 1 ||
+    complete !== true ||
+    typeof stepId !== "string" ||
+    !stepIdPattern.test(stepId) ||
+    !isDigest(planDigest)
+  )
+    throw new TypeError("Expected a complete v1 Vitest file inventory.");
+  const { commit, treeSha, lockfileDigest } = exactFields(
+    source,
+    ["commit", "treeSha", "lockfileDigest"],
+    "inventory source"
+  );
+  if (!gitSha(commit) || !gitSha(treeSha) || !isDigest(lockfileDigest))
+    throw new TypeError("Invalid Vitest inventory source.");
+  const { node, bun, vitest, platform, arch } = exactFields(
+    toolchain,
+    ["node", "bun", "vitest", "platform", "arch"],
+    "inventory toolchain"
+  );
+  if (
+    typeof node !== "string" ||
+    !/^24\.[0-9]{1,8}\.[0-9]{1,8}$/.test(node) ||
+    bun !== "1.4.4" ||
+    vitest !== "5.1.0" ||
+    !systemId(platform) ||
+    !systemId(arch)
+  )
+    throw new TypeError("Unsupported Vitest inventory toolchain.");
+  let primaryConfig: NodeCheckFileInventory["configuration"] = null;
+  if (configuration !== null) {
+    const { path, digest } = exactFields(
+      configuration,
+      ["path", "digest"],
+      "inventory primary configuration"
+    );
+    if (!isNodeCheckFilePath(path) || !isDigest(digest))
+      throw new TypeError("Invalid Vitest inventory configuration.");
+    primaryConfig = { path, digest };
+  }
+  return {
+    version,
+    complete,
+    files: normalizeNodeCheckFiles(files),
+    stepId,
+    planDigest,
+    source: { commit, treeSha, lockfileDigest },
+    toolchain: { node, bun, vitest, platform, arch },
+    configuration: primaryConfig,
+  };
 }

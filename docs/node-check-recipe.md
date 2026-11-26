@@ -120,7 +120,7 @@ manifest API and reproduction command.
 
 Cloud rollout still requires its outbound-network, abuse and enrollment gates.
 Additional package managers and languages, private registries, caches, service
-containers and sharding remain outside the recipe.
+containers and Vitest's built-in sharding remain outside the recipe.
 
 ## Discover and select Vitest files
 
@@ -261,9 +261,173 @@ image, and run identity. Retain native status and independently require exact
 completion evidence. Gate the UI and CLI on the capability. A file-aware run
 is ineligible for reproduction manifest v1.
 
-O8b can consume a complete validated inventory and compatible file timings
-once its partitioning contract is ready. C8b needs the bound inventory
-identity at dispatch and must fail closed if rediscovery shows drift. An
-aggregate full pass requires successful execution and complete, disjoint
-coverage of the same inventory plus the required check prerequisites. A
-single `subset-passed` result carries only its requested scope.
+Use the [partition contract](#plan-and-run-local-vitest-partitions)
+for deterministic assignment and exact local coverage. See its
+[Cloud C8b admission and transport](#cloud-c8b-admission-and-transport)
+requirements for hosted support.
+
+## Plan and run local Vitest partitions
+
+Use the [same trusted checkout](#discover-and-select-vitest-files) for discovery
+and execution. The packed fixture uses Node 24, Bun 1.4.4, and Vitest 5.1.0.
+This example plans two partitions for the full inventory of the check named
+`test`. Each partition runs serially inside that one check step.
+
+```ts
+import { planNodeCheckPartitions } from "tubeless/check-plan";
+import { readNodeCheckPlan, runNodeCheckFiles, runNodeCheckPartitions } from "tubeless/node/check";
+
+const cwd = process.cwd();
+const context = { cwd, log: { log: console.error, warn: console.error, error: console.error } };
+const plan = await readNodeCheckPlan(cwd);
+const baseRequest = { version: 1, stepId: "test" } as const;
+const { fileCheck } = await runNodeCheckFiles(plan, context, { ...baseRequest, mode: "inventory" });
+if (fileCheck.outcome !== "inventory-complete" || !fileCheck.inventory)
+  throw new Error("Expected a complete Vitest inventory.");
+
+const assignment = await planNodeCheckPartitions(
+  fileCheck.inventory,
+  { ...baseRequest, mode: "full" },
+  { partitions: 2 }
+);
+const result = await runNodeCheckPartitions(plan, context, assignment);
+console.log(JSON.stringify(result, null, 2));
+process.exitCode = result.partitionCheck.outcome === "full-passed" ? 0 : 1;
+```
+
+Use `{ ...baseRequest, mode: "selected", files: ["spec/check.case.js", "spec/archive.case.js"] }`
+for an explicit subset. Check for `subset-passed` when using that request, even if
+its files cover the entire inventory. A script using the example can run under
+`node scripts/check-partitions.ts`. Pass an AbortSignal in the context to cancel
+the run. `{ dryRun: true }` executes no check commands and returns `not-run`.
+
+### Partition contract and estimates
+
+`tubeless/check-plan` exports the data-only `decodeNodeCheckFileInventory`,
+`planNodeCheckPartitions`, `decodeNodeCheckPartitionPlan`,
+`digestNodeCheckPartitionPlan`, `digestNodeCheckPartitionTimingContext`, and
+`verifyNodeCheckPartitionCoverage`. These work in a Cloud Worker. The planner
+and decoder require a complete v1 inventory and the O8a request for the same
+step. They return canonical v1 JSON with these fields.
+
+| Field                                  | Value                                                                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `version`                              | Integer `1`                                                                                                                          |
+| `inventory`, `inventoryDigest`         | Complete canonical O8a inventory and its exact digest, including nullable source identity                                            |
+| `request`, `requestDigest`             | Normalized O8a `full` or `selected` request and its digest bound to the base plan                                                    |
+| `timingContext`, `timingContextDigest` | Optional producer-verified context and its digest, with `null` for unknown                                                           |
+| `partitions`                           | Ascending one-based `id`, aggregate `estimatedMs`, and path-sorted `files` containing `path`, `estimatedMs`, and estimate provenance |
+
+The canonical plan digest uses SHA-256/base64url over recursively key-sorted
+JSON. The decoder verifies the identity digests, exact cohort membership and
+assignment. Bounds are the O8a file/path limits, 1–16 nonempty partitions, and
+4 MiB for the canonical plan. An empty cohort, invalid files, path collisions,
+unknown members, or a partition count greater than the cohort size fails
+explicitly. The cohort always covers the exact requested files.
+
+Estimate from at most 8,192 observations with finite durations from zero to
+86,400,000 milliseconds, or `null` for unavailable. Observations outside the
+cohort contribute no weight. To use a sample, provide these three verified
+SHA-256/base64url digests through `timingContext`.
+
+- `sourceDigest` identifies the exact verified snapshot. For Cloud, bind the
+  authorized repository and connection scope, admitted commit, and tree.
+- `configurationDigest` identifies effective Vitest configuration, including
+  imported and generated inputs that affect discovery and execution. The O8a
+  primary configuration file digest covers only that file.
+- `environmentDigest` identifies the effective execution environment, including
+  policy and recipe revision, image, resource class, runtime, and environment
+  inputs that affect the check. Record safe digests from verified context.
+
+The timing context digest binds those fields to the complete O8a inventory,
+which includes step, plan, lockfile and toolchain identities. A caller that
+cannot verify all three digests uses no timing context. The planner treats
+producer claims as scheduling inputs. The local check verifies the available
+O8a identity and the base plan. Attestations about effective configuration,
+environment, and source contents come from their owner. A local inventory
+with unknown commit and tree cannot detect edits that leave discovery and its
+recorded context unchanged.
+
+Require an exact path and context digest, a non-null duration, and
+`eligible: true` and `identity: "unique-specification"` from the producer.
+Eligibility means a passing file with complete, accepted evidence and a
+successful native run. Prefer `vitest-module-tests-and-hooks` over
+`sum-of-final-test-durations`. A C8a `report-path` row needs independent
+unique-specification evidence and verified timing context before it qualifies.
+For the preferred available metric, use the largest compatible observation,
+breaking a tie by lexicographically smallest sample ID. Round the duration up
+to whole milliseconds and retain zero. Record the metric and sample ID. For
+missing, incompatible, or unusable observations use the greater of 1,000 ms
+and the largest compatible estimate in the cohort, recording the fallback
+reason.
+
+Assign files in descending weight, breaking ties by UTF-16 path order. Assign
+each file to the partition with the lowest current weight, then the fewest
+files, then the lowest ID. Sort files within each partition for transport.
+Equivalent input orders produce the same assignment and digest. Weights are
+estimates for planning.
+
+### Local execution and coverage
+
+Execute one base graph. Install and required prerequisite checks run once.
+Each partition gets a fresh Vitest process with the configured setup and
+worker settings. Serial partition dispatch keeps Vitest's internal workers
+within one partition at a time. The existing check deadline covers the
+partitioned step. Before each partition may dispatch tests, re-read the base
+plan and rediscover the O8a inventory in the process using its resolved
+configuration. Abort on any digest mismatch. Local execution requires an
+inventory with local source provenance. A trusted hosted source identity
+belongs to the hosted job and must be verified there. Vitest coverage
+instrumentation and threshold aggregation are unsupported in partitioned v1.
+
+`partitionCheck` records `version`, the base `planDigest`, the
+`partitionPlanDigest`, the `inventoryDigest`, the original `request` and
+`requestDigest`, `outcome`, and `coverageComplete`. The `evidence` array
+retains attempted partitions. Each record has the partition `id`, the exact
+O8a selected-request `requestDigest` for its members, rediscovered
+`inventoryDigest` or null, launcher-observed `process`, and the O8a
+`execution` record or null. Diagnostic `reports` are independently bounded
+and keyed by partition ID. Other graph commands and reports retain their
+original results.
+
+Coverage requires one unique terminal record per partition, zero native exit,
+matching digests and exact file completions. An explicitly skipped file is
+visible and at least one test must pass per partition. Failure or interruption
+stops further partition dispatch. Missing, extra, duplicate, clipped or
+unverifiable completion evidence prevents accepted coverage. Log truncation
+and bounded diagnostic truncation are independent of file evidence. Required
+downstream checks run once after accepted coverage. `coverageComplete`
+describes the named Vitest step. `full-passed` requires full mode, accepted file
+coverage and successful completion of all required checks. A failed downstream
+check produces `failed` even when file coverage is complete.
+
+### Cloud C8b admission and transport
+
+Cloud must advertise a partition capability with explicit v1 support and
+reject unknown versions and fields at admission. Bind the original mode,
+canonical partition plan digest, base plan and inventory and per-partition
+request digests in the durable job. Include the partition plan digest in
+native idempotency identity. Resolve Cloud policy and the base plan independently
+and verify repository, connection lifetime, PR or branch trust scope, commit,
+tree, lockfile, image and resource class. The exact O8a inventory digest
+includes its original nullable fields. Verify GitHub source separately and
+carry that identity in the trusted admission. Keep both identities intact.
+
+C8b must recompute discovery and available effective configuration and
+environment identity after prerequisites and before each dispatch. Bind
+evidence to the admitted plan, run, attempt and fenced generation. Require
+both the outer supervisor's native result and each partition's launcher-observed
+exit or signal. The module completions are guest observations. Require a unique
+terminal record for every partition under that same run and attempt and
+verified successful results for the rest of the DAG. Apply the same coverage
+verifier at settlement and keep `subset-passed` distinct from `full-passed`.
+V1 has no hidden partition retries.
+
+Declare smaller hosted byte/count caps and reject overflow explicitly on
+admission or evidence collection. The existing 68 KiB native start body,
+16,000-byte base64 job header and 96 KiB diagnostic frame cannot carry the
+full OSS profile. To support it, use a separate bounded private manifest and
+evidence channel with size and digest bound to the admitted job and attempt.
+Carry the rediscovery digest once per partition record. Keep coverage evidence
+outside diagnostic and log clipping limits. V1 reproduction export is
+unavailable for either partitioned mode.

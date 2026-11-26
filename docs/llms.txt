@@ -30,6 +30,7 @@ Guides:
 - Download retained Cloud artifacts or a reproduction manifest: ./cli.md#download-retained-files
 - Follow an existing Cloud run or resume after a disconnect: ./cli.md#follow-and-read-results
 - Discover and select Vitest files locally: ./node-check-recipe.md#discover-and-select-vitest-files
+- Plan and run local Vitest partitions: ./node-check-recipe.md#plan-and-run-local-vitest-partitions
 - Reproduce a pinned Cloud Node check: ./reproduction-manifest.md
 - Local Studio and gateway hosting: ./studio.md
 - YAML and JSON pipelines: ./declarative-pipelines.md

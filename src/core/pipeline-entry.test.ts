@@ -101,6 +101,15 @@ function* reachableFiles(entries: readonly string[]): IterableIterator<string> {
 }
 
 describe("module runtime boundaries", () => {
+  it("keeps portable check planning and reproduction data free of platform dependencies", () => {
+    for (const file of reachableFiles([
+      "utilities/node-check-plan.js",
+      "utilities/reproduction-manifest.js",
+    ])) {
+      expect(moduleName(file)).toBe("utilities");
+      expect(externalSpecifiers(file), relative(dist, file)).toEqual([]);
+    }
+  });
   it("keeps the optional Node recipe outside core and within its execution adapters", () => {
     for (const file of reachableFiles(["check/node-check.js"])) {
       expect(["check", "core", "node", "tracing", "utilities"]).toContain(moduleName(file));

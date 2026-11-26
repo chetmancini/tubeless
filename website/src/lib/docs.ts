@@ -22,7 +22,7 @@ export const DOC_NAV = [
   { slug: "step-output-recovery", label: "Step output recovery", blurb: "Restore saved raw outputs across host restarts with compatibility checks and business idempotency." },
   { slug: "execution-journal", label: "Execution journals", blurb: "Recover acknowledged work with host-owned storage and stable logical identities." },
   { slug: "artifacts", label: "Artifacts", blurb: "Load, save, and trace typed artifacts with dry-run safety." },
-  { slug: "node-check-recipe", label: "Portable Node checks", blurb: "Run Node/Bun check gates, discover Vitest files, and select exact paths." },
+  { slug: "node-check-recipe", label: "Portable Node checks", blurb: "Run Node/Bun check gates and plan local Vitest file partitions." },
   { slug: "reproduction-manifest", label: "Reproduce a Cloud check", blurb: "Rerun an eligible Node/Bun check from its pinned source and plan." },
   { slug: "structured-diagnostics", label: "Structured failures", blurb: "Inspect bounded Vitest reports and preserve framework errors across machine interfaces." },
   { slug: "graph-metadata", label: "Graph metadata", blurb: "Describe ownership, tags, and annotations; query graphs without changing execution." },

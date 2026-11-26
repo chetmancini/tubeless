@@ -394,21 +394,32 @@
     {
       "declaration": "./dist/utilities/node-check-plan.d.ts",
       "exports": [
+        "decodeNodeCheckFileInventory",
         "decodeNodeCheckFileRequest",
+        "decodeNodeCheckPartitionPlan",
         "decodeNodeCheckPlan",
         "digestNodeCheckFileInventory",
         "digestNodeCheckFileRequest",
+        "digestNodeCheckPartitionPlan",
+        "digestNodeCheckPartitionTimingContext",
         "isNodeCheckReportPath",
         "NODE_CHECK_FILE_LIMITS",
+        "NODE_CHECK_PARTITION_LIMITS",
         "NodeCheckCommand",
         "NodeCheckConfig",
         "NodeCheckFileCompletion",
         "NodeCheckFileInventory",
         "NodeCheckFileRequest",
+        "NodeCheckPartitionEvidence",
+        "NodeCheckPartitionPlan",
+        "NodeCheckPartitionTimingContext",
+        "NodeCheckPartitionTimingObservation",
         "NodeCheckPlan",
-        "resolveNodeCheckPlan"
+        "planNodeCheckPartitions",
+        "resolveNodeCheckPlan",
+        "verifyNodeCheckPartitionCoverage"
       ],
-      "sha256": "f3694ae17cf590249ea13610fc01bd6ef646b8fade387f80bbda6241f9046d3f",
+      "sha256": "16841f181456082da23d74b12303f5f8a24d7e8e31a35b1d4e7bd537c7dfaa3a",
       "specifier": "tubeless/check-plan"
     },
     {
@@ -420,7 +431,7 @@
         "REPRODUCTION_MANIFEST_MAX_BYTES",
         "ReproductionManifest"
       ],
-      "sha256": "c978cd3bff16e7a79b01b449759e93915c1e16ebadf62d01e00f1f9045314a4a",
+      "sha256": "75b4c2a08df474a9bad18f42597012db70991af507662c46b5261beee239b610",
       "specifier": "tubeless/reproduction-manifest"
     },
     {
@@ -428,11 +439,13 @@
       "exports": [
         "NodeCheckExecution",
         "NodeCheckFileExecution",
+        "NodeCheckPartitionExecution",
         "readNodeCheckPlan",
         "runNodeCheck",
-        "runNodeCheckFiles"
+        "runNodeCheckFiles",
+        "runNodeCheckPartitions"
       ],
-      "sha256": "d0e9cab6c061d104bbbabe9b2c5a2845b8d21bba7fcf5534e6eb621159d13ed6",
+      "sha256": "0144c0d650bb4210d006d0368854a78f0f76fef27c7201c14e2a3013c3c684b9",
       "specifier": "tubeless/node/check"
     }
   ],
