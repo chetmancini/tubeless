@@ -2,7 +2,7 @@
 
 The O7 harness runs the supported Node 24, Bun 1.4.4 and Vitest 5.1.0 check locally or through the existing authenticated Tubeless Cloud CLI. Schedule trials serially and give each campaign its own directory under `logs/`, which Git ignores.
 
-## Workload
+## Tiny control
 
 The fixture-only [benchmark branch](https://github.com/chetmancini/tubeless/tree/benchmark/node-check-v1) contains the five files from [the portable Node fixture](../fixtures/node-check). Configure the Cloud pipeline to use this branch so both pinned commits are reachable. Treat the branch as an immutable fixture.
 
@@ -17,6 +17,38 @@ The second revision changes only `app.js` from `42` to `41`. Both have lockfile 
 2. `bun run --silent types`, which invokes `node --check app.js`
 3. `node node_modules/vitest/vitest.mjs run --reporter=json --outputFile=.tubeless-reports/vitest.json --includeTaskLocation`
 
+## Representative workloads
+
+The [representative branch](https://github.com/chetmancini/tubeless/tree/benchmark/node-check-representative-v1)
+contains both immutable snapshots and the tiny control history. Select the
+workload by ID and pass the `pass` variant. The default workload still accepts
+both control variants. A representative pass requires its named Vitest test,
+a complete report and a clean exit.
+
+| Workload ID             | Git commit                                 | Git tree                                   |
+| ----------------------- | ------------------------------------------ | ------------------------------------------ |
+| `vitepress-docs-v1`     | `40d9273a74c36cc69c848827641c08992fb74bee` | `bb31ab12efb7971bc3f074f7be2c5cffbb2854cd` |
+| `esbuild-source-map-v1` | `ed5c9fee3590a4452c5f0e570c2520af4965b4ed` | `33b7a2ee66d9ecccc00b7073b4359e7ed7e7bc77` |
+
+| Workload ID             | Bun lock digest                               | Resolved plan digest                          |
+| ----------------------- | --------------------------------------------- | --------------------------------------------- |
+| `vitepress-docs-v1`     | `l5pRMLCS7CMSdYAolyEwaeUaRDXMv8isFaHVI2h-49M` | `g50eExgXIvjF69dkB3T8zdQmPD3O1lXf_5l0QXPlHMA` |
+| `esbuild-source-map-v1` | `kW8NqiSb2vsgadMEZkGbUoLyqPXHwUXMVwtYrgpoYfw` | `8fpNpcEvoXCXJBREmTRMHmKuewEm_vbBQS9chxf83sI` |
+
+Both use Node 24, Bun 1.4.4, and Vitest 5.1.0. The VitePress workload pins
+version 1.6.4 and builds one upstream English guide page with the default
+theme. It installed 155 packages in the local macOS preflight, including the
+Vue and Vite build graph and platform-selected optional dependencies. The
+Vitest check verifies the generated page.
+[Upstream VitePress revision](https://github.com/vuejs/vitepress/tree/1fc537b78cda287fa23c1129a815ad9455fd8106).
+
+The esbuild workload exercises 136 source-map scenarios across four newline
+and minification combinations. It uses the pinned 0.27.2 native binary, the
+upstream verifier and its public npm dependencies. Its Vitest wrapper reports
+the original suite's exit and success marker. The macOS preflight installed
+44 packages. Each snapshot includes its MIT license and adaptation notes.
+[Upstream esbuild revision](https://github.com/evanw/esbuild/tree/cd832972927f1f67b6d2cc895c06a8759c1cf309).
+
 ## Run and recover
 
 Run these commands from the Tubeless checkout with Git, Node 24 and Bun 1.4.4 on PATH.
@@ -29,12 +61,14 @@ benchmark=scripts/node-check-benchmark/benchmark.ts
 campaign=logs/node-check-benchmark/demonstration
 bun --no-env-file "$benchmark" local "$campaign/pass-01" pass
 bun --no-env-file "$benchmark" local "$campaign/fail-01" assertion-failure
+bun --no-env-file "$benchmark" local "$campaign/docs-01" pass --workload vitepress-docs-v1
+bun --no-env-file "$benchmark" local "$campaign/source-maps-01" pass --workload esbuild-source-map-v1
 bun --no-env-file "$benchmark" summarize "$campaign" > "$campaign/summary.json"
 ```
 
 Exercise client timeout accounting with `bun --no-env-file "$benchmark" local "$campaign/timeout-01" pass --timeout-ms 1`. This trial exits `2` and records `timeout` with an unknown execution outcome if the deadline fires during preparation.
 
-For Cloud, use one explicitly secretless portable Node check pipeline, approved for this GitHub repository and branch. Inject a workspace automation bearer as `TUBELESS_TOKEN` with `run` and `read` access to that pipeline. Use a new trial directory for each deliberate submission.
+For Cloud, use an explicitly secretless portable Node check pipeline approved for the branch containing the selected immutable commit. Pass the same `--workload` option for a representative trial. Inject a workspace automation bearer as `TUBELESS_TOKEN` with `run` and `read` access to that pipeline. Use a new trial directory for each deliberate submission.
 
 ```sh
 bun --no-env-file "$benchmark" cloud "$campaign/cloud-pass-01" pass \
@@ -62,7 +96,7 @@ Local runs use the host OS, filesystems, CPU and network. Cloud uses the recorde
 
 Each invocation writes one `*.sample.json` checkpoint in the logical trial directory before execution. The script replaces that file atomically as the invocation advances. The initial pending record survives a process loss once written. Recovery never overwrites a previous invocation file.
 
-- `workload` binds the fixture ID, variant, GitHub repository, commit, tree, lockfile and plan. `mode`, `condition`, and `operation` identify the experimental conditions and whether the invocation starts, resumes or replays a trial. `startedAt` is a UTC label and replay guard.
+- `workload` binds the workload ID, variant, GitHub repository, commit, tree, lockfile and plan. `mode`, `condition`, and `operation` identify the experimental conditions and whether the invocation starts, resumes or replays a trial. `startedAt` is a UTC label and replay guard.
 - `client` records OS, architecture, CPU model, available logical CPUs and memory. `tools` records the driver versions and local executable Node and Bun versions. Cloud executable versions remain unknown. C7 toolchain values describe the admitted image catalog.
 - `attemptId` identifies the logical trial, `invocationId` each local driver invocation, and `execution.runId` the pipeline run. For Cloud, `target` carries the non-secret host, workspace, pipeline, automation principal ID and idempotency key. `execution` records the image digest, source verification and normalized outcome. The expected assertion requires the original complete Vitest report and nonzero test exit.
 - `observation` records the last completed or in-progress driver stage and state. A client deadline is a timeout in `observation.state`. A proven recipe or supervisor timeout is a `timed-out` execution outcome. A killed process can leave the observation pending. Absent outcomes are `unknown`.
@@ -83,6 +117,8 @@ make check
 make website-build
 ```
 
+The v1 sample shape is shared by the control and representative workloads. Existing control ledgers continue to validate and summarize with this driver. Use the same driver revision to start and recover a representative trial.
+
 The test replays sanitized native admissions and terminal inspections [captured from Cloud's Miniflare integration suite](../fixtures/node-check-benchmark/c7-miniflare.json) through the real Tubeless CLI and the harness adapter. Cloud commit `8f219a87cd546667462096116ae242b4cc33aa7b` generated those responses with `TUBELESS_CAPTURE_HOSTED_FIXTURES=1 npm run test:integration -- --node-check`. The fixture uses a simulated supervisor and synthetic repository and workspace, with one shared source commit and main and PR selectors. Its timings provide contract test data only.
 
-The two local variants and a forced local observation timeout were exercised. Cloud's companion C7 disposable proof exercised both pinned revisions on Cloudflare and validated the producer projection. Full hosted CLI qualification still requires an approved pilot connection, a scoped application bearer and a bounded campaign ledger. A live campaign should record and reconcile exact run IDs and cleanup outcomes before interpreting distributions. Cloud owns provider measurement and accounting.
+The two local variants and a forced local observation timeout were exercised. Cloud's companion C7 disposable proof exercised both pinned revisions on Cloudflare and validated the producer projection. The accepted fresh staging baseline used the two control variants. Representative staging qualification uses a new scoped connection and bounded campaign ledger. Record and reconcile exact run IDs and cleanup outcomes before interpreting distributions. Cloud owns provider measurement and accounting.

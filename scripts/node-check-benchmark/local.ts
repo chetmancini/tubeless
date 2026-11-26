@@ -45,7 +45,11 @@ export async function runLocal(sample: LocalSample, signal: AbortSignal, checkpo
       ({ process }) => process.status === "timed-out"
     )
       ? "timed-out"
-      : checkOutcome(execution.run.status, execution.reports[0]?.result);
+      : checkOutcome(
+          sample.workload,
+          execution.run.status,
+          execution.reports.find(({ stepId }) => stepId === "test")?.result
+        );
     signal.throwIfAborted();
     sample.observation.terminalMs = terminal - start;
   });

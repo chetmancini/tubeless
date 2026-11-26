@@ -8,12 +8,12 @@ import { runLocal } from "./local.ts";
 import { resolveCloudHost } from "../../dist/workbench/cloud/config.js";
 import { newSample, type Sample } from "./sample.ts";
 import { summarize } from "./summary.ts";
-import { expectedOutcome, variants, workload } from "./workload.ts";
+import { controlId, expectedOutcome, selectWorkload } from "./workload.ts";
 
 const usage = [
   "Usage: bun --no-env-file scripts/node-check-benchmark/benchmark.ts",
-  "  local <new-trial-directory> <pass|assertion-failure> [--timeout-ms <ms>]",
-  "  cloud <new-trial-directory> <pass|assertion-failure> --workspace <id> --pipeline <id> [--host <origin>] [--timeout-ms <ms>]",
+  "  local <new-trial-directory> <pass|assertion-failure> [--workload <id>] [--timeout-ms <ms>]",
+  "  cloud <new-trial-directory> <pass|assertion-failure> [--workload <id>] --workspace <id> --pipeline <id> [--host <origin>] [--timeout-ms <ms>]",
   "  resume <trial-directory> [--timeout-ms <ms>]",
   "  replay <trial-directory> [--timeout-ms <ms>]",
   "  summarize <campaign-or-trial-directory>",
@@ -71,6 +71,7 @@ async function main() {
     allowPositionals: true,
     options: {
       host: { type: "string" },
+      workload: { type: "string" },
       workspace: { type: "string" },
       pipeline: { type: "string" },
       "timeout-ms": { type: "string" },
@@ -93,10 +94,10 @@ async function main() {
   if (!driverBun) throw new UsageError();
   const tools = { driverBun, driverTubeless: packageJson.version };
   if (command === "local" || command === "cloud") {
-    const selected = variants.find((option) => option === variant);
+    const selected = selectWorkload(values.workload ?? controlId, variant ?? "");
     if (!selected) throw new UsageError();
     const attemptId = randomUUID();
-    const intent = { attemptId, workload: workload(selected), operation: "start" as const };
+    const intent = { attemptId, workload: selected, operation: "start" as const };
     let sample: Sample;
     if (command === "cloud") {
       if (!values.workspace || !values.pipeline) throw new UsageError();
@@ -124,7 +125,14 @@ async function main() {
     return withTrial(directory, () => observe(directory, sample));
   }
   if (command !== "resume" && command !== "replay") throw new UsageError();
-  if (variant || values.host || values.workspace || values.pipeline) throw new UsageError();
+  if (
+    variant ||
+    values.workload !== undefined ||
+    values.host ||
+    values.workspace ||
+    values.pipeline
+  )
+    throw new UsageError();
   return withTrial(directory, async () => {
     const { runId, ...intent } = recoveryIntent(
       await readSamples(directory, false),

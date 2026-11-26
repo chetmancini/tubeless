@@ -7,7 +7,8 @@ import { runHosted, verifyCloudPrincipal } from "./cloud.ts";
 import { recoveryIntent } from "./ledger.ts";
 import { newSample, readSample, type Sample } from "./sample.ts";
 import { summarize } from "./summary.ts";
-import { workload, type Variant } from "./workload.ts";
+import { parseCliRun } from "../../dist/workbench/cloud/protocol.js";
+import { checkOutcome, selectWorkload, workload, type Variant } from "./workload.ts";
 
 const tools = { driverBun: "1.4.4", driverTubeless: "0.4.7" };
 const token = "tlc_ci_v1.fixture-only-bearer";
@@ -260,4 +261,59 @@ it("validates measurements and reports repeatable counts, medians and timeout ex
     })
   );
   expect(summarize([...raw].reverse())).toEqual(summary);
+});
+
+it.each([
+  {
+    id: "vitepress-docs-v1",
+    file: "docs-build.test.js",
+    title: "renders the upstream VitePress guide",
+  },
+  {
+    id: "esbuild-source-map-v1",
+    file: "source-map.test.mjs",
+    title: "passes upstream esbuild source-map verification",
+  },
+])("selects $id and requires its complete passing report", ({ id, file, title }) => {
+  const selected = selectWorkload(id, "pass");
+  if (!selected) throw new Error("Representative workload unavailable");
+  expect(selectWorkload(id, "assertion-failure")).toBeUndefined();
+  expect(selectWorkload("unknown-workload", "pass")).toBeUndefined();
+
+  const sample = { ...localSample("pass", 100), workload: selected };
+  expect(readSample(sample).workload).toEqual(selected);
+  expect(() =>
+    readSample({ ...sample, workload: { ...selected, commit: workload("pass").commit } })
+  ).toThrow("Sample workload differs from the pinned workload");
+
+  const result = parseCliRun(captures[0].inspection).diagnostics?.reports[0]?.result;
+  if (result?.state !== "available") throw new Error("Expected retained Vitest report");
+  const representative = structuredClone(result);
+  const test = representative.report.tests[0];
+  if (!test) throw new Error("Expected retained test");
+  test.file = file;
+  test.title = title;
+  test.id = JSON.stringify([file, [], title, 0]);
+
+  expect(checkOutcome(selected, "completed", undefined)).toBe("failed");
+  expect(checkOutcome(selected, "completed", result)).toBe("failed");
+  expect(checkOutcome(selected, "failed", representative)).toBe("failed");
+  expect(checkOutcome(selected, "completed", representative)).toBe("passed");
+  representative.report.truncated = true;
+  expect(checkOutcome(selected, "completed", representative)).toBe("failed");
+});
+
+it("rejects recovery if a same-variant sample changes workload identity", () => {
+  const trial = cloudSample("https://cloud.example", "pass", captures[0]);
+  const target = { ...trial.target, principalId };
+  const start = { ...trial, mode: "cloud" as const, target, workload: workload("pass") };
+  const other = selectWorkload("vitepress-docs-v1", "pass");
+  if (!other) throw new Error("Representative workload unavailable");
+  expect(() =>
+    recoveryIntent(
+      [start, { ...start, operation: "resume", workload: other }],
+      "resume",
+      Date.now()
+    )
+  ).toThrow("Inconsistent Cloud trial ledger");
 });

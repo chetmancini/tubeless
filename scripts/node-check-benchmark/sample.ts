@@ -22,7 +22,7 @@ import {
   version,
   type HostedMeasurements,
 } from "./measurements.ts";
-import { variants, workload, type Workload } from "./workload.ts";
+import { selectWorkload, variants, workloadIds, type Workload } from "./workload.ts";
 
 const strict = { strict: true } as const;
 const nil = wireLiteral(null);
@@ -66,7 +66,7 @@ const shared = {
   }),
   workload: wireObject(
     {
-      id: wireLiteral("portable-node-check-v1"),
+      id: wireEnum(workloadIds),
       variant: wireEnum(variants),
       repository: pattern(/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i),
       commit: gitSha,
@@ -222,7 +222,7 @@ export function readSample(value: unknown): Sample {
   const { execution, observation } = sample;
   if (
     sample.mode !== "cloud-fixture" &&
-    !isDeepStrictEqual(sample.workload, workload(sample.workload.variant))
+    !isDeepStrictEqual(sample.workload, selectWorkload(sample.workload.id, sample.workload.variant))
   )
     throw new Error("Sample workload differs from the pinned workload");
   if (execution.runId === null && execution.outcome !== "unknown")
