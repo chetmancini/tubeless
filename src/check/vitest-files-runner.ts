@@ -6,6 +6,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Reporter, TestSpecification } from "vitest/node";
 import {
+  digestNodeCheckFileInventory,
   isNodeCheckFilePath,
   NODE_CHECK_FILE_LIMITS,
   normalizeNodeCheckFiles,
@@ -126,6 +127,9 @@ async function run(transport: string, observed: VitestFileObservation): Promise<
         "Unsupported Vitest configuration for portable file inventory and execution."
       );
 
+    if (input.expectedInventoryDigest && config.coverage.enabled)
+      throw new TypeError("Vitest coverage collection is unsupported for partitioned checks.");
+
     const specs = await ctx.getRelevantTestSpecifications();
     if (specs.length > NODE_CHECK_FILE_LIMITS.files)
       throw new TypeError("Vitest file list exceeds 4096 files.");
@@ -142,14 +146,32 @@ async function run(transport: string, observed: VitestFileObservation): Promise<
     const configPath = configFile ? repositoryPath(root, configFile) : null;
     if (configPath) await requireRegularFile(root, configPath);
     observed.inventory = {
+      version: 1,
+      complete: true,
       files,
+      stepId: request.stepId,
+      planDigest: input.planDigest,
+      source: {
+        commit: null,
+        treeSha: null,
+        lockfileDigest: await fileDigest(join(root, "bun.lock")),
+      },
+      toolchain: {
+        node: process.versions.node,
+        bun: input.bun,
+        vitest: vitest.version,
+        platform: process.platform,
+        arch: process.arch,
+      },
       configuration: configPath
         ? { path: configPath, digest: await fileDigest(resolve(root, configPath)) }
         : null,
-      node: process.versions.node,
-      vitest: vitest.version,
-      lockfileDigest: await fileDigest(join(root, "bun.lock")),
     };
+    if (
+      input.expectedInventoryDigest &&
+      (await digestNodeCheckFileInventory(observed.inventory)) !== input.expectedInventoryDigest
+    )
+      throw new Error("Vitest inventory changed after partition planning.");
     if (request.mode === "inventory") return;
 
     const expected = request.mode === "selected" ? request.files : files;

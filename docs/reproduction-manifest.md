@@ -49,9 +49,11 @@ settings, caches, private registries and other recipe types are outside this
 contract. V1 represents the original full invocation. The local
 [Vitest file request](./node-check-recipe.md#discover-and-select-vitest-files)
 has a separate version and digest. V1 rejects extra fields, including file
-requests. A future manifest for file-aware runs must use a new version and bind
-the request, context and source identity before execution. Cloud must withhold
-v1 export for those runs.
+requests and partition plans. A future manifest for file-aware or partitioned
+runs must use a new version and bind the request, context and source identity
+before execution. For a partitioned run, also bind the canonical partition plan,
+its inventory and digest, and the original full or selected mode. Cloud must
+withhold v1 export for these runs.
 
 ## Cloud producer handoff
 

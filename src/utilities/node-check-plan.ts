@@ -313,3 +313,19 @@ export {
   type NodeCheckFileInventory,
   type NodeCheckFileCompletion,
 } from "./node-check/files.js";
+
+export { decodeNodeCheckFileInventory } from "./node-check/files.js";
+export {
+  NODE_CHECK_PARTITION_LIMITS,
+  decodeNodeCheckPartitionPlan,
+  digestNodeCheckPartitionPlan,
+  digestNodeCheckPartitionTimingContext,
+  planNodeCheckPartitions,
+  type NodeCheckPartitionPlan,
+  type NodeCheckPartitionTimingContext,
+  type NodeCheckPartitionTimingObservation,
+} from "./node-check/partition-plan.js";
+export {
+  verifyNodeCheckPartitionCoverage,
+  type NodeCheckPartitionEvidence,
+} from "./node-check/partition-coverage.js";

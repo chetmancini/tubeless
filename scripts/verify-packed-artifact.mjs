@@ -470,7 +470,7 @@ try {
   if (process.platform !== "win32" && nodeMajor === 24) {
     const fixtures = ["packed-reproduction.mjs"];
     if (run("bun", ["--version"], consumerRoot).trim() === "1.4.4")
-      fixtures.push("packed-node-check-files.mjs");
+      fixtures.push("packed-node-check-files.mjs", "packed-node-check-partitions.mjs");
     for (const fixture of fixtures)
       process.stdout.write(
         run(

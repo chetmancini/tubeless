@@ -10,4 +10,5 @@ export default defineProject("tubeless-examples", [ValidatedPipeline], {
 });
 
 // Use the optional Node recipe in node-check.ts to run repository checks or
-// discover and select Vitest files explicitly. Project discovery stays passive.
+// discover and select Vitest files explicitly. See docs/node-check-recipe.md
+// for local file partitions. Project discovery stays passive.

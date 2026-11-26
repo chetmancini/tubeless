@@ -60,6 +60,18 @@ describe("Node check reproduction manifest", () => {
     );
   });
 
+  it("rejects partition fields on v1 reproduction manifests and base plans", async () => {
+    const input = manifest();
+    const partitionPlan = { version: 1, partitions: [] };
+    await expect(decodeReproductionManifest({ ...input, partitionPlan })).rejects.toThrow(
+      "manifest fields"
+    );
+    Object.assign(input.nodeCheck.plan, { partitionPlan });
+    await expect(decodeReproductionManifest(input)).rejects.toThrow(
+      "Unsupported reproduction manifest Node check plan"
+    );
+  });
+
   it.each([
     [
       "plan digest mismatch",

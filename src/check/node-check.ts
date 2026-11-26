@@ -8,7 +8,17 @@ import {
 } from "../utilities/node-check-plan.js";
 import type { CheckProcessOutcome, CheckReportResult } from "../utilities/check-report.js";
 import { readCheckToolVersion, runCheckProcess } from "./process.js";
-import { executeNodeCheckPlan } from "./recipe.js";
+import { collectVitestReport, executeNodeCheckPlan, requireCheckSuccess } from "./recipe.js";
+import { prepareCheckReport } from "../node/check-files.js";
+import { digestCanonicalJson } from "../utilities/canonical-json.js";
+import {
+  decodeNodeCheckPartitionPlan,
+  type NodeCheckPartitionPlan,
+} from "../utilities/node-check/partition-plan.js";
+import {
+  partitionFileRequest,
+  type NodeCheckPartitionEvidence,
+} from "../utilities/node-check/partition-coverage.js";
 import {
   decodeNodeCheckFileRequest,
   digestNodeCheckFileRequest,
@@ -112,7 +122,7 @@ export async function runNodeCheckFiles(
   };
   const execution = await executeNodeCheckPlan(plan, context, localRunner(plan), options.dryRun, {
     stepId: request.stepId,
-    inventoryOnly: request.mode === "inventory",
+    mode: request.mode === "inventory" ? "inventory" : "files",
     async run(command, step) {
       const observation = await runVitestFiles(command, request, plan, planDigest, step);
       fileCheck.inventory = observation.inventory;
@@ -129,6 +139,111 @@ export async function runNodeCheckFiles(
       fileCheck.outcome = request.mode === "selected" ? "subset-passed" : "full-passed";
   }
   return { ...execution, fileCheck };
+}
+
+/** One graph run with independent partition evidence and diagnostic reports for the selected Vitest step. */
+export interface NodeCheckPartitionExecution extends NodeCheckExecution {
+  partitionCheck: {
+    version: 1;
+    planDigest: string;
+    partitionPlanDigest: string;
+    inventoryDigest: string;
+    request: NodeCheckPartitionPlan["request"];
+    requestDigest: string;
+    outcome: "not-run" | "subset-passed" | "full-passed" | "failed" | "cancelled";
+    coverageComplete: boolean;
+    evidence: NodeCheckPartitionEvidence[];
+    reports: { id: number; result: CheckReportResult }[];
+  };
+}
+
+/** Execute a validated file partition plan locally, one partition process at a time in one check graph. */
+export async function runNodeCheckPartitions(
+  input: NodeCheckPlan,
+  context: NodeCheckContext,
+  partitionPlan: NodeCheckPartitionPlan,
+  options: NodeCheckOptions = {}
+): Promise<NodeCheckPartitionExecution> {
+  const { dryRun } = options;
+  const [plan, partitions] = await Promise.all([
+    verifyLocalPlan(input, context.cwd),
+    decodeNodeCheckPartitionPlan(partitionPlan),
+  ]);
+  const planDigest = await digestNodeCheckPlan(plan);
+  const { request, requestDigest, inventory, inventoryDigest } = partitions;
+  if (
+    planDigest !== inventory.planDigest ||
+    !plan.commands.some(({ id, kind }) => id === request.stepId && kind === "vitest")
+  )
+    throw new TypeError("Partition plan does not match the local Node check plan.");
+  if (inventory.source.commit !== null || inventory.source.treeSha !== null)
+    throw new TypeError(
+      "Local partition execution requires an inventory discovered from the local checkout."
+    );
+
+  const partitionCheck: NodeCheckPartitionExecution["partitionCheck"] = {
+    version: 1,
+    planDigest,
+    partitionPlanDigest: await digestCanonicalJson(partitions),
+    inventoryDigest,
+    request,
+    requestDigest,
+    outcome: "not-run",
+    coverageComplete: false,
+    evidence: [],
+    reports: [],
+  };
+  const execution = await executeNodeCheckPlan(plan, context, localRunner(plan), dryRun, {
+    stepId: request.stepId,
+    mode: "partitions",
+    async run(command, step) {
+      const deadline = performance.now() + command.timeoutMs;
+      for (const partition of partitions.partitions) {
+        step.signal?.throwIfAborted();
+        if ((await digestNodeCheckPlan(await readNodeCheckPlan(step.cwd))) !== planDigest)
+          throw new Error("Node check configuration changed after partition planning.");
+        await prepareCheckReport(step.cwd, command.report.path);
+        const fileRequest = partitionFileRequest(partitions, partition);
+        const digest = await digestNodeCheckFileRequest(planDigest, fileRequest);
+        const remaining = Math.floor(deadline - performance.now());
+        if (remaining < 1)
+          throw new Error(`Vitest partition step ${command.id} exhausted its deadline.`);
+        const observed = await runVitestFiles(
+          { ...command, timeoutMs: remaining },
+          fileRequest,
+          plan,
+          planDigest,
+          step,
+          inventoryDigest
+        );
+        partitionCheck.evidence.push({
+          id: partition.id,
+          requestDigest: digest,
+          inventoryDigest: observed.inventoryDigest,
+          process: observed.process,
+          execution: observed.execution,
+        });
+        partitionCheck.reports.push({
+          id: partition.id,
+          result: await collectVitestReport(command, step, observed.process, true),
+        });
+        step.signal?.throwIfAborted();
+        requireCheckSuccess(
+          `Vitest partition ${partition.id}`,
+          observed.process,
+          observed.evidenceError
+        );
+      }
+      if (performance.now() > deadline)
+        throw new Error(`Vitest partition step ${command.id} exhausted its deadline.`);
+      partitionCheck.coverageComplete = true;
+    },
+  });
+  const { status } = execution.run;
+  if (status === "failed" || status === "cancelled") partitionCheck.outcome = status;
+  else if (status === "completed" && partitionCheck.coverageComplete)
+    partitionCheck.outcome = request.mode === "full" ? "full-passed" : "subset-passed";
+  return { ...execution, partitionCheck };
 }
 
 async function verifyLocalPlan(input: NodeCheckPlan, cwd: string): Promise<NodeCheckPlan> {
