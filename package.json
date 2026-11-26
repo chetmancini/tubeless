@@ -1,6 +1,6 @@
 {
   "name": "tubeless",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "description": "Typed, agentic pipelines for TypeScript. Run locally, schedule on Tubeless Cloud.",
   "author": {
     "name": "Chet Mancini",
