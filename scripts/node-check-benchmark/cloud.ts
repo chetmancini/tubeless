@@ -16,6 +16,37 @@ const bin = fileURLToPath(new URL("../../dist/workbench/workbench-bin.js", impor
 
 export class ObservationTimeout extends Error {}
 
+type CloudFailureCategory =
+  | "cli-process"
+  | "cli-exit"
+  | "invalid-cli-json"
+  | "invalid-run-response"
+  | "run-identity"
+  | "source-identity"
+  | "invalid-measurements"
+  | "measurement-identity"
+  | "outcome-conflict";
+
+export class CloudObservationError extends Error {
+  constructor(
+    readonly category: CloudFailureCategory,
+    readonly exitCode?: number
+  ) {
+    super("Cloud observation failed: " + category);
+  }
+}
+
+function decodeCloudEvidence<T>(
+  category: "invalid-run-response" | "invalid-measurements",
+  decode: () => T
+): T {
+  try {
+    return decode();
+  } catch {
+    throw new CloudObservationError(category);
+  }
+}
+
 export async function verifyCloudPrincipal(target: Target, signal: AbortSignal): Promise<string> {
   const token = process.env.TUBELESS_TOKEN;
   if (!token || !isCloudAutomationToken(token))
@@ -71,14 +102,15 @@ const invokeCloudCli: Invoke = (args, signal) =>
       (error, stdout, stderr) => {
         if (signal.aborted) return reject(new Error("Cloud observation was stopped."));
         const exitCode = error?.code ?? 0;
-        if (typeof exitCode !== "number")
-          return reject(new Error("Cloud CLI could not return a response."));
+        if (typeof exitCode !== "number") return reject(new CloudObservationError("cli-process"));
         try {
           resolve({ exitCode, body: JSON.parse(stdout) as unknown });
         } catch {
           const failure = followTimedOut(stderr)
             ? new ObservationTimeout("Cloud CLI observation timed out.")
-            : new Error("Cloud CLI returned no usable JSON.");
+            : exitCode === 0
+              ? new CloudObservationError("invalid-cli-json")
+              : new CloudObservationError("cli-exit", exitCode);
           reject(failure);
         }
       }
@@ -87,7 +119,7 @@ const invokeCloudCli: Invoke = (args, signal) =>
 
 function terminal(run: CliRun) {
   if (run.status !== "completed" && run.status !== "failed" && run.status !== "cancelled")
-    throw new Error("Cloud observation returned a nonterminal run.");
+    throw new CloudObservationError("outcome-conflict");
   return run.status;
 }
 
@@ -122,22 +154,24 @@ async function inspectIdentity(sample: CloudSample, run: CliRun): Promise<void> 
     (await digestNodeCheckPlan(plan.plan)) !== expected.planDigest
   ) {
     sample.execution.identity = "mismatch";
-    throw new Error("Cloud inspection does not match the pinned workload.");
+    throw new CloudObservationError("source-identity");
   }
 
   const evidence = isJsonObject(run) ? run.hostedMeasurements : undefined;
   if (evidence !== undefined) {
-    const measured = hostedMeasurements.decode(evidence, "hostedMeasurements");
+    const measured = decodeCloudEvidence("invalid-measurements", () =>
+      hostedMeasurements.decode(evidence, "hostedMeasurements")
+    );
     if (!matchesHostedIdentity(measured, expected, plan.imageDigest)) {
       sample.execution.identity = "mismatch";
-      throw new Error("Cloud measurement identity conflicts with retained inspection.");
+      throw new CloudObservationError("measurement-identity");
     }
     const outcome = measured.outcome;
     if (
       outcome !== null &&
       (outcome === "interrupted" || outcome === "timed_out" ? "failed" : outcome) !== run.status
     )
-      throw new Error("Cloud measurement outcome conflicts with retained inspection.");
+      throw new CloudObservationError("outcome-conflict");
     if (outcome === "timed_out") sample.execution.outcome = "timed-out";
     if (outcome === "interrupted") sample.execution.outcome = "interrupted";
     sample.hostedMeasurements = measured;
@@ -160,14 +194,18 @@ export async function runHosted(
   const call = async (args: string[], exitCodes: number[]) => {
     signal.throwIfAborted();
     const response = await invoke([...args, ...options], signal);
-    if (!exitCodes.includes(response.exitCode)) throw new Error("Cloud CLI request failed.");
-    const run = parseCliRun(response.body);
-    identifier.decode(run.id, "Cloud run ID");
+    if (!exitCodes.includes(response.exitCode))
+      throw new CloudObservationError("cli-exit", response.exitCode);
+    const run = decodeCloudEvidence("invalid-run-response", () => {
+      const decoded = parseCliRun(response.body);
+      identifier.decode(decoded.id, "Cloud run ID");
+      return decoded;
+    });
     if (
       run.pipelineId !== target.pipelineId ||
       (sample.execution.runId && run.id !== sample.execution.runId)
     )
-      throw new Error("Cloud response identity conflicts with the request.");
+      throw new CloudObservationError("run-identity");
     return run;
   };
   const start = performance.now();
@@ -193,7 +231,7 @@ export async function runHosted(
     await checkpoint();
     if (receipt.commit !== sample.workload.commit) {
       sample.execution.identity = "mismatch";
-      throw new Error("Cloud admitted a different commit.");
+      throw new CloudObservationError("source-identity");
     }
   }
   const runId = sample.execution.runId;
@@ -206,13 +244,13 @@ export async function runHosted(
   sample.observation.stage = "inspect";
   await checkpoint();
   const inspected = await call(["inspect", runId], [0]);
-  if (
-    inspected.status !== observed.status ||
-    observed.commit !== sample.workload.commit ||
-    inspected.commit !== sample.workload.commit
-  ) {
+  if (observed.commit !== sample.workload.commit || inspected.commit !== sample.workload.commit) {
     sample.execution.identity = "mismatch";
-    throw new Error("Cloud inspection conflicts with the observed run.");
+    throw new CloudObservationError("source-identity");
+  }
+  if (inspected.status !== observed.status) {
+    sample.execution.identity = "mismatch";
+    throw new CloudObservationError("outcome-conflict");
   }
   sample.execution.outcome = classify(sample.workload, inspected);
   await inspectIdentity(sample, inspected);

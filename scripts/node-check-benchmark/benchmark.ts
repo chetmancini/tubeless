@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import packageJson from "../../package.json" with { type: "json" };
-import { ObservationTimeout, runHosted, verifyCloudPrincipal } from "./cloud.ts";
+import {
+  CloudObservationError,
+  ObservationTimeout,
+  runHosted,
+  verifyCloudPrincipal,
+} from "./cloud.ts";
 import { checkpointSample, withTrial, readSamples, recoveryIntent } from "./ledger.ts";
 import { runLocal } from "./local.ts";
 import { resolveCloudHost } from "../../dist/workbench/cloud/config.js";
@@ -27,6 +33,7 @@ async function observe(directory: string, sample: Sample) {
   const signal = AbortSignal.any([interrupts.signal, deadline]);
   const interrupt = () => interrupts.abort();
   const checkpoint = () => checkpointSample(directory, sample);
+  let inspectionFailure: { category: string; exitCode?: number } | undefined;
   await checkpoint();
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
@@ -44,11 +51,29 @@ async function observe(directory: string, sample: Sample) {
       : deadline.aborted || error instanceof ObservationTimeout
         ? "timeout"
         : "error";
+    if (
+      sample.mode !== "local" &&
+      sample.observation.stage === "inspect" &&
+      sample.observation.state === "error"
+    ) {
+      inspectionFailure =
+        error instanceof CloudObservationError
+          ? { category: error.category, exitCode: error.exitCode }
+          : { category: "unclassified" };
+    }
   } finally {
     process.off("SIGINT", interrupt);
     process.off("SIGTERM", interrupt);
   }
   await checkpoint();
+  if (inspectionFailure) {
+    const receipt = { version: 1, invocationId: sample.invocationId, ...inspectionFailure };
+    await writeFile(
+      join(directory, sample.invocationId + ".inspection-error.json"),
+      JSON.stringify(receipt, null, 2) + "\n",
+      { flag: "wx", mode: 0o600 }
+    );
+  }
   // Print only fixed classifications and safe identifiers. Command output stays in memory.
   console.log(
     JSON.stringify({
