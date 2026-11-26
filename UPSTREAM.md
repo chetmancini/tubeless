@@ -1,5 +1,6 @@
-This single-page VitePress documentation build uses the upstream English
-overview and MIT license from vuejs/vitepress commit
-1fc537b78cda287fa23c1129a815ad9455fd8106 (v1.6.4). The package manifest pins the
-released VitePress package. The local config skips link checking for pages
-outside this snapshot. The Vitest check verifies the generated HTML.
+The source-map verifier and MIT license come from evanw/esbuild commit
+cd832972927f1f67b6d2cc895c06a8759c1cf309 (v0.27.2). The verifier uses the
+matching native binary from npm in place of building esbuild with Go.
+The four original newline/minification combinations run in batches so
+at most one combination's scenarios are active. The Vitest wrapper
+records the upstream suite's exit and success marker as one bounded test.

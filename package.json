@@ -1,11 +1,14 @@
 {
-  "name": "c7-vitepress-docs",
+  "name": "c7-esbuild-source-map",
   "private": true,
-  "type": "module",
   "packageManager": "bun@1.4.4",
-  "scripts": { "docs:build": "vitepress build docs" },
+  "dependencies": {
+    "esbuild": "0.27.2",
+    "source-map": "0.7.4",
+    "fuse.js": "3.2.0",
+    "react": "17.0.1"
+  },
   "devDependencies": {
-    "vitepress": "1.6.4",
     "vitest": "5.1.0"
   }
 }
