@@ -10,8 +10,9 @@ const require = createRequire(join(process.cwd(), "package.json"));
 const { readNodeCheckPlan, runNodeCheck, runNodeCheckFiles } = await import(
   pathToFileURL(require.resolve("tubeless/node/check"))
 );
-const { decodeNodeCheckFileRequest, digestNodeCheckFileRequest, digestNodeCheckFileInventory } =
-  await import(pathToFileURL(require.resolve("tubeless/check-plan")));
+const { digestNodeCheckFileRequest, digestNodeCheckFileInventory } = await import(
+  pathToFileURL(require.resolve("tubeless/check-plan"))
+);
 
 const workspace = await mkdtemp(join(await realpath(tmpdir()), "tubeless-packed-file-check-"));
 try {
@@ -91,21 +92,14 @@ try {
   assert.equal(history.coverage.complete, true);
   assert.equal(history.estimateEligible, true);
   assert.equal(history.context.configurationDigest, null);
-  const byPath = new Map(history.files.map((file) => [file.path, file]));
-  assert.deepEqual(decodeNodeCheckFileRequest({ ...selected, version: 1, stepId: "test" }).files, [
-    ...byPath.keys(),
-  ]);
+  const byPath = new Map(history.files.map(({ path, durationMs }) => [path, durationMs]));
+  assert.deepEqual([...byPath.keys()], expectedSelected);
+  assert.ok(
+    [...byPath.values()].every((durationMs) => typeof durationMs === "number" && durationMs >= 0)
+  );
   assert.deepEqual(
-    discovered.fileCheck.inventory.files.map((path) => {
-      const sample = byPath.get(path);
-      if (sample) assert.ok(typeof sample.durationMs === "number" && sample.durationMs >= 0);
-      return [path, Boolean(sample)];
-    }),
-    [
-      ["spec/archive.case.js", true],
-      ["spec/check.case.js", true],
-      ["spec/nested/spec/check.case.js", false],
-    ]
+    discovered.fileCheck.inventory.files.filter((path) => !byPath.has(path)),
+    ["spec/nested/spec/check.case.js"]
   );
   // This working tree has no admitted source or hosted configuration evidence.
   assert.notEqual(discovered.fileCheck.inventory.source.commit, history.source.commit);
