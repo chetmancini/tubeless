@@ -76,7 +76,7 @@
     "eval:agent": "bun run build && node scripts/eval-agent.mjs"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "2.0.0-rc.3",
+    "@cloudflare/vite-plugin": "2.0.0-rc.5",
     "@dagster-io/dagster-pipes": "0.1.0",
     "@inngest/test": "1.0.0",
     "@interfere/landmines": "0.3.1",
@@ -86,7 +86,7 @@
     "@temporalio/worker": "1.27.0",
     "@temporalio/workflow": "1.27.0",
     "@types/aws-lambda": "8.10.164",
-    "@types/node": "22.20.5",
+    "@types/node": "22.20.6",
     "@vitest/coverage-v8": "5.1.2",
     "cf": "1.0.0-rc.6",
     "inngest": "4.27.0",
